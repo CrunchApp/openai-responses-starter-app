@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import Auth0ProviderWithNavigate from "@/components/providers/auth0-provider";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -32,7 +33,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <div className="flex h-screen bg-gray-200 w-full flex-col  text-stone-900">
-          <main>{children}</main>
+          <Auth0ProviderWithNavigate>
+            <main>{children}</main>
+          </Auth0ProviderWithNavigate>
         </div>
       </body>
     </html>

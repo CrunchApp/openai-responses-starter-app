@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import LinkedInImportStep from "./steps/linkedin-import-step";
 import PersonalInfoStep from "./steps/personal-info-step";
 import EducationStep from "./steps/education-step";
 import CareerGoalsStep from "./steps/career-goals-step";
@@ -17,6 +18,9 @@ export interface ProfileData {
   lastName: string;
   email: string;
   phone: string;
+  
+  // LinkedIn profile information
+  linkedInProfile?: string;
   
   // Education
   education: Array<{
@@ -69,6 +73,7 @@ export default function ProfileWizard() {
     lastName: "",
     email: "",
     phone: "",
+    linkedInProfile: "",
     education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
     careerGoals: {
       shortTerm: "",
@@ -90,6 +95,7 @@ export default function ProfileWizard() {
   });
 
   const steps = [
+    { name: "LinkedIn Import", component: LinkedInImportStep },
     { name: "Personal Information", component: PersonalInfoStep },
     { name: "Education", component: EducationStep },
     { name: "Career Goals", component: CareerGoalsStep },
@@ -108,6 +114,10 @@ export default function ProfileWizard() {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handleSkipToPersonalInfo = () => {
+    setCurrentStep(1); // Skip to the Personal Information step
   };
 
   const handleComplete = async () => {
@@ -185,6 +195,14 @@ export default function ProfileWizard() {
   // Render the current step
   const CurrentStepComponent = steps[currentStep].component;
 
+  // Additional props for the LinkedIn import step
+  const stepProps = currentStep === 0 
+    ? { 
+        onManualEntry: handleSkipToPersonalInfo,
+        ...{ profileData, setProfileData }
+      } 
+    : { profileData, setProfileData };
+
   return (
     <Card className="p-6 shadow-md">
       {/* Progress indicator */}
@@ -212,8 +230,7 @@ export default function ProfileWizard() {
       {/* Current step content */}
       <div className="mb-6">
         <CurrentStepComponent
-          profileData={profileData}
-          setProfileData={setProfileData}
+          {...stepProps}
         />
       </div>
 
@@ -228,7 +245,7 @@ export default function ProfileWizard() {
         </Button>
         
         {currentStep < steps.length - 1 ? (
-          <Button onClick={handleNext}>Next</Button>
+          currentStep === 0 ? null : <Button onClick={handleNext}>Next</Button>
         ) : (
           <Button onClick={handleComplete}>Complete Profile</Button>
         )}

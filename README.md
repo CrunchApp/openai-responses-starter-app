@@ -4,12 +4,16 @@
 ![NextJS](https://img.shields.io/badge/Built_with-NextJS-blue)
 ![OpenAI API](https://img.shields.io/badge/Powered_by-OpenAI_API-orange)
 
-This repository contains a Proof of Concept (PoC) for the Vista Education Adviser, built on top of the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses). Vista Education Adviser helps users find personalized education and career paths through AI-powered recommendations and guidance.
+This repository contains a Proof of Concept (PoC) for the Vista Education Adviser, built on top of the [OpenAI API](https://platform.openai.com/docs/api-reference). Vista Education Adviser helps users find personalized education and career paths through AI-powered recommendations and guidance.
+
+## Project Overview
+
+Vista Education Adviser addresses challenges in the traditional education guidance sector by democratizing access to quality education advice through technology. The application provides personalized recommendations and AI-powered guidance to help students and professionals navigate their educational and career journeys.
 
 ## Features
 
 ### Core Features
-- **Personalized Recommendation Engine**: Tailored education/career paths based on user profiles
+- **Personalized Recommendation Engine**: Tailored education/career paths based on user profiles using a rule-based system initially
 - **AI Chatbot Guidance**: OpenAI-powered conversational assistant for answering queries about programs and applications
 - **User Authentication**: Secure login via email/password and social login (Google, LinkedIn)
 - **External Integrations**: 
@@ -17,72 +21,86 @@ This repository contains a Proof of Concept (PoC) for the Vista Education Advise
   - Google Custom Search for program details
   - Document uploads (transcripts, SOPs)
 
-### Technical Features
-- Multi-turn conversation handling
-- Web search tool configuration
-- Vector store creation & file upload for use with the file search tool
-- Function calling
-- Streaming responses & tool calls
-- Display annotations
+## Technology Stack
 
-## Deployment
+### Frontend
+- **Framework**: Next.js 14+ with App Router
+- **Language**: TypeScript
+- **UI Library**: React
+- **Styling**: Tailwind CSS
+- **State Management**: React Context and/or Zustand
+- **Deployment**: Vercel
 
-The PoC is designed for cost-efficient deployment using:
-- **Vercel** for hosting the Next.js frontend
-- **Heroku** for the FastAPI backend
+### Backend (Planned)
+- **Framework**: FastAPI (Python)
+- **Database**: PostgreSQL
+- **ORM**: SQLAlchemy
+- **Authentication**: JWT + social OAuth
+- **Deployment**: Heroku
 
-## How to use
+## Getting Started
 
-1. **Set Up the OpenAI API:**
-
-   - If you're new to the OpenAI API, [sign up for an account](https://platform.openai.com/signup).
-   - Follow the [Quickstart](https://platform.openai.com/docs/quickstart) to retrieve your API key.
-
-2. **Clone the Repository:**
+1. **Clone the Repository:**
 
    ```bash
    git clone https://github.com/[your-organization]/vista-education-adviser.git
+   cd vista-education-adviser
    ```
 
-3. **Install dependencies:**
+2. **Environment Setup:**
 
-   Run in the project root:
+   Create a `.env` file in the root directory with necessary API keys (see `.env.sample` for reference).
+
+3. **Install Dependencies:**
 
    ```bash
    npm install
    ```
 
-4. **Run the app:**
+4. **Run the Development Server:**
 
    ```bash
    npm run dev
    ```
 
-   The app will be available at [`http://localhost:3000`](http://localhost:3000).
+   The application will be available at [`http://localhost:3000`](http://localhost:3000).
 
 ## Project Structure
 
-The project follows a microservices architecture with:
+The project follows a service-oriented architecture with modular components:
 
-- **Backend (FastAPI):**
-  - Authentication service
-  - Profile management
-  - Recommendation engine
-  - AI chatbot service
-  - Document upload service
-
-- **Frontend (Next.js with TypeScript):**
-  - User authentication pages
-  - Profile setup
-  - Recommendations display
+- **Frontend Components**:
+  - Authentication (login/signup)
+  - User profile management
+  - Recommendation display
   - Chatbot interface
+  - Document uploads
 
-For detailed information about the architecture and data flow, see the [/docs](./docs) directory.
+- **Backend Services**:
+  - Authentication Service
+  - Profile Management Service
+  - Recommendation Engine Service
+  - Chatbot Service
+  - File Upload Service
 
-## Contributing
+For detailed information about the project, refer to the `memory-bank` directory which contains:
 
-You are welcome to open issues or submit PRs to improve this app, however, please note that we may not review all suggestions.
+- `projectBrief.md`: High-level overview of goals and requirements
+- `productContext.md`: Business context and user needs
+- `systemPatterns.md`: Architectural decisions and design patterns
+- `techContext.md`: Technical stack details and dependencies
+- `activeContext.md`: Current development status
+- `progress.md`: Project timeline and milestones
+
+## Development Roadmap
+
+The project is divided into several phases:
+
+1. **Foundation Setup**: Understanding the starter app and implementing core components
+2. **Core Features**: Authentication, profile management, recommendation engine, and chatbot
+3. **External Integrations**: LinkedIn, Google Search, document uploads
+4. **Refinement & Testing**: Performance optimization and user testing
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

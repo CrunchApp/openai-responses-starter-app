@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Dispatch, SetStateAction, ComponentType } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import LinkedInImportStep from "./steps/linkedin-import-step";
@@ -10,6 +10,8 @@ import PreferencesStep from "./steps/preferences-step";
 import DocumentsStep from "./steps/documents-step";
 import ReviewStep from "./steps/review-step";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { CheckCircle2 } from "lucide-react";
 
 // Define profile data structure
 export interface ProfileData {
@@ -65,9 +67,33 @@ export interface ProfileData {
   vectorStoreId?: string;
 }
 
+// Define interfaces for step props
+export interface BaseStepProps {
+  profileData: ProfileData;
+  setProfileData: Dispatch<SetStateAction<ProfileData>>;
+}
+
+export interface LinkedInImportStepProps extends BaseStepProps {
+  onManualEntry: () => void;
+}
+
+export interface ReviewStepProps extends BaseStepProps {
+  onComplete: () => void;
+}
+
+// Define the step structure with proper typing
+interface Step {
+  name: string;
+  icon?: string;
+  description: string;
+  component: ComponentType<any>;
+}
+
 export default function ProfileWizard() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
+  const [animationDirection, setAnimationDirection] = useState("forward");
+  const [showCompletionMessage, setShowCompletionMessage] = useState(false);
   const [profileData, setProfileData] = useState<ProfileData>({
     firstName: "",
     lastName: "",
@@ -94,160 +120,252 @@ export default function ProfileWizard() {
     documents: {},
   });
 
-  const steps = [
-    { name: "LinkedIn Import", component: LinkedInImportStep },
-    { name: "Personal Information", component: PersonalInfoStep },
-    { name: "Education", component: EducationStep },
-    { name: "Career Goals", component: CareerGoalsStep },
-    { name: "Preferences", component: PreferencesStep },
-    { name: "Documents", component: DocumentsStep },
-    { name: "Review", component: ReviewStep },
+  const steps: Step[] = [
+    { 
+      name: "LinkedIn Import", 
+      description: "Fast-track your profile setup by importing from LinkedIn",
+      component: LinkedInImportStep 
+    },
+    { 
+      name: "Personal Information", 
+      description: "Tell us about yourself",
+      component: PersonalInfoStep 
+    },
+    { 
+      name: "Education", 
+      description: "Your academic background",
+      component: EducationStep 
+    },
+    { 
+      name: "Career Goals", 
+      description: "What you want to achieve professionally",
+      component: CareerGoalsStep 
+    },
+    { 
+      name: "Preferences", 
+      description: "Your preferences for educational programs",
+      component: PreferencesStep 
+    },
+    { 
+      name: "Documents", 
+      description: "Upload supporting documents",
+      component: DocumentsStep 
+    },
+    { 
+      name: "Review", 
+      description: "Review your profile before completion",
+      component: ReviewStep 
+    },
   ];
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
+      setAnimationDirection("forward");
+      
+      // Show completion animation when step is complete
+      setShowCompletionMessage(true);
+      setTimeout(() => {
+        setShowCompletionMessage(false);
       setCurrentStep(currentStep + 1);
+      }, 800);
     }
   };
 
   const handlePrevious = () => {
     if (currentStep > 0) {
+      setAnimationDirection("backward");
       setCurrentStep(currentStep - 1);
     }
   };
 
   const handleSkipToPersonalInfo = () => {
+    setAnimationDirection("forward");
     setCurrentStep(1); // Skip to the Personal Information step
   };
 
-  const handleComplete = async () => {
-    try {
-      // Create a vector store with the user's profile data
-      const createStoreResponse = await fetch("/api/vector_stores/create_store", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeName: `Profile: ${profileData.firstName} ${profileData.lastName}`,
-        }),
-      });
-      
-      if (!createStoreResponse.ok) {
-        throw new Error("Failed to create vector store");
-      }
-      
-      const createStoreData = await createStoreResponse.json();
-      const vectorStoreId = createStoreData.id;
-      
-      // Convert the profile data to a string representation for the vector store
-      const profileText = JSON.stringify(profileData, null, 2);
-      
-      // Upload the profile data as a file
-      const fileObject = {
-        name: "profile.json",
-        content: btoa(profileText),
-      };
-      
-      const uploadResponse = await fetch("/api/vector_stores/upload_file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileObject }),
-      });
-      
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload profile data");
-      }
-      
-      const uploadData = await uploadResponse.json();
-      const fileId = uploadData.id;
-      
-      // Add the file to the vector store
-      const addFileResponse = await fetch("/api/vector_stores/add_file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileId,
-          vectorStoreId,
-        }),
-      });
-      
-      if (!addFileResponse.ok) {
-        throw new Error("Failed to add file to vector store");
-      }
-      
-      // Save the vector store ID to the profile data
-      setProfileData(prevData => ({
-        ...prevData,
-        vectorStoreId,
-      }));
-      
-      // Save the complete profile data to the backend
-      // For now, we'll just log it and redirect
-      console.log("Profile completed:", { ...profileData, vectorStoreId });
-      
-      // Redirect to the recommendations page
-      router.push("/recommendations");
-    } catch (error) {
-      console.error("Error submitting profile:", error);
-      alert("There was an error saving your profile. Please try again.");
+  // This function now just logs completion
+  // The actual vector store creation is now handled in ReviewStep
+  const handleComplete = () => {
+    console.log("Profile completed:", profileData);
+  };
+
+  // Animation variants for step transitions
+  const slideVariants = {
+    enter: (direction: string) => ({
+      x: direction === "forward" ? "100%" : "-100%",
+      opacity: 0,
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+    },
+    exit: (direction: string) => ({
+      x: direction === "forward" ? "-100%" : "100%",
+      opacity: 0,
+    }),
+  };
+
+  // Render the current step with proper typing
+  const renderCurrentStep = () => {
+    const StepComponent = steps[currentStep].component;
+    
+    if (currentStep === 0) {
+      // LinkedIn import step
+      return (
+        <motion.div
+          key={currentStep}
+          custom={animationDirection}
+          variants={slideVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ type: "tween", duration: 0.3 }}
+        >
+          <StepComponent
+            profileData={profileData}
+            setProfileData={setProfileData}
+            onManualEntry={handleSkipToPersonalInfo}
+          />
+        </motion.div>
+      );
+    } else if (currentStep === steps.length - 1) {
+      // Review step
+      return (
+        <motion.div
+          key={currentStep}
+          custom={animationDirection}
+          variants={slideVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ type: "tween", duration: 0.3 }}
+        >
+          <StepComponent
+            profileData={profileData}
+            setProfileData={setProfileData}
+            onComplete={handleComplete}
+          />
+        </motion.div>
+      );
+    } else {
+      // Other steps
+      return (
+        <motion.div
+          key={currentStep}
+          custom={animationDirection}
+          variants={slideVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ type: "tween", duration: 0.3 }}
+        >
+          <StepComponent
+            profileData={profileData}
+            setProfileData={setProfileData}
+          />
+        </motion.div>
+      );
     }
   };
 
-  // Render the current step
-  const CurrentStepComponent = steps[currentStep].component;
-
-  // Additional props for the LinkedIn import step
-  const stepProps = currentStep === 0 
-    ? { 
-        onManualEntry: handleSkipToPersonalInfo,
-        ...{ profileData, setProfileData }
-      } 
-    : { profileData, setProfileData };
-
   return (
-    <Card className="p-6 shadow-md">
+    <Card className="p-6 shadow-lg rounded-xl relative overflow-hidden border border-blue-100">
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-white z-0 opacity-50"></div>
+      
+      {/* Step completion notification */}
+      {showCompletionMessage && (
+        <motion.div 
+          className="absolute top-4 right-4 bg-green-100 text-green-700 px-4 py-2 rounded-lg shadow-md flex items-center"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+        >
+          <CheckCircle2 className="mr-2 h-5 w-5" />
+          <span>Step completed!</span>
+        </motion.div>
+      )}
+      
+      <div className="relative z-10">
+        {/* Current step info */}
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-blue-800 mb-2">{steps[currentStep].name}</h2>
+          <p className="text-sm text-gray-600">{steps[currentStep].description}</p>
+        </div>
+        
       {/* Progress indicator */}
-      <div className="mb-6">
-        <div className="flex justify-between mb-2">
+        <div className="mb-8">
+          <div className="relative mb-6">
+            {/* Step numbers with connector line */}
+            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -translate-y-1/2"></div>
+            <div 
+              className="absolute top-1/2 left-0 h-1 bg-blue-600 -translate-y-1/2 transition-all duration-700 ease-in-out"
+              style={{ width: `${((currentStep) / (steps.length - 1)) * 100}%` }}
+            ></div>
+            
+            <div className="relative flex justify-between">
           {steps.map((step, index) => (
-            <div
-              key={index}
-              className={`text-xs font-medium ${
-                index <= currentStep ? "text-blue-600" : "text-zinc-400"
+                <div key={index} className="flex flex-col items-center">
+                  <button
+                    disabled={index > currentStep}
+                    onClick={() => {
+                      if (index < currentStep) {
+                        setAnimationDirection("backward");
+                        setCurrentStep(index);
+                      }
+                    }}
+                    className={`z-10 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 
+                    ${index < currentStep 
+                      ? "bg-blue-500 text-white hover:bg-blue-600 cursor-pointer" 
+                      : index === currentStep 
+                        ? "bg-blue-600 text-white ring-4 ring-blue-100" 
+                        : "bg-gray-200 text-gray-500 cursor-not-allowed"}
+                    `}
+                  >
+                    {index + 1}
+                  </button>
+                  <span 
+                    className={`mt-2 text-xs font-medium text-center transition-all duration-300 ${
+                      index <= currentStep ? "text-blue-600" : "text-gray-400"
               }`}
             >
               {step.name}
+                  </span>
             </div>
           ))}
         </div>
-        <div className="w-full bg-zinc-200 rounded-full h-2.5">
-          <div
-            className="bg-blue-600 h-2.5 rounded-full transition-all"
-            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
-          ></div>
-        </div>
+          </div>
       </div>
 
       {/* Current step content */}
-      <div className="mb-6">
-        <CurrentStepComponent
-          {...stepProps}
-        />
+        <div className="mb-8 min-h-[400px]">
+          {renderCurrentStep()}
       </div>
 
-      {/* Navigation buttons */}
+        {/* Navigation buttons - only show for non-review steps */}
+        {currentStep < steps.length - 1 && (
       <div className="flex justify-between mt-6">
         <Button
           variant="outline"
           onClick={handlePrevious}
           disabled={currentStep === 0}
+              className="transition-all duration-300 hover:bg-gray-100 px-6"
         >
           Previous
         </Button>
         
-        {currentStep < steps.length - 1 ? (
-          currentStep === 0 ? null : <Button onClick={handleNext}>Next</Button>
-        ) : (
-          <Button onClick={handleComplete}>Complete Profile</Button>
+            {currentStep === 0 ? null : (
+              <Button 
+                onClick={handleNext}
+                className="bg-blue-600 hover:bg-blue-700 transition-all duration-300 px-8 shadow-md hover:shadow-lg flex items-center gap-2"
+              >
+                Next
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </Card>

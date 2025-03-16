@@ -1,63 +1,102 @@
 ---
-description: Database rules for working with databases, drizzle schemas and creating backend apis
+description: Database rules for working with databases, SQLAlchemy schemas and creating backend apis
 globs: 
 alwaysApply: false
 ---
 You are an expert database architect with extensive experience in designing robust, scalable schemas for modern applications. For the Vista Education Adviser PoC, adhere to the following database rules and conventions:
 
+## Database Technology
+
+### SQLAlchemy ORM with PostgreSQL
+Vista Education Adviser uses SQLAlchemy ORM with PostgreSQL for data persistence:
+
+- **Models**: Define in `app/models/` directory as Python classes that inherit from SQLAlchemy Base
+- **Migrations**: Use Alembic for database migrations (in the `migrations/` directory)
+- **Schemas**: Use Pydantic models for request/response validation in `app/api/<module>/schemas.py`
+
 ## Data Types and Field Conventions
 
-### String Types over Enums
-Use Drizzle’s string types instead of enums for better flexibility.
+### String Types
+Use SQLAlchemy's string types with appropriate lengths:
 
 **Example:**
-```ts
-status: text("status").$type<pending | cancelled | error>().notNull()
+```python
+# For status fields with specific values
+status = Column(String(20), nullable=False)  # values like: 'pending', 'cancelled', 'error'
 ```
 
-### Text vs. Varchar
-- **IDs**: Use `varchar` for id fields (as in the users table) to maintain consistency.
-- **Other Fields**: Use `text` for all other string fields unless a length restriction is necessary.
+### String Field Types
+- **IDs**: Use `UUID` or `String` with appropriate length for ID fields
+- **Short Text**: Use `String` with length limit for fields like names, titles
+- **Long Text**: Use `Text` for unlimited length text fields like descriptions
 
 ## ID Generation and Table Naming Conventions
 
-### New Table Creation
+### ID Generation
 
-Leverage the `ID` utility in `packages/id/src/generate.ts` when creating a new table.
-
-#### Prefixes
-Use the predefined prefixes to ensure unique and consistent id generation.
+Use UUID v4 for primary keys to ensure uniqueness across distributed systems:
 
 **Example:**
-```ts
-// packages/id/generate.ts
+```python
+import uuid
+from sqlalchemy import Column, String
+from sqlalchemy.dialects.postgresql import UUID
 
-const prefixes = {
-  post: "post",
-  property: "prop",
-  // Add new prefixes here
-} as const;
+# In a model file
+id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 ```
 
-#### Adding New Tables
-Simply add a new key (with an abbreviated value if needed) for your table. No changes to nanoid or other logic are required.
+### Table Naming
 
-### Schema Integration
-
-Use the generated IDs in your schema definition within `packages/db/schema.ts`.
+- Use plural, snake_case names for tables
+- Use singular, CamelCase for model class names
 
 **Example:**
-```ts
-export const properties = pgTable("properties", {
-  id: varchar("id", { length: 255 })
-    .primaryKey()
-    .$defaultFn(() => newId("property"))
-  // ... other fields
-});
+```python
+# Class name is singular
+class User(Base):
+    # Table name is plural
+    __tablename__ = "users"
+```
+
+## Relationships
+
+Define clear relationships between entities using SQLAlchemy's relationship tools:
+
+**Example:**
+```python
+# One-to-many relationship
+class User(Base):
+    __tablename__ = "users"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # ...other fields
+    
+    # Relationship to profiles (one user has one profile)
+    profile = relationship("Profile", back_populates="user", uselist=False)
+
+class Profile(Base):
+    __tablename__ = "profiles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # ...other fields
+    
+    # Relationship to user (one profile belongs to one user)
+    user = relationship("User", back_populates="profile")
 ```
 
 ## Special Considerations
 
 ### Users Table
-Do not include extraneous fields such as avatar or name unless specifically required for synchronization via Clerk.
+Include only authentication-related fields in the User model, with profile-specific fields in the Profile model:
+
+**Example:**
+```python
+class User(Base):
+    __tablename__ = "users"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=True)  # Nullable for social auth users
+    is_active = Column(Boolean(), default=True)
+    auth_provider = Column(String(20), nullable=False, default="email")  # "email", "google", "linkedin"
+```
 

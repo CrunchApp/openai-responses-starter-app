@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Users, BookOpen, GraduationCap, ArrowRight, Menu, X } from "lucide-react";
@@ -12,8 +13,15 @@ export default function Home() {
     <div className="flex flex-col min-h-screen">
       {/* Navigation Bar */}
       <header className="sticky top-0 z-50 w-full bg-white border-b shadow-sm">
-        <div className="container flex items-center justify-between h-16 px-4 md:px-6">
-          <Link href="/" className="flex items-center">
+        <div className="container flex items-center justify-between h-20 px-4 md:px-6">
+          <Link href="/" className="flex items-center gap-3">
+            <Image 
+              src="/vista_logo.svg"
+              alt="Vista Logo"
+              width={60}
+              height={60}
+              className="h-auto"
+            />
             <h1 className="text-2xl font-bold text-primary">Vista Education Adviser</h1>
           </Link>
           
@@ -262,7 +270,7 @@ export default function Home() {
                 </p>
               </div>
               <div>
-                <Button variant="secondary" size="lg" className="mt-4">
+                <Button variant="secondary" size="lg" className="mt-4 bg-accent text-white hover:bg-accent/90">
                   Take the Test
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -270,7 +278,7 @@ export default function Home() {
             </div>
             <div className="flex justify-center">
               <div 
-                className="rounded-lg bg-gradient-to-br from-blue-400 to-indigo-600 w-64 h-64 md:w-80 md:h-80"
+                className="rounded-lg bg-gradient-to-br from-accent/80 to-accent w-64 h-64 md:w-80 md:h-80"
                 aria-label="Personality Test Illustration"
               >
                 <GraduationCap className="w-20 h-20 text-white m-auto flex items-center justify-center h-full" />

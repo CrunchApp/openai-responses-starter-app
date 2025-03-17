@@ -9,8 +9,10 @@ import CareerGoalsStep from "./steps/career-goals-step";
 import PreferencesStep from "./steps/preferences-step";
 import DocumentsStep from "./steps/documents-step";
 import ReviewStep from "./steps/review-step";
+import WelcomeStep from "./steps/welcome-step";
+import ImportOptionsStep from "./steps/import-options-step";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 
 // Define profile data structure
@@ -20,6 +22,7 @@ export interface ProfileData {
   lastName: string;
   email: string;
   phone: string;
+  preferredName: string;
   
   // LinkedIn profile information
   linkedInProfile?: string;
@@ -73,6 +76,14 @@ export interface BaseStepProps {
   setProfileData: Dispatch<SetStateAction<ProfileData>>;
 }
 
+export interface WelcomeStepProps extends BaseStepProps {
+  onComplete: () => void;
+}
+
+export interface ImportOptionsStepProps extends BaseStepProps {
+  onComplete: () => void;
+}
+
 export interface LinkedInImportStepProps extends BaseStepProps {
   onManualEntry: () => void;
 }
@@ -99,6 +110,7 @@ export default function ProfileWizard() {
     lastName: "",
     email: "",
     phone: "",
+    preferredName: "",
     linkedInProfile: "",
     education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
     careerGoals: {
@@ -121,10 +133,15 @@ export default function ProfileWizard() {
   });
 
   const steps: Step[] = [
-    { 
-      name: "LinkedIn Import", 
-      description: "Fast-track your profile setup by importing from LinkedIn",
-      component: LinkedInImportStep 
+    {
+      name: "Welcome",
+      description: "Let's get started with Vista",
+      component: WelcomeStep
+    },
+    {
+      name: "Profile Import",
+      description: "Tell Vista about yourself",
+      component: ImportOptionsStep
     },
     { 
       name: "Personal Information", 
@@ -147,11 +164,6 @@ export default function ProfileWizard() {
       component: PreferencesStep 
     },
     { 
-      name: "Documents", 
-      description: "Upload supporting documents",
-      component: DocumentsStep 
-    },
-    { 
       name: "Review", 
       description: "Review your profile before completion",
       component: ReviewStep 
@@ -166,7 +178,7 @@ export default function ProfileWizard() {
       setShowCompletionMessage(true);
       setTimeout(() => {
         setShowCompletionMessage(false);
-      setCurrentStep(currentStep + 1);
+        setCurrentStep(currentStep + 1);
       }, 800);
     }
   };
@@ -176,11 +188,6 @@ export default function ProfileWizard() {
       setAnimationDirection("backward");
       setCurrentStep(currentStep - 1);
     }
-  };
-
-  const handleSkipToPersonalInfo = () => {
-    setAnimationDirection("forward");
-    setCurrentStep(1); // Skip to the Personal Information step
   };
 
   // This function now just logs completion
@@ -210,7 +217,7 @@ export default function ProfileWizard() {
     const StepComponent = steps[currentStep].component;
     
     if (currentStep === 0) {
-      // LinkedIn import step
+      // Welcome step
       return (
         <motion.div
           key={currentStep}
@@ -224,7 +231,26 @@ export default function ProfileWizard() {
           <StepComponent
             profileData={profileData}
             setProfileData={setProfileData}
-            onManualEntry={handleSkipToPersonalInfo}
+            onComplete={handleNext}
+          />
+        </motion.div>
+      );
+    } else if (currentStep === 1) {
+      // Import Options step
+      return (
+        <motion.div
+          key={currentStep}
+          custom={animationDirection}
+          variants={slideVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ type: "tween", duration: 0.3 }}
+        >
+          <StepComponent
+            profileData={profileData}
+            setProfileData={setProfileData}
+            onComplete={handleNext}
           />
         </motion.div>
       );
@@ -248,7 +274,7 @@ export default function ProfileWizard() {
         </motion.div>
       );
     } else {
-      // Other steps
+      // Regular steps
       return (
         <motion.div
           key={currentStep}
@@ -268,106 +294,93 @@ export default function ProfileWizard() {
     }
   };
 
+  const completionAnimation = {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 500, damping: 20 } },
+    exit: { opacity: 0, scale: 1.2, transition: { duration: 0.2 } }
+  };
+
   return (
-    <Card className="p-6 shadow-lg rounded-xl relative overflow-hidden border border-blue-100">
-      {/* Background pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-white z-0 opacity-50"></div>
-      
-      {/* Step completion notification */}
-      {showCompletionMessage && (
-        <motion.div 
-          className="absolute top-4 right-4 bg-green-100 text-green-700 px-4 py-2 rounded-lg shadow-md flex items-center"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-        >
-          <CheckCircle2 className="mr-2 h-5 w-5" />
-          <span>Step completed!</span>
-        </motion.div>
-      )}
-      
-      <div className="relative z-10">
-        {/* Current step info */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-blue-800 mb-2">{steps[currentStep].name}</h2>
-          <p className="text-sm text-gray-600">{steps[currentStep].description}</p>
-        </div>
-        
-      {/* Progress indicator */}
-        <div className="mb-8">
-          <div className="relative mb-6">
-            {/* Step numbers with connector line */}
-            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -translate-y-1/2"></div>
-            <div 
-              className="absolute top-1/2 left-0 h-1 bg-blue-600 -translate-y-1/2 transition-all duration-700 ease-in-out"
-              style={{ width: `${((currentStep) / (steps.length - 1)) * 100}%` }}
-            ></div>
-            
-            <div className="relative flex justify-between">
-          {steps.map((step, index) => (
-                <div key={index} className="flex flex-col items-center">
-                  <button
-                    disabled={index > currentStep}
-                    onClick={() => {
-                      if (index < currentStep) {
-                        setAnimationDirection("backward");
-                        setCurrentStep(index);
-                      }
-                    }}
-                    className={`z-10 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 
-                    ${index < currentStep 
-                      ? "bg-blue-500 text-white hover:bg-blue-600 cursor-pointer" 
-                      : index === currentStep 
-                        ? "bg-blue-600 text-white ring-4 ring-blue-100" 
-                        : "bg-gray-200 text-gray-500 cursor-not-allowed"}
-                    `}
-                  >
-                    {index + 1}
-                  </button>
-                  <span 
-                    className={`mt-2 text-xs font-medium text-center transition-all duration-300 ${
-                      index <= currentStep ? "text-blue-600" : "text-gray-400"
-              }`}
+    <div className="max-w-3xl mx-auto py-8 px-4">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-4">Create Your Profile</h1>
+        <p className="text-zinc-600">
+          Complete the steps below to set up your personal educational profile.
+        </p>
+      </div>
+
+      <div className="relative">
+        {/* Step completion animation overlay */}
+        <AnimatePresence>
+          {showCompletionMessage && (
+            <motion.div 
+              className="absolute inset-0 flex items-center justify-center z-10 bg-white/70 backdrop-blur-sm rounded-lg"
+              variants={completionAnimation}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
             >
-              {step.name}
-                  </span>
-            </div>
-          ))}
+              <div className="bg-green-100 p-4 rounded-full">
+                <CheckCircle2 className="h-10 w-10 text-green-600" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Progress steps */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between max-w-xl mx-auto">
+            {steps.map((step, idx) => (
+              <div key={idx} className="flex flex-col items-center">
+                <div 
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                    idx < currentStep 
+                      ? "bg-green-500 text-white"
+                      : idx === currentStep
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {idx < currentStep ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <span>{idx + 1}</span>
+                  )}
+                </div>
+                <span className="text-xs mt-2 hidden md:block">{step.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="relative max-w-xl mx-auto mt-4">
+            <div className="absolute top-1/2 left-4 right-4 h-1 bg-gray-200 -translate-y-1/2" />
+            <div 
+              className="absolute top-1/2 left-4 h-1 bg-blue-600 -translate-y-1/2 transition-all duration-300"
+              style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+            />
+          </div>
         </div>
-          </div>
-      </div>
 
-      {/* Current step content */}
-        <div className="mb-8 min-h-[400px]">
-          {renderCurrentStep()}
-      </div>
+        {/* Main content */}
+        <Card className="p-6 shadow-md">
+          <AnimatePresence mode="wait" custom={animationDirection}>
+            {renderCurrentStep()}
+          </AnimatePresence>
 
-        {/* Navigation buttons - only show for non-review steps */}
-        {currentStep < steps.length - 1 && (
-      <div className="flex justify-between mt-6">
-        <Button
-          variant="outline"
-          onClick={handlePrevious}
-          disabled={currentStep === 0}
-              className="transition-all duration-300 hover:bg-gray-100 px-6"
-        >
-          Previous
-        </Button>
-        
-            {currentStep === 0 ? null : (
-              <Button 
-                onClick={handleNext}
-                className="bg-blue-600 hover:bg-blue-700 transition-all duration-300 px-8 shadow-md hover:shadow-lg flex items-center gap-2"
+          {/* Navigation buttons */}
+          {currentStep !== 0 && currentStep !== 1 && currentStep !== steps.length - 1 && (
+            <div className="flex justify-between mt-8 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={handlePrevious}
+                disabled={currentStep === 0}
               >
-                Next
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
+                Previous
               </Button>
-            )}
-          </div>
-        )}
+              <Button onClick={handleNext}>Continue</Button>
+            </div>
+          )}
+        </Card>
       </div>
-    </Card>
+    </div>
   );
 } 

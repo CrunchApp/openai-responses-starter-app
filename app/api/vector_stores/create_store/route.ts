@@ -3,14 +3,38 @@ import OpenAI from "openai";
 const openai = new OpenAI();
 
 export async function POST(request: Request) {
-  const { name } = await request.json();
   try {
+    // Parse request body
+    const body = await request.json();
+    const { name } = body;
+
+    // Validate name
+    if (!name || typeof name !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'A valid name is required for the vector store' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create vector store with OpenAI API
     const vectorStore = await openai.vectorStores.create({
       name,
     });
-    return new Response(JSON.stringify(vectorStore), { status: 200 });
+
+    // Return successful response with the created vector store data
+    return new Response(
+      JSON.stringify(vectorStore),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
+    // Log the error for debugging
     console.error("Error creating vector store:", error);
-    return new Response("Error creating vector store", { status: 500 });
+    
+    // Return appropriate error response
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }

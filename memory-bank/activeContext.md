@@ -51,6 +51,7 @@
 - Planning feature implementation sequence
 - Setting up the FastAPI backend structure
 - Designing database schemas for user profiles and authentication
+- Designing comprehensive data model for user profiles, education programs, and recommendations
 
 ## Recent Decisions
 - Decision to use the openai-responses-starter-app as the foundation for the frontend
@@ -59,6 +60,27 @@
 - Selected FastAPI with SQLAlchemy for the backend over other alternatives
 - Decided to use JWT-based authentication with social OAuth integration
 - Chosen to implement file storage in cloud storage (AWS S3 or Firebase)
+- Designed comprehensive data model with entities for users, profiles, education history, work experience, career goals, education preferences, programs, institutions, recommendations, and feedback
+
+## Data Model Implementation Status
+- Detailed data model created with 13 key entities:
+  - Users: Authentication and basic user information
+  - Profiles: Personal user information
+  - Education: User's education history
+  - WorkExperience: User's work history
+  - CareerGoal: User's career objectives
+  - EducationPreference: User's education preferences for recommendations
+  - Program: Educational programs to recommend
+  - Institution: Educational institutions offering programs
+  - Recommendation: Links users to recommended programs with match scores
+  - RecommendationFeedback: Stores user feedback on recommendations
+  - Document: User-uploaded documents
+  - Conversation: Chat conversations with the AI assistant
+  - Message: Individual messages within conversations
+- Defined relationships between entities, with important one-to-many relationships
+- Prepared schema with appropriate data types for PostgreSQL implementation
+- Added support for recommendation feedback to improve future matching
+- Included verification tracking for education and work experience data
 
 ## Integration Points Status
 - LinkedIn OAuth: Planned, not implemented
@@ -95,11 +117,11 @@
 - Develop profile data models and API endpoints
 
 ## Timeline
-- Project setup: March 16-17, 2023
-- Authentication implementation: March 18-22, 2023
-- Profile management: March 23-26, 2023
-- Recommendation engine: March 27-31, 2023
-- Chatbot integration: April 1-5, 2023
-- External integrations: April 6-12, 2023
-- Testing and refinement: April 13-19, 2023
-- Initial deployment: April 20, 2023
+- Project setup: March 16-17, 2025
+- Authentication implementation: March 18-22, 2025
+- Profile management: March 23-26, 2025
+- Recommendation engine: March 27-31, 2025
+- Chatbot integration: April 1-5, 2025
+- External integrations: April 6-12, 2025
+- Testing and refinement: April 13-19, 2025
+- Initial deployment: April 20, 2025

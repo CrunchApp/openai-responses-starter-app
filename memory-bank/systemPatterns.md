@@ -124,6 +124,184 @@ The openai-responses-starter-app serves as the foundation for our frontend imple
 - **User → Conversations**: One-to-many relationship
 - **Conversation → Messages**: One-to-many relationship
 - **User → Documents**: One-to-many relationship
+- **Program → Recommendations**: One-to-many relationship
+- **Recommendation → Feedback**: One-to-one relationship
+
+## Data Model
+
+### User Entity
+- **id**: UUID (Primary Key)
+- **email**: String, unique, required
+- **password_hash**: String (for email/password authentication)
+- **auth_provider**: String (email, google, linkedin)
+- **auth_provider_id**: String (optional, for OAuth users)
+- **created_at**: DateTime
+- **updated_at**: DateTime
+- **last_login**: DateTime
+- **is_active**: Boolean
+- **is_verified**: Boolean
+
+### Profile Entity
+- **id**: UUID (Primary Key)
+- **user_id**: UUID (Foreign Key to User)
+- **first_name**: String
+- **last_name**: String
+- **date_of_birth**: Date
+- **nationality**: String
+- **country_of_residence**: String
+- **phone_number**: String
+- **preferred_language**: String
+- **profile_completion**: Int (percentage of profile completed)
+- **profile_picture_url**: String (optional)
+- **bio**: Text (optional)
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### Education Entity
+- **id**: UUID (Primary Key)
+- **profile_id**: UUID (Foreign Key to Profile)
+- **institution_name**: String
+- **degree**: String
+- **field_of_study**: String
+- **start_date**: Date
+- **end_date**: Date (optional, for ongoing education)
+- **grade**: String (optional)
+- **activities**: Text (optional)
+- **description**: Text (optional)
+- **is_verified**: Boolean
+- **verification_source**: String (self, linkedin, document)
+
+### WorkExperience Entity
+- **id**: UUID (Primary Key)
+- **profile_id**: UUID (Foreign Key to Profile)
+- **company_name**: String
+- **position**: String
+- **start_date**: Date
+- **end_date**: Date (optional, for current positions)
+- **location**: String
+- **description**: Text (optional)
+- **skills**: Array of Strings
+- **is_verified**: Boolean
+- **verification_source**: String (self, linkedin, document)
+
+### CareerGoal Entity
+- **id**: UUID (Primary Key)
+- **profile_id**: UUID (Foreign Key to Profile)
+- **desired_industry**: String
+- **desired_role**: String
+- **desired_location**: String
+- **timeline**: String (immediate, short-term, long-term)
+- **salary_expectation**: Range (min-max)
+- **priority_factors**: JSON (e.g., {"work_life_balance": 5, "salary": 4, ...})
+- **description**: Text
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### EducationPreference Entity
+- **id**: UUID (Primary Key)
+- **profile_id**: UUID (Foreign Key to Profile)
+- **program_types**: Array of Strings (degree, certificate, etc.)
+- **preferred_countries**: Array of Strings
+- **preferred_institutions**: Array of Strings (optional)
+- **preferred_study_mode**: String (full-time, part-time, online, hybrid)
+- **budget_range**: Range (min-max)
+- **start_date_range**: Range (earliest-latest)
+- **duration_preference**: String
+- **funding_needs**: Boolean
+- **special_requirements**: Text (optional)
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### Program Entity
+- **id**: UUID (Primary Key)
+- **name**: String
+- **institution_id**: UUID (Foreign Key to Institution)
+- **type**: String (degree, certificate, diploma, etc.)
+- **level**: String (bachelor, master, phd, etc.)
+- **field**: String
+- **specialization**: String (optional)
+- **description**: Text
+- **duration**: Int (in months)
+- **cost**: Decimal
+- **currency**: String
+- **location**: String
+- **delivery_mode**: String (on-campus, online, hybrid)
+- **language**: String
+- **entry_requirements**: JSON
+- **application_deadline**: Date
+- **start_dates**: Array of Dates
+- **link**: String (URL to program page)
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### Institution Entity
+- **id**: UUID (Primary Key)
+- **name**: String
+- **type**: String (university, college, institute, etc.)
+- **country**: String
+- **city**: String
+- **website**: String
+- **accreditation**: Array of Strings
+- **ranking**: JSON (e.g., {"world": 150, "national": 15, ...})
+- **description**: Text
+- **founded_year**: Int
+- **student_count**: Int
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### Recommendation Entity
+- **id**: UUID (Primary Key)
+- **user_id**: UUID (Foreign Key to User)
+- **program_id**: UUID (Foreign Key to Program)
+- **match_score**: Decimal (0-100)
+- **match_factors**: JSON (detailed scoring by factor)
+- **priority**: Int (1-5, with 1 being highest)
+- **is_favorite**: Boolean (user marked as favorite)
+- **status**: String (recommended, viewed, saved, applied, rejected)
+- **recommended_at**: DateTime
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### RecommendationFeedback Entity
+- **id**: UUID (Primary Key)
+- **recommendation_id**: UUID (Foreign Key to Recommendation)
+- **user_rating**: Int (1-5)
+- **feedback_text**: Text (optional)
+- **relevance_score**: Int (1-5)
+- **helpful_attributes**: Array of Strings
+- **unhelpful_attributes**: Array of Strings
+- **created_at**: DateTime
+- **updated_at**: DateTime
+
+### Document Entity
+- **id**: UUID (Primary Key)
+- **user_id**: UUID (Foreign Key to User)
+- **name**: String
+- **description**: String (optional)
+- **file_type**: String (pdf, docx, jpg, etc.)
+- **file_size**: Int (in bytes)
+- **document_type**: String (transcript, certificate, resume, etc.)
+- **storage_path**: String
+- **uploaded_at**: DateTime
+- **is_verified**: Boolean
+- **verification_date**: DateTime (optional)
+
+### Conversation Entity
+- **id**: UUID (Primary Key)
+- **user_id**: UUID (Foreign Key to User)
+- **title**: String
+- **created_at**: DateTime
+- **updated_at**: DateTime
+- **last_message_at**: DateTime
+
+### Message Entity
+- **id**: UUID (Primary Key)
+- **conversation_id**: UUID (Foreign Key to Conversation)
+- **role**: String (user, assistant)
+- **content**: Text
+- **created_at**: DateTime
+- **related_programs**: Array of UUIDs (optional, for program references)
+- **related_institutions**: Array of UUIDs (optional, for institution references)
 
 ## Application State Management
 - Use appropriate state management based on complexity:

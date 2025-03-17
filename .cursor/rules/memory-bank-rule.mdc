@@ -3,20 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
-Memory-Bank Rule for AI Coding Agent:
-----------------------------------------------------------
-Before initiating any coding task or modification, ensure that a "memory-bank/" folder exists at the project root. 
-
-memory-bank/
-├── [projectBrief.md](mdc:memory-bank/projectBrief.md)      # High-level overview: goals, requirements, and key project info.
-├── [productContext.md](mdc:memory-bank/productContext.md)    # The “why” behind the project: user needs, business context.
-├── [systemPatterns.md](mdc:memory-bank/systemPatterns.md)    # Architectural decisions, design patterns, and relationships.
-├── [techContext.md](mdc:memory-bank/techContext.md)       # Technical stack details, dependencies, and environment setup.
-├── [activeContext.md](mdc:memory-bank/activeContext.md)     # Current state: ongoing tasks, recent changes, and decisions.
-└── [progress.md](mdc:memory-bank/progress.md)          # Change tracking: completed work, milestones, and updates.
-
-
-This folder is your persistent source of project context and guidelines. Follow these steps:
+The memory-bank folder is your persistent source of project context, documentation and guidelines. Follow these steps when executing any tasks:
 
 
 1. Pre-Task Check:
@@ -42,6 +29,15 @@ This folder is your persistent source of project context and guidelines. Follow 
 5. Ongoing Reference:
    - Throughout multi-file edits or new code additions, periodically refer back to the memory-bank files to ensure your work is in sync with established guidelines.
    - If any conflicts or uncertainties arise between new changes and existing documentation, pause and consult the memory bank for clarification before proceeding.
+
+
+   memory-bank/
+├── @projectBrief.md      # High-level overview: goals, requirements, and key project info.
+├── @productContext.md    # The “why” behind the project: user needs, business context.
+├── @systemPatterns.md    # Architectural decisions, design patterns, and relationships.
+├── @techContext.md       # Technical stack details, dependencies, and environment setup.
+├── @activeContext.md     # Current state: ongoing tasks, recent changes, and decisions.
+└── @progress.md          # Change tracking: completed work, milestones, and updates.
 
 
 ----------------------------------------------------------

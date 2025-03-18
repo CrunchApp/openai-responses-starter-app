@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ProfileData } from "../profile-wizard";
 import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, Edit2, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award } from "lucide-react";
@@ -29,26 +29,30 @@ export default function ReviewStep({
   const router = useRouter();
   const { setVectorStore, setFileSearchEnabled } = useToolsStore();
 
+  // Add a useEffect to check for uploaded documents in localStorage
+  useEffect(() => {
+    // Check if documents need to be updated from the vector store
+    const vectorStoreId = localStorage.getItem('userVectorStoreId');
+    
+    if (vectorStoreId && !profileData.vectorStoreId) {
+      // If there's a vector store ID in localStorage but not in profileData, update it
+      setProfileData(prev => ({
+        ...prev,
+        vectorStoreId: vectorStoreId
+      }));
+    }
+  }, [profileData.vectorStoreId, setProfileData]);
+
   const handleCompleteProfile = async () => {
     try {
       setIsSubmitting(true);
       
-      // Create a new vector store with user-specific name
-      const storeName = `${profileData.firstName} ${profileData.lastName}'s Profile`;
-      const createResponse = await fetch("/api/vector_stores/create_store", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeName: storeName,
-        }),
-      });
+      // Get the vector store ID from localStorage (created during welcome step)
+      const vectorStoreId = localStorage.getItem('userVectorStoreId');
       
-      if (!createResponse.ok) {
-        throw new Error("Failed to create vector store");
+      if (!vectorStoreId) {
+        throw new Error("Vector store not found. Please restart the profile setup.");
       }
-      
-      const createData = await createResponse.json();
-      const vectorStoreId = createData.id;
       
       // Create a JSON file with all profile data
       const profileJson = JSON.stringify(profileData, null, 2);
@@ -90,16 +94,18 @@ export default function ReviewStep({
         throw new Error("Failed to add file to vector store");
       }
       
-      // Update the profile data with the vector store ID
-      setProfileData(prev => ({
-        ...prev,
-        vectorStoreId
-      }));
+      // Make sure the profile data has the vector store ID
+      if (!profileData.vectorStoreId) {
+        setProfileData(prev => ({
+          ...prev,
+          vectorStoreId
+        }));
+      }
       
       // Store the vector store in global state for the AI assistant to use
       setVectorStore({
         id: vectorStoreId,
-        name: storeName,
+        name: `${profileData.firstName} ${profileData.lastName}'s Profile`,
       });
       
       // Enable file search to use the vector store

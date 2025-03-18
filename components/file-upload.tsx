@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useState, FormEvent } from "react";
+import React, { useCallback, useState, FormEvent, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,19 +22,45 @@ import {
 interface FileUploadProps {
   vectorStoreId?: string;
   vectorStoreName?: string;
-  onAddStore: (id: string) => void;
-  onUnlinkStore: () => void;
+  onAddStore?: (id: string) => void;
+  onUnlinkStore?: () => void;
+  customTrigger?: React.ReactNode;
+  dialogOpen?: boolean;
+  setDialogOpen?: (open: boolean) => void;
 }
 
 export default function FileUpload({
   vectorStoreId,
-  onAddStore,
-  onUnlinkStore,
+  vectorStoreName,
+  onAddStore = () => {},
+  onUnlinkStore = () => {},
+  customTrigger,
+  dialogOpen,
+  setDialogOpen: externalSetDialogOpen,
 }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
+  const [userVectorStoreId, setUserVectorStoreId] = useState<string | null>(null);
   const [newStoreName, setNewStoreName] = useState<string>("Default store");
   const [uploading, setUploading] = useState<boolean>(false);
-  const [dialogOpen, setDialogOpen] = useState<boolean>(false);
+  const [internalDialogOpen, setInternalDialogOpen] = useState<boolean>(false);
+  const [storeError, setStoreError] = useState<string | null>(null);
+  
+  // Use external dialog state if provided, otherwise use internal state
+  const isDialogOpen = dialogOpen !== undefined ? dialogOpen : internalDialogOpen;
+  const setIsDialogOpen = externalSetDialogOpen || setInternalDialogOpen;
+
+  // Load the user's vector store ID from localStorage on component mount
+  useEffect(() => {
+    const storedVectorStoreId = localStorage.getItem('userVectorStoreId');
+    if (storedVectorStoreId) {
+      setUserVectorStoreId(storedVectorStoreId);
+      
+      // If no vector store ID was provided through props, update using the stored one
+      if (!vectorStoreId && typeof onAddStore === 'function') {
+        onAddStore(storedVectorStoreId);
+      }
+    }
+  }, [vectorStoreId, onAddStore]);
 
   const acceptedFileTypes = {
     "text/x-c": [".c"],
@@ -95,7 +121,18 @@ export default function FileUpload({
       alert("Please select a file to upload.");
       return;
     }
+    
+    // Determine which vector store ID to use
+    // Priority: 1. Prop vectorStoreId 2. localStorage userVectorStoreId
+    const activeVectorStoreId = vectorStoreId || userVectorStoreId;
+    
+    if (!activeVectorStoreId) {
+      setStoreError("No vector store found. Please complete your profile setup first.");
+      return;
+    }
+    
     setUploading(true);
+    setStoreError(null);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -123,37 +160,18 @@ export default function FileUpload({
       }
       console.log("Uploaded file:", uploadData);
 
-      let finalVectorStoreId = vectorStoreId;
-
-      // 2. If no vector store is linked, create one
-      if (!vectorStoreId || vectorStoreId === "") {
-        const createResponse = await fetch("/api/vector_stores/create_store", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storeName: newStoreName,
-          }),
-        });
-        if (!createResponse.ok) {
-          throw new Error("Error creating vector store");
-        }
-        const createData = await createResponse.json();
-        finalVectorStoreId = createData.id;
+      // Use the active vector store ID for the uploaded file
+      if (typeof onAddStore === 'function') {
+        onAddStore(activeVectorStoreId);
       }
 
-      if (!finalVectorStoreId) {
-        throw new Error("Error getting vector store ID");
-      }
-
-      onAddStore(finalVectorStoreId);
-
-      // 3. Add file to vector store
+      // 2. Add file to vector store
       const addFileResponse = await fetch("/api/vector_stores/add_file", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileId,
-          vectorStoreId: finalVectorStoreId,
+          vectorStoreId: activeVectorStoreId,
         }),
       });
       if (!addFileResponse.ok) {
@@ -162,22 +180,24 @@ export default function FileUpload({
       const addFileData = await addFileResponse.json();
       console.log("Added file to vector store:", addFileData);
       setFile(null);
-      setDialogOpen(false);
+      setIsDialogOpen(false);
     } catch (error) {
       console.error("Error during file upload process:", error);
-      alert("There was an error processing your file. Please try again.");
+      setStoreError(error instanceof Error ? error.message : "There was an error processing your file");
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
-        <div className="bg-white rounded-full flex items-center justify-center py-1 px-3 border border-zinc-200 gap-1 font-medium text-sm cursor-pointer hover:bg-zinc-50 transition-all">
-          <Plus size={16} />
-          Upload
-        </div>
+        {customTrigger || (
+          <div className="bg-white rounded-full flex items-center justify-center py-1 px-3 border border-zinc-200 gap-1 font-medium text-sm cursor-pointer hover:bg-zinc-50 transition-all">
+            <Plus size={16} />
+            Upload
+          </div>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] md:max-w-[600px] max-h-[80vh] overflow-y-scrollfrtdtd">
         <form onSubmit={handleSubmit}>
@@ -185,21 +205,9 @@ export default function FileUpload({
             <DialogTitle>Add files to your vector store</DialogTitle>
           </DialogHeader>
           <div className="my-6">
-            {!vectorStoreId || vectorStoreId === "" ? (
-              <div className="flex items-start gap-2 text-sm">
-                <label className="font-medium w-72" htmlFor="storeName">
-                  New vector store name
-                  <div className="text-xs text-zinc-400">
-                    A new store will be created when you upload a file.
-                  </div>
-                </label>
-                <Input
-                  id="storeName"
-                  type="text"
-                  value={newStoreName}
-                  onChange={(e) => setNewStoreName(e.target.value)}
-                  className="border rounded p-2"
-                />
+            {!vectorStoreId && !userVectorStoreId ? (
+              <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-md text-sm">
+                <p>No vector store found. Please complete your profile setup first.</p>
               </div>
             ) : (
               <div className="flex items-center justify-between flex-1 min-w-0">
@@ -207,14 +215,18 @@ export default function FileUpload({
                   <div className="text-sm font-medium w-24 text-nowrap">
                     Vector store
                   </div>
-                  <div className="text-zinc-400  text-xs font-mono flex-1 text-ellipsis truncate">
-                    {vectorStoreId}
+                  <div className="text-zinc-400 text-xs font-mono flex-1 text-ellipsis truncate">
+                    {vectorStoreId || userVectorStoreId}
                   </div>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <CircleX
-                          onClick={() => onUnlinkStore()}
+                          onClick={() => {
+                            if (typeof onUnlinkStore === 'function') {
+                              onUnlinkStore();
+                            }
+                          }}
                           size={16}
                           className="cursor-pointer text-zinc-400 mb-0.5 shrink-0 mt-0.5 hover:text-zinc-700 transition-all"
                         />
@@ -228,6 +240,13 @@ export default function FileUpload({
               </div>
             )}
           </div>
+          
+          {storeError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md text-sm mb-4">
+              <p>{storeError}</p>
+            </div>
+          )}
+          
           <div className="flex justify-center items-center mb-4 h-[200px]">
             {file ? (
               <div className="flex flex-col items-start">
@@ -265,7 +284,7 @@ export default function FileUpload({
             )}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={uploading}>
+            <Button type="submit" disabled={uploading || (!vectorStoreId && !userVectorStoreId)}>
               {uploading ? "Uploading..." : "Add"}
             </Button>
           </DialogFooter>

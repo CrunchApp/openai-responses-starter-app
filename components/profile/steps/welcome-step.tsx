@@ -22,16 +22,17 @@ export default function WelcomeStep({
       setIsCreatingStore(true);
       setStoreError(null);
       
+      // Create a unique vector store for this user
       const response = await fetch('/api/vector_stores/create_store', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: `${name}_Context` }),
+        body: JSON.stringify({ name: `${name}_VectorStore` }),
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to create memory store: ${response.statusText}`);
+        throw new Error(`Failed to create vector store: ${response.statusText}`);
       }
       
       const data = await response.json();
@@ -42,10 +43,14 @@ export default function WelcomeStep({
         vectorStoreId: data.id
       }));
       
+      // Store vectorStoreId in localStorage for persistence
+      // This allows the ID to be accessed across components
+      localStorage.setItem('userVectorStoreId', data.id);
+      
       return data.id;
     } catch (error) {
       console.error('Error creating vector store:', error);
-      setStoreError(error instanceof Error ? error.message : 'Failed to create memory store');
+      setStoreError(error instanceof Error ? error.message : 'Failed to create vector store');
       return null;
     } finally {
       setIsCreatingStore(false);

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth0 } from "@auth0/auth0-react";
-import FileUpload from "@/components/file-upload";
+import DocumentUpload from "@/components/document-upload";
 import { 
   ArrowRight, 
   Linkedin, 
@@ -277,7 +277,7 @@ export default function ImportOptionsStep({
                   </Button>
                 </div>
               ) : (
-                <FileUpload
+                <DocumentUpload
                   allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
                   maxSizeMB={5}
                   endpoint="/api/upload/document"
@@ -288,7 +288,7 @@ export default function ImportOptionsStep({
                     <Upload size={16} className="mb-1 text-blue-500" />
                     <span className="text-xs text-center text-gray-500">Upload Resume</span>
                   </div>
-                </FileUpload>
+                </DocumentUpload>
               )}
             </Card>
 
@@ -326,7 +326,7 @@ export default function ImportOptionsStep({
                   </Button>
                 </div>
               ) : (
-                <FileUpload
+                <DocumentUpload
                   allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
                   maxSizeMB={5}
                   endpoint="/api/upload/document"
@@ -337,7 +337,7 @@ export default function ImportOptionsStep({
                     <Upload size={16} className="mb-1 text-blue-500" />
                     <span className="text-xs text-center text-gray-500">Upload Transcripts</span>
                   </div>
-                </FileUpload>
+                </DocumentUpload>
               )}
             </Card>
 
@@ -375,7 +375,7 @@ export default function ImportOptionsStep({
                   </Button>
                 </div>
               ) : (
-                <FileUpload
+                <DocumentUpload
                   allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
                   maxSizeMB={5}
                   endpoint="/api/upload/document"
@@ -386,7 +386,7 @@ export default function ImportOptionsStep({
                     <Upload size={16} className="mb-1 text-blue-500" />
                     <span className="text-xs text-center text-gray-500">Upload Statement of Purpose</span>
                   </div>
-                </FileUpload>
+                </DocumentUpload>
               )}
             </Card>
           </div>

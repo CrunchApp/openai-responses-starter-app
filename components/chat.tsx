@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ToolCall from "./tool-call";
 import Message from "./message";
 import Annotations from "./annotations";
@@ -14,10 +14,20 @@ interface ChatProps {
 const Chat: React.FC<ChatProps> = ({ items, onSendMessage }) => {
   const itemsEndRef = useRef<HTMLDivElement>(null);
   const [inputMessageText, setinputMessageText] = useState<string>("");
+  // This state is used to provide better user experience for non-English IMEs such as Japanese
+  const [isComposing, setIsComposing] = useState(false);
 
   const scrollToBottom = () => {
     itemsEndRef.current?.scrollIntoView({ behavior: "instant" });
   };
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !isComposing) {
+      event.preventDefault();
+      onSendMessage(inputMessageText);
+      setinputMessageText("");
+    }
+  }, [onSendMessage, inputMessageText]);
 
   useEffect(() => {
     scrollToBottom();
@@ -89,15 +99,9 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage }) => {
                       className="resize-none border-0 focus:outline-none text-sm bg-transparent px-2 py-2 text-gray-800"
                       value={inputMessageText}
                       onChange={(e) => setinputMessageText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (inputMessageText.trim()) {
-                            onSendMessage(inputMessageText);
-                            setinputMessageText("");
-                          }
-                        }
-                      }}
+                      onKeyDown={handleKeyDown}
+                      onCompositionStart={() => setIsComposing(true)}
+                      onCompositionEnd={() => setIsComposing(false)}
                     />
                   </div>
                   <button

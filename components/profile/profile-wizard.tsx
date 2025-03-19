@@ -13,7 +13,11 @@ import WelcomeStep from "./steps/welcome-step";
 import ImportOptionsStep from "./steps/import-options-step";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+// Define the degree level type
+type DegreeLevel = "" | "High School" | "Associate's" | "Bachelor's" | "Master's" | "Doctorate" | "Certificate" | "Other";
 
 // Define profile data structure
 export interface ProfileData {
@@ -29,7 +33,7 @@ export interface ProfileData {
   
   // Education
   education: Array<{
-    degreeLevel: string;
+    degreeLevel: DegreeLevel;
     institution: string;
     fieldOfStudy: string;
     graduationYear: string;
@@ -105,6 +109,7 @@ export default function ProfileWizard() {
   const [currentStep, setCurrentStep] = useState(0);
   const [animationDirection, setAnimationDirection] = useState("forward");
   const [showCompletionMessage, setShowCompletionMessage] = useState(false);
+  const [canNavigateToStep, setCanNavigateToStep] = useState<number[]>([0]);
   const [profileData, setProfileData] = useState<ProfileData>({
     firstName: "",
     lastName: "",
@@ -179,6 +184,11 @@ export default function ProfileWizard() {
       setTimeout(() => {
         setShowCompletionMessage(false);
         setCurrentStep(currentStep + 1);
+        
+        // Add this step to navigable steps if not already added
+        if (!canNavigateToStep.includes(currentStep + 1)) {
+          setCanNavigateToStep(prev => [...prev, currentStep + 1]);
+        }
       }, 800);
     }
   };
@@ -187,6 +197,14 @@ export default function ProfileWizard() {
     if (currentStep > 0) {
       setAnimationDirection("backward");
       setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleStepClick = (stepIndex: number) => {
+    // Only allow navigation to steps that have been visited or are the next step
+    if (canNavigateToStep.includes(stepIndex)) {
+      setAnimationDirection(stepIndex > currentStep ? "forward" : "backward");
+      setCurrentStep(stepIndex);
     }
   };
 
@@ -331,31 +349,62 @@ export default function ProfileWizard() {
         <div className="mb-8">
           <div className="flex items-center justify-between max-w-xl mx-auto">
             {steps.map((step, idx) => (
-              <div key={idx} className="flex flex-col items-center">
-                <div 
-                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                    idx < currentStep 
-                      ? "bg-green-500 text-white"
-                      : idx === currentStep
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-500"
-                  }`}
-                >
-                  {idx < currentStep ? (
-                    <CheckCircle2 className="h-5 w-5" />
-                  ) : (
-                    <span>{idx + 1}</span>
-                  )}
-                </div>
-                <span className="text-xs mt-2 hidden md:block">{step.name}</span>
-              </div>
+              <TooltipProvider key={idx} delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div 
+                      className={`flex flex-col items-center ${
+                        canNavigateToStep.includes(idx) 
+                          ? "cursor-pointer hover:opacity-80 transition-opacity" 
+                          : "cursor-not-allowed opacity-70"
+                      }`}
+                      onClick={() => handleStepClick(idx)}
+                    >
+                      <motion.div 
+                        whileHover={canNavigateToStep.includes(idx) ? { scale: 1.1 } : {}}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                          idx < currentStep 
+                            ? "bg-green-500 text-white ring-2 ring-offset-2 ring-green-200"
+                            : idx === currentStep
+                              ? "bg-blue-600 text-white ring-2 ring-offset-2 ring-blue-200"
+                              : canNavigateToStep.includes(idx)
+                                ? "bg-gray-200 text-gray-700 ring-2 ring-offset-2 ring-gray-100"
+                                : "bg-gray-200 text-gray-500"
+                        }`}
+                      >
+                        {idx < currentStep ? (
+                          <CheckCircle2 className="h-5 w-5" />
+                        ) : (
+                          <span>{idx + 1}</span>
+                        )}
+                      </motion.div>
+                      <span className={`text-xs mt-2 hidden md:block ${
+                        idx === currentStep ? "font-medium text-blue-700" : ""
+                      }`}>
+                        {step.name}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>{step.description}</p>
+                    {!canNavigateToStep.includes(idx) && idx > 0 && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center">
+                        <Info className="h-3 w-3 mr-1" /> Complete previous steps first
+                      </p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ))}
           </div>
           <div className="relative max-w-xl mx-auto mt-4">
-            <div className="absolute top-1/2 left-4 right-4 h-1 bg-gray-200 -translate-y-1/2" />
-            <div 
-              className="absolute top-1/2 left-4 h-1 bg-blue-600 -translate-y-1/2 transition-all duration-300"
+            <div className="absolute top-1/2 left-4 right-4 h-2 bg-gray-200 -translate-y-1/2 rounded-full" />
+            <motion.div 
+              className="absolute top-1/2 left-4 h-2 bg-blue-600 -translate-y-1/2 rounded-full"
               style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+              initial={{ width: 0 }}
+              animate={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+              transition={{ duration: 0.5 }}
             />
           </div>
         </div>

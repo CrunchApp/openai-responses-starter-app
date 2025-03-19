@@ -15,10 +15,10 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Responses starter app",
-  description: "Starter app for the OpenAI Responses API",
+  title: "Vista Education",
+  description: "Vista Education Pathfinder",
   icons: {
-    icon: "/openai_logo.svg",
+    icon: "/vista_logo.svg",
   },
 };
 

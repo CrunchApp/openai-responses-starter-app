@@ -103,101 +103,167 @@ export async function callPerplexityApi(query: string): Promise<string> {
   // Get the API key from environment variables
   const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
   
+  // Validate API key existence and format
   if (!PERPLEXITY_API_KEY) {
-    console.warn('PERPLEXITY_API_KEY not found in environment variables');
+    console.error('PERPLEXITY_API_KEY not found in environment variables');
     throw new Error('PERPLEXITY_API_KEY not found in environment variables');
   }
-
-  try {
-    // Configure the request to use the sonar-reasoning-pro model for research
-    const options: PerplexityRequestOptions = {
-      model: "sonar-reasoning-pro", // Using the reasoning model for better analysis
-      messages: [
-        { 
-          role: "system", 
-          content: "You are an expert educational researcher with global knowledge about universities, colleges, and educational programs."
-        },
-        {
-          role: "user",
-          content: query
-        }
-      ],
-      temperature: 0.1, // Lower temperature for more factual responses
-      max_tokens: 10000,
-      web_search_options: {
-        search_context_size: "high" // Use high search context for more comprehensive results
-      },
-      top_p: 0.95,
-      frequency_penalty: 0.5 // Reduce repetition
-    };
-
-    // Set up AbortController for timeout
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 15000); // 15 second timeout
-
-    try {
-      // Make the API call with timeout
-      const response = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${PERPLEXITY_API_KEY}`
-        },
-        body: JSON.stringify(options),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeout); // Clear the timeout if request completes
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        // Check specifically for auth errors
-        if (response.status === 401 || response.status === 403) {
-          console.error('Perplexity API authentication error - check your API key');
-          throw new Error('Perplexity API authentication failed');
-        }
-        throw new Error(`Perplexity API error: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      const data = await response.json() as PerplexityResponse;
-      
-      if (!data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
-        throw new Error('No content returned from Perplexity API');
-      }
-      
-      return data.choices[0].message.content;
-    } catch (fetchError: any) {
-      clearTimeout(timeout); // Ensure timeout is cleared
-      
-      if (fetchError.name === 'AbortError') {
-        console.error('Perplexity API request timed out');
-        throw new Error('Perplexity API request timed out');
-      }
-      
-      throw fetchError;
-    }
-  } catch (error) {
-    console.error('Error calling Perplexity API:', error);
-    
-    // Fallback to OpenAI if Perplexity API fails
-    return fallbackToOpenAI(query);
+  
+  if (PERPLEXITY_API_KEY.length < 20) {
+    console.error('PERPLEXITY_API_KEY appears invalid - check your environment variables');
+    throw new Error('Invalid Perplexity API key format');
   }
+
+  // Configure the request to use the sonar-reasoning-pro model for research
+  const options: PerplexityRequestOptions = {
+    model: "sonar-reasoning-pro", // Using the reasoning model for better analysis
+    messages: [
+      { 
+        role: "system", 
+        content: "You are an expert educational researcher with global knowledge about universities, colleges, and educational programs."
+      },
+      {
+        role: "user",
+        content: query
+      }
+    ],
+    temperature: 0.1, // Lower temperature for more factual responses
+    max_tokens: 10000,
+    web_search_options: {
+      search_context_size: "high" // Use high search context for more comprehensive results
+    },
+    top_p: 0.95,
+    frequency_penalty: 0.5 // Reduce repetition
+  };
+
+  // Log the API call configuration
+  console.log('Calling Perplexity API with options:', {
+    model: options.model,
+    temperature: options.temperature,
+    searchContextSize: options.web_search_options?.search_context_size,
+    queryLength: query.length
+  });
+
+  // Implement retry logic with exponential backoff
+  const MAX_ATTEMPTS = 3;
+  const TIMEOUT_MS = 180000; // Increased from 15s to 180s
+  
+  let attempts = 0;
+  let lastError;
+
+  while (attempts < MAX_ATTEMPTS) {
+    attempts++;
+    console.log(`Perplexity API attempt ${attempts}/${MAX_ATTEMPTS}`);
+    
+    try {
+      // Set up AbortController for timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, TIMEOUT_MS);
+
+      try {
+        // Make the API call with timeout
+        const response = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${PERPLEXITY_API_KEY}`
+          },
+          body: JSON.stringify(options),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeout); // Clear the timeout if request completes
+        
+        // Log the response status
+        console.log(`Perplexity API response status: ${response.status}`);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Perplexity API error response: ${errorText}`);
+          
+          // Check specifically for auth errors
+          if (response.status === 401 || response.status === 403) {
+            console.error('Perplexity API authentication error - check your API key');
+            throw new Error(`Perplexity API authentication failed (${response.status})`);
+          }
+          
+          // Check for rate limiting
+          if (response.status === 429) {
+            console.error('Perplexity API rate limit exceeded');
+            // Continue to retry logic for rate limiting
+            throw new Error(`Perplexity API rate limit exceeded (${response.status})`);
+          }
+          
+          throw new Error(`Perplexity API error: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        const data = await response.json() as PerplexityResponse;
+        
+        // Log usage stats
+        if (data.usage) {
+          console.log('Perplexity API usage stats:', data.usage);
+        }
+        
+        if (!data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
+          throw new Error('No content returned from Perplexity API');
+        }
+        
+        // Success! Return the content
+        console.log('Perplexity API call successful');
+        return data.choices[0].message.content;
+      } catch (fetchError: any) {
+        clearTimeout(timeout); // Ensure timeout is cleared
+        
+        if (fetchError.name === 'AbortError') {
+          console.error(`Perplexity API request timed out after ${TIMEOUT_MS}ms`);
+          throw new Error(`Perplexity API request timed out after ${TIMEOUT_MS}ms`);
+        }
+        
+        throw fetchError;
+      }
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Perplexity API attempt ${attempts} failed:`, error.message);
+      
+      // Check if we should retry
+      if (attempts < MAX_ATTEMPTS) {
+        // Wait with exponential backoff before retrying
+        const backoffMs = 1000 * Math.pow(2, attempts - 1);
+        console.log(`Retrying in ${backoffMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      } else {
+        console.error(`All ${MAX_ATTEMPTS} attempts to call Perplexity API failed`);
+        // Fallback to OpenAI
+        console.log('Falling back to OpenAI for educational program research');
+        return fallbackToOpenAI(query);
+      }
+    }
+  }
+  
+  // This should not be reached due to the returns in the loop, but TypeScript needs it
+  throw lastError || new Error('Failed to call Perplexity API for unknown reasons');
 }
 
 /**
  * Fallback to OpenAI if Perplexity API is unavailable
  */
 async function fallbackToOpenAI(query: string): Promise<string> {
+  console.log('Starting OpenAI fallback process');
   try {
-    console.log('Falling back to OpenAI for educational program research');
-    
     // Import the OpenAI client
     const OpenAI = (await import('openai')).default;
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
+    
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY not found in environment variables');
+      throw new Error('OpenAI API key missing for fallback');
+    }
+    
+    console.log('Calling OpenAI API for educational program research');
     
     // Use OpenAI to generate research data
     const completion = await openai.chat.completions.create({
@@ -219,10 +285,11 @@ async function fallbackToOpenAI(query: string): Promise<string> {
       throw new Error('Failed to generate research data with OpenAI fallback');
     }
     
+    console.log('OpenAI fallback successful');
     return completion.choices[0].message.content;
-  } catch (error) {
-    console.error('Error with OpenAI fallback:', error);
-    throw new Error('Both Perplexity and OpenAI research attempts failed');
+  } catch (error: any) {
+    console.error('Error with OpenAI fallback:', error.message);
+    throw new Error(`Both Perplexity and OpenAI research attempts failed: ${error.message}`);
   }
 }
 
@@ -231,11 +298,22 @@ async function fallbackToOpenAI(query: string): Promise<string> {
  */
 export async function parsePerplexityResponse(response: string, pathway: any): Promise<any[]> {
   try {
+    console.log('Parsing Perplexity API response', { 
+      responseLength: response.length,
+      pathwayField: pathway.fieldOfStudy,
+      pathwayType: pathway.qualificationType 
+    });
+    
     // Use OpenAI to extract and structure the information from the research data
     const OpenAI = (await import('openai')).default;
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
+
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY not found in environment variables');
+      throw new Error('OpenAI API key missing for parsing');
+    }
 
     const prompt = `
     Below is information about education programs from a Perplexity search query.
@@ -285,10 +363,11 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
       ...
     ]
 
-    Extract 3-5 programs maximum. If the exact cost, duration, or other numerical values are not provided, make a reasonable estimate based on similar programs.
+    Extract 5 programs maximum. If the exact cost, duration, or other numerical values are not provided, make a reasonable estimate based on similar programs.
     Ensure the JSON is valid and doesn't contain any trailing commas.
     `;
 
+    console.log('Calling OpenAI to parse program data');
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-2024-08-06",
       messages: [
@@ -299,7 +378,7 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
     });
 
     if (!completion.choices || completion.choices.length === 0 || !completion.choices[0].message.content) {
-      throw new Error('Failed to parse program data');
+      throw new Error('Failed to parse program data - no content returned from OpenAI');
     }
 
     // Parse the JSON response
@@ -310,19 +389,31 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
       // The response should be a JSON object with a "programs" array
       const parsedData = JSON.parse(content);
       programs = Array.isArray(parsedData) ? parsedData : (parsedData.programs || []);
-    } catch (error) {
-      console.error('Error parsing JSON from completion:', error);
+      
+      console.log(`Successfully parsed ${programs.length} programs from response`);
+    } catch (error: any) {
+      console.error('Error parsing JSON from completion:', error.message);
       // Try to extract JSON array from the text
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        programs = JSON.parse(jsonMatch[0]);
+        try {
+          programs = JSON.parse(jsonMatch[0]);
+          console.log(`Extracted ${programs.length} programs using regex matching`);
+        } catch (parseError: any) {
+          console.error('Failed to parse JSON after regex extraction:', parseError.message);
+          throw new Error('Could not parse program data from response - invalid JSON format');
+        }
       } else {
-        throw new Error('Could not parse program data from response');
+        throw new Error('Could not parse program data from response - no JSON found');
       }
     }
 
+    if (programs.length === 0) {
+      console.warn('No programs extracted from response - returning empty result');
+    }
+
     // Calculate match scores based on pathway alignment
-    return programs.map((program, index) => {
+    const enrichedPrograms = programs.map((program, index) => {
       // Calculate base match score starting from 95 and decreasing by 3 per rank
       let baseScore = Math.max(70, 95 - (index * 3));
       
@@ -362,8 +453,11 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
         }
       };
     });
-  } catch (error) {
-    console.error('Error parsing Perplexity response:', error);
+    
+    console.log(`Returning ${enrichedPrograms.length} enriched programs with match scores`);
+    return enrichedPrograms;
+  } catch (error: any) {
+    console.error('Error parsing Perplexity response:', error.message);
     throw error;
   }
 }
@@ -373,14 +467,29 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
  * Combines the API call and parsing in one function
  */
 export async function searchProgramsWithPerplexityAPI(query: string, pathway: any): Promise<any[]> {
+  console.log('Starting Perplexity search for programs', { 
+    pathwayTitle: pathway.title,
+    queryLength: query.length 
+  });
+  
   try {
     // First, call the Perplexity API with the query
+    console.log('Calling Perplexity API for education program data');
     const perplexityResponse = await callPerplexityApi(query);
     
     // Then parse the response to extract structured program data
-    return await parsePerplexityResponse(perplexityResponse, pathway);
-  } catch (error) {
-    console.error('Error with Perplexity search:', error);
+    console.log('Parsing Perplexity response into structured program data');
+    const programs = await parsePerplexityResponse(perplexityResponse, pathway);
+    
+    console.log(`Perplexity search complete, found ${programs.length} matching programs`);
+    return programs;
+  } catch (error: any) {
+    // Add detailed error information
+    console.error('Error with Perplexity search:', {
+      message: error.message,
+      pathway: pathway.title,
+      error: error.toString()
+    });
     throw error;
   }
 }

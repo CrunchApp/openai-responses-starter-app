@@ -24,6 +24,14 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    if (!PERPLEXITY_API_KEY) {
+      console.error('Missing PERPLEXITY_API_KEY environment variable');
+      return NextResponse.json(
+        { error: 'Server configuration error: Missing Perplexity API key' },
+        { status: 500 }
+      );
+    }
     
     const { userProfile, vectorStoreId } = await request.json();
     
@@ -35,33 +43,21 @@ export async function POST(request: NextRequest) {
     }
     
     // Check for API timeouts - set a global timeout for the entire process
-    const MAX_EXECUTION_TIME = 50000; // 50 seconds
+    const MAX_EXECUTION_TIME = 150000; // 150 seconds - increased to allow for API processing
     let isTimedOut = false;
     
     const timeoutId = setTimeout(() => {
       isTimedOut = true;
-      console.error('Recommendation generation timed out');
+      console.error('Recommendation generation timed out after 150 seconds');
     }, MAX_EXECUTION_TIME);
     
-    // If we're already timed out, return a helpful response with fallback data
+    // If we're already timed out, return an error response
     if (isTimedOut) {
-      console.log('Timed out before processing, returning fallback recommendations');
-      const fallbackRecommendations = generateSimulatedRecommendations([
-        {
-          title: "General Education Pathway",
-          qualificationType: "Master's Degree",
-          fieldOfStudy: "Business Administration",
-          subfields: ["Management", "Finance"],
-          targetRegions: ["United States", "Canada", "Europe"],
-          budgetRange: { min: 15000, max: 50000 },
-          duration: { min: 12, max: 24 }
-        }
-      ]);
+      console.log('Timed out before processing, returning error response');
       clearTimeout(timeoutId);
       return NextResponse.json({ 
-        recommendations: fallbackRecommendations,
-        note: "These are fallback recommendations generated due to processing timeout."
-      });
+        error: "The recommendation process timed out. Please try again."
+      }, { status: 504 });
     }
     
     // Step 1: Use Career & Education Matcher (Planning Agent) to generate education pathway queries
@@ -72,45 +68,18 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('Error generating education pathways:', error);
       clearTimeout(timeoutId);
-      // Return fallback recommendations instead of error
-      const fallbackRecommendations = generateSimulatedRecommendations([
-        {
-          title: "General Education Pathway",
-          qualificationType: "Master's Degree",
-          fieldOfStudy: "Business Administration",
-          subfields: ["Management", "Finance"],
-          targetRegions: ["United States", "Canada", "Europe"],
-          budgetRange: { min: 15000, max: 50000 },
-          duration: { min: 12, max: 24 }
-        }
-      ]);
       return NextResponse.json({ 
-        recommendations: fallbackRecommendations,
-        note: "These are fallback recommendations due to pathway generation error."
-      });
+        error: "Failed to generate education pathways based on your profile. Please try again."
+      }, { status: 500 });
     }
     
     // Check for timeout again
     if (isTimedOut) {
-      console.log('Timed out after pathway generation, returning fallback recommendations');
-      const fallbackRecommendations = generateSimulatedRecommendations(
-        educationPathways.pathways?.slice(0, 2) || [
-          {
-            title: "General Education Pathway",
-            qualificationType: "Master's Degree",
-            fieldOfStudy: "Business Administration",
-            subfields: ["Management", "Finance"],
-            targetRegions: ["United States", "Canada", "Europe"],
-            budgetRange: { min: 15000, max: 50000 },
-            duration: { min: 12, max: 24 }
-          }
-        ]
-      );
+      console.log('Timed out after pathway generation, returning error response');
       clearTimeout(timeoutId);
       return NextResponse.json({ 
-        recommendations: fallbackRecommendations,
-        note: "These are fallback recommendations generated due to processing timeout."
-      });
+        error: "The recommendation process timed out after generating pathways. Please try again."
+      }, { status: 504 });
     }
     
     // Step 2: Use Program Research Agent to find specific programs based on the pathways
@@ -120,9 +89,10 @@ export async function POST(request: NextRequest) {
       console.log('Specific programs researched successfully');
     } catch (error) {
       console.error('Error researching specific programs:', error);
-      // Don't fail the request, just use fallback recommendations
-      recommendations = generateSimulatedRecommendations(educationPathways.pathways?.slice(0, 3) || []);
-      console.log('Using fallback recommendations due to research error');
+      clearTimeout(timeoutId);
+      return NextResponse.json({ 
+        error: "Failed to research specific programs matching your profile. Please try again."
+      }, { status: 500 });
     }
     
     // Step 3: Calculate match scores and prepare the final recommendations 
@@ -137,23 +107,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ recommendations: enhancedRecommendations });
   } catch (error) {
     console.error('Error generating recommendations:', error);
-    // Provide fallback recommendations instead of an error
-    const fallbackRecommendations = generateSimulatedRecommendations([
-      {
-        title: "General Education Pathway",
-        qualificationType: "Master's Degree",
-        fieldOfStudy: "Business Administration",
-        subfields: ["Management", "Finance"],
-        targetRegions: ["United States", "Canada", "Europe"],
-        budgetRange: { min: 15000, max: 50000 },
-        duration: { min: 12, max: 24 }
-      }
-    ]);
-    
     return NextResponse.json({ 
-      recommendations: fallbackRecommendations,
-      note: "These are fallback recommendations due to an unexpected error."
-    });
+      error: "An unexpected error occurred while generating recommendations. Please try again."
+    }, { status: 500 });
   }
 }
 
@@ -208,7 +164,7 @@ For each pathway, provide:
 - Alternative options within this pathway
 
 OUTPUT FORMAT:
-Provide 3-5 distinct educational pathways as a JSON array. Each pathway should be structured as follows:
+Provide 3 distinct educational pathways as a JSON array. Each pathway should be structured as follows:
 
 {
   "pathways": [
@@ -243,7 +199,7 @@ Think carefully about each suggestion and ensure they truly fit the user's uniqu
         { role: "system", content: "You are an expert career and education pathway planner with decades of experience." },
         { role: "user", content: prompt }
       ],
-      temperature: 0.7, // Balance between creativity and relevance
+
       response_format: { type: "json_object" }
     });
     
@@ -277,42 +233,39 @@ async function researchSpecificPrograms(pathways: any, userProfile: UserProfile)
       throw new Error('No education pathways provided');
     }
 
-    // Check if Perplexity API key is present - if not, skip to fallback immediately
-    const hasPerplexityKey = !!process.env.PERPLEXITY_API_KEY;
-    
-    if (!hasPerplexityKey) {
-      console.log('No Perplexity API key found, using simulated recommendations');
-      return generateSimulatedRecommendations(pathwaysArray);
-    }
-
     // Limit to at most 3 pathways to avoid timeouts
     const limitedPathwaysArray = pathwaysArray.slice(0, 3);
     console.log(`Processing ${limitedPathwaysArray.length} education pathways...`);
 
     // Set a timeout to prevent the function from running too long
-    const timeoutMs = 25000; // 25 seconds
+    const timeoutMs = 120000; // 120 seconds - increased to allow for API processing
     let hasTimedOut = false;
     
     // Create a timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
         hasTimedOut = true;
-        reject(new Error('Pathway research timed out, using fallback recommendations'));
+        reject(new Error('Pathway research timed out after 120 seconds'));
       }, timeoutMs);
     });
 
     // Process pathways in parallel with Promise.all
     const recommendationsPromise = Promise.all(
-      limitedPathwaysArray.map(async (pathway: any) => {
+      limitedPathwaysArray.map(async (pathway: any, index: number) => {
         if (hasTimedOut) return []; // Skip if already timed out
         
+        console.log(`Researching pathway ${index + 1}/${limitedPathwaysArray.length}: ${pathway.title}`);
         const query = constructDetailedQuery(pathway, userProfile);
         
         try {
-          return await searchProgramsWithPerplexity(query, pathway);
+          // Use searchProgramsWithPerplexityAPI which will handle the API call and parsing
+          const results = await searchProgramsWithPerplexityAPI(query, pathway);
+          console.log(`Found ${results.length} programs for pathway "${pathway.title}"`);
+          return results;
         } catch (error) {
           console.error(`Error searching pathway "${pathway.title}":`, error);
-          return generateSimulatedRecommendations([pathway]);
+          // Don't fall back to simulated data - let the error propagate
+          throw error;
         }
       })
     );
@@ -327,20 +280,27 @@ async function researchSpecificPrograms(pathways: any, userProfile: UserProfile)
     const allRecommendations = (Array.isArray(results) ? results.flat() : [])
       .filter(item => item);
     
-    // If we got no recommendations or timed out, use the fallback
-    if (allRecommendations.length === 0 || hasTimedOut) {
-      console.log('Using fallback simulated recommendations due to timeout or empty results');
-      return generateSimulatedRecommendations(limitedPathwaysArray);
+    // If we got no recommendations, this is a real issue since APIs are working
+    if (allRecommendations.length === 0) {
+      console.error('No recommendations found after searching all pathways');
+      throw new Error('Failed to find any matching programs for your pathways');
     }
     
-    // Limit to top recommendations
-    return allRecommendations.slice(0, 10);
-  } catch (error) {
-    console.error('Error researching specific programs:', error);
+    // Log success information
+    console.log(`Successfully found ${allRecommendations.length} recommendations using API integration`);
     
-    // Fallback to simulated recommendations if any error occurs
-    console.log('Using fallback simulated recommendations due to error');
-    return generateSimulatedRecommendations(pathways.pathways?.slice(0, 3) || []);
+    // Sort by match score before returning
+    return allRecommendations
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 10); // Limit to top 10 recommendations
+  } catch (error: any) {
+    console.error('Error researching specific programs:', {
+      message: error.message, 
+      stack: error.stack
+    });
+    
+    // Re-throw the error instead of falling back to simulated recommendations
+    throw error;
   }
 }
 
@@ -404,112 +364,6 @@ Format each program as a structured entry with:
 `;
 
   return query;
-}
-
-/**
- * Uses Perplexity API to search for specific programs
- */
-async function searchProgramsWithPerplexity(query: string, pathway: any): Promise<any[]> {
-  try {
-    // Call the Perplexity integration module to perform research
-    // This will use the actual Perplexity API in production
-    return await searchProgramsWithPerplexityAPI(query, pathway);
-  } catch (error) {
-    console.error('Error searching with Perplexity API:', error);
-    
-    // If we encountered an error with Perplexity API, use the fallback simulated data
-    console.log('Falling back to simulated recommendations due to API error');
-    return generateSimulatedRecommendations([pathway]);
-  }
-}
-
-/**
- * Generates simulated recommendations based on pathways
- * This is a fallback when the Perplexity search is not available
- */
-function generateSimulatedRecommendations(pathways: any[]): RecommendationProgram[] {
-  if (!pathways || pathways.length === 0) {
-    return [];
-  }
-  
-  const simulatedRecommendations: RecommendationProgram[] = [];
-  
-  // For each pathway, generate 2-3 simulated programs
-  pathways.forEach((pathway, pathwayIndex) => {
-    const programCount = Math.min(3, Math.floor(10 / pathways.length));
-    
-    for (let i = 0; i < programCount; i++) {
-      const institutions = [
-        { name: "Stanford University", location: "Stanford, CA, USA" },
-        { name: "University of Toronto", location: "Toronto, ON, Canada" },
-        { name: "MIT", location: "Cambridge, MA, USA" },
-        { name: "University of British Columbia", location: "Vancouver, BC, Canada" },
-        { name: "ETH Zurich", location: "Zurich, Switzerland" },
-        { name: "National University of Singapore", location: "Singapore" },
-        { name: "University of Melbourne", location: "Melbourne, Australia" },
-        { name: "Imperial College London", location: "London, UK" }
-      ];
-      
-      const institution = institutions[Math.floor(Math.random() * institutions.length)];
-      const costRange = pathway.budgetRange || { min: 15000, max: 60000 };
-      const durationRange = pathway.duration || { min: 12, max: 36 };
-      
-      // Generate a cost within the specified range
-      const cost = Math.floor(Math.random() * (costRange.max - costRange.min) + costRange.min);
-      // Generate a duration within the specified range
-      const duration = Math.floor(Math.random() * (durationRange.max - durationRange.min) + durationRange.min);
-      
-      // Generate a unique ID
-      const id = `rec${pathwayIndex + 1}_${i + 1}`;
-      
-      // Create match rationale with randomized scores
-      const matchRationale = {
-        careerAlignment: Math.floor(Math.random() * 15) + 80, // 80-95
-        budgetFit: Math.floor(Math.random() * 20) + 75, // 75-95
-        locationMatch: Math.floor(Math.random() * 25) + 70, // 70-95
-        academicFit: Math.floor(Math.random() * 20) + 75 // 75-95
-      };
-      
-      // Calculate an overall match score based on the rationale
-      const matchScore = Math.floor(
-        (matchRationale.careerAlignment * 0.4) +
-        (matchRationale.budgetFit * 0.2) +
-        (matchRationale.locationMatch * 0.2) +
-        (matchRationale.academicFit * 0.2)
-      );
-      
-      simulatedRecommendations.push({
-        id,
-        name: `${pathway.qualificationType} in ${pathway.fieldOfStudy}${i === 0 ? '' : ` with focus on ${pathway.subfields?.[i % pathway.subfields?.length] || 'Advanced Topics'}`}`,
-        institution: institution.name,
-        degreeType: pathway.qualificationType,
-        fieldOfStudy: pathway.fieldOfStudy,
-        description: `A comprehensive program that combines ${pathway.fieldOfStudy} with innovative approaches to prepare students for careers in ${pathway.subfields?.join(', ') || pathway.fieldOfStudy}.`,
-        matchScore,
-        costPerYear: cost,
-        duration,
-        location: institution.location,
-        startDate: ["September 2024", "January 2025", "August 2024"][Math.floor(Math.random() * 3)],
-        applicationDeadline: ["December 15, 2023", "January 15, 2024", "February 1, 2024", "March 1, 2024"][Math.floor(Math.random() * 4)],
-        requirements: [
-          "Bachelor's degree in related field",
-          "GRE scores (may be waived)",
-          "Letters of recommendation",
-          "Statement of purpose"
-        ],
-        highlights: [
-          "Industry connections with leading companies",
-          "Research opportunities with renowned faculty",
-          "Flexible curriculum with specialization options",
-          "Internship opportunities"
-        ],
-        matchRationale
-      });
-    }
-  });
-  
-  // Sort by match score (highest first)
-  return simulatedRecommendations.sort((a, b) => b.matchScore - a.matchScore);
 }
 
 /**

@@ -151,7 +151,7 @@ async function extractProfileInformationUsingFileSearch(vectorStoreId: string, d
 
   if (documentIds && documentIds.length > 0) {
     // Create a query that explicitly references the file IDs to focus the search
-    searchQuery = `Extract profile information from the following documents: ${documentIds.join(", ")}.`;
+    searchQuery = `Extract profile information from the store documents`;
   }
 
   // Full prompt with extraction instructions and format

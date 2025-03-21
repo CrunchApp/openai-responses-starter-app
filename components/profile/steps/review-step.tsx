@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, Edit2, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award } from "lucide-react";
 import { useRouter } from "next/navigation";
 import useToolsStore from "@/stores/useToolsStore";
+import useUserDataStore from "@/stores/useUserDataStore";
+import { UserProfile } from "@/app/recommendations/types";
 import { motion } from "framer-motion";
 import {
   Accordion,
@@ -28,6 +30,7 @@ export default function ReviewStep({
   const [expandedSection, setExpandedSection] = useState("personal");
   const router = useRouter();
   const { setVectorStore, setFileSearchEnabled } = useToolsStore();
+  const { setProfileData: setStoredProfileData } = useUserDataStore();
 
   // Add a useEffect to check for uploaded documents in localStorage
   useEffect(() => {
@@ -54,8 +57,59 @@ export default function ReviewStep({
         throw new Error("Vector store not found. Please restart the profile setup.");
       }
       
-      // Store the profile data directly in localStorage for faster access
-      localStorage.setItem('userProfileData', JSON.stringify(profileData));
+      // Ensure profile has the vector store ID
+      if (!profileData.vectorStoreId) {
+        setProfileData(prev => ({
+          ...prev,
+          vectorStoreId
+        }));
+      }
+      
+      // Store the profile data in the global store
+      const profileToStore: UserProfile = {
+        firstName: profileData.firstName,
+        lastName: profileData.lastName,
+        email: profileData.email,
+        phone: profileData.phone,
+        preferredName: profileData.preferredName,
+        linkedInProfile: profileData.linkedInProfile || null,
+        education: profileData.education.map(ed => ({
+          degreeLevel: ed.degreeLevel,
+          institution: ed.institution,
+          fieldOfStudy: ed.fieldOfStudy,
+          graduationYear: ed.graduationYear,
+          gpa: ed.gpa || null
+        })),
+        careerGoals: {
+          shortTerm: profileData.careerGoals.shortTerm,
+          longTerm: profileData.careerGoals.longTerm,
+          desiredIndustry: profileData.careerGoals.desiredIndustry,
+          desiredRoles: profileData.careerGoals.desiredRoles
+        },
+        skills: profileData.skills,
+        preferences: {
+          preferredLocations: profileData.preferences.preferredLocations,
+          studyMode: profileData.preferences.studyMode,
+          startDate: profileData.preferences.startDate,
+          budgetRange: {
+            min: profileData.preferences.budgetRange.min,
+            max: profileData.preferences.budgetRange.max
+          }
+        },
+        documents: {
+          resume: profileData.documents.resume || null,
+          transcripts: profileData.documents.transcripts || null,
+          statementOfPurpose: profileData.documents.statementOfPurpose || null,
+          otherDocuments: profileData.documents.otherDocuments || null
+        },
+        vectorStoreId,
+        // Add desiredField and goal for UI display in recommendations
+        desiredField: profileData.careerGoals.desiredIndustry[0] || profileData.education[0]?.fieldOfStudy || undefined,
+        goal: getGoalFromDegreeLevel(profileData.education[0]?.degreeLevel) || undefined,
+      };
+      
+      // Store in the global state
+      setStoredProfileData(profileToStore);
       
       // Create a JSON file with all profile data
       const profileJson = JSON.stringify(profileData, null, 2);
@@ -97,14 +151,6 @@ export default function ReviewStep({
         throw new Error("Failed to add file to vector store");
       }
       
-      // Make sure the profile data has the vector store ID
-      if (!profileData.vectorStoreId) {
-        setProfileData(prev => ({
-          ...prev,
-          vectorStoreId
-        }));
-      }
-      
       // Store the vector store in global state for the AI assistant to use
       setVectorStore({
         id: vectorStoreId,
@@ -141,6 +187,26 @@ export default function ReviewStep({
       reader.readAsDataURL(blob);
     });
   };
+
+  // Helper function to convert degree level to a goal description
+  function getGoalFromDegreeLevel(degreeLevel?: string): string | null {
+    if (!degreeLevel) return null;
+    
+    switch(degreeLevel) {
+      case "Bachelor's":
+        return "Bachelor's degree";
+      case "Master's":
+        return "Master's degree";
+      case "Doctorate":
+        return "Doctoral";
+      case "Associate's":
+        return "Associate's degree";
+      case "Certificate":
+        return "Certificate";
+      default:
+        return "Advanced degree";
+    }
+  }
 
   // Calculate profile completion percentage
   const calculateCompletion = () => {

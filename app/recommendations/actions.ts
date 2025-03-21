@@ -18,7 +18,7 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
       throw new Error('Vector store ID is required to generate recommendations');
     }
 
-    // Use cached profile if provided (from client-side localStorage)
+    // Use cached profile if provided (from client-side store)
     let userProfile = cachedUserProfile;
     
     // If no cached profile is provided, fetch from vector store
@@ -60,7 +60,7 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
       }
       
       if (!userProfile) {
-        throw new Error('Could not retrieve user profile data');
+        throw new Error('Could not retrieve user profile data. Please complete your profile first.');
       }
     }
 
@@ -79,7 +79,7 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
         vectorStoreId 
       }),
       // Use a longer timeout as this operation can take time
-      signal: AbortSignal.timeout(60000), // 60 second timeout
+      signal: AbortSignal.timeout(180000), // 180 second timeout
       cache: 'no-store',
     });
 
@@ -100,6 +100,11 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
 
     // Parse the successful response
     const data = await response.json();
+    
+    // Check for error in the response
+    if (data.error) {
+      throw new Error(data.error);
+    }
     
     if (!data.recommendations || !Array.isArray(data.recommendations)) {
       console.error('Invalid response format:', data);

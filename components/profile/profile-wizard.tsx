@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, Dispatch, SetStateAction, ComponentType } from "react";
+import React, { useState, useEffect, useRef, useCallback, Dispatch, SetStateAction, ComponentType } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import LinkedInImportStep from "./steps/linkedin-import-step";
@@ -15,11 +15,13 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import useUserDataStore from "@/stores/useUserDataStore";
+import { UserProfile } from "@/app/recommendations/types";
 
 // Define the degree level type
 type DegreeLevel = "" | "High School" | "Associate's" | "Bachelor's" | "Master's" | "Doctorate" | "Certificate" | "Other";
 
-// Define profile data structure
+  // Define profile dat  a structure
 export interface ProfileData {
   // Personal information
   firstName: string;
@@ -106,37 +108,11 @@ interface Step {
 
 export default function ProfileWizard() {
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [animationDirection, setAnimationDirection] = useState("forward");
-  const [showCompletionMessage, setShowCompletionMessage] = useState(false);
-  const [canNavigateToStep, setCanNavigateToStep] = useState<number[]>([0]);
-  const [profileData, setProfileData] = useState<ProfileData>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    preferredName: "",
-    linkedInProfile: "",
-    education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
-    careerGoals: {
-      shortTerm: "",
-      longTerm: "",
-      desiredIndustry: [],
-      desiredRoles: [],
-    },
-    skills: [],
-    preferences: {
-      preferredLocations: [],
-      studyMode: "Full-time",
-      startDate: "",
-      budgetRange: {
-        min: 0,
-        max: 100000,
-      },
-    },
-    documents: {},
-  });
-
+  
+  // Use refs to avoid circular updates
+  const initialized = useRef(false);
+  
+  // Define steps
   const steps: Step[] = [
     {
       name: "Welcome",
@@ -174,7 +150,113 @@ export default function ProfileWizard() {
       component: ReviewStep 
     },
   ];
-
+  
+  // Get store references but don't trigger re-renders
+  const {
+    profileData: storeProfileData,
+    setProfileData: storeSetProfileData,
+    profileCompletionStep: storeStep,
+    setProfileCompletionStep: storeSetStep,
+  } = useUserDataStore();
+  
+  // Initial state setup
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Use persisted step from localStorage if available
+    if (typeof window !== 'undefined') {
+      try {
+        const storedData = localStorage.getItem('user-data-store');
+        if (storedData) {
+          const parsedData = JSON.parse(storedData);
+          if (parsedData.state && parsedData.state.profileCompletionStep !== undefined) {
+            return parsedData.state.profileCompletionStep;
+          }
+        }
+      } catch (e) {
+        console.error('Error loading step from localStorage:', e);
+      }
+    }
+    return 0;
+  });
+  
+  // Derive navigable steps from current step
+  const [canNavigateToStep, setCanNavigateToStep] = useState<number[]>(() => {
+    if (currentStep > 0) {
+      return Array.from({ length: currentStep + 1 }, (_, i) => i);
+    }
+    return [0];
+  });
+  
+  const [animationDirection, setAnimationDirection] = useState("forward");
+  const [showCompletionMessage, setShowCompletionMessage] = useState(false);
+  
+  // Initialize profile data once
+  const [profileData, setProfileData] = useState<ProfileData>(() => {
+    // Try to load from localStorage first
+    if (typeof window !== 'undefined') {
+      try {
+        const storedData = localStorage.getItem('user-data-store');
+        if (storedData) {
+          const parsedData = JSON.parse(storedData);
+          if (parsedData.state && parsedData.state.profileData) {
+            return convertToProfileData(parsedData.state.profileData);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading profile from localStorage:', e);
+      }
+    }
+    
+    // Default profile data if nothing in localStorage
+    return {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      preferredName: "",
+      linkedInProfile: "",
+      education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
+      careerGoals: {
+        shortTerm: "",
+        longTerm: "",
+        desiredIndustry: [],
+        desiredRoles: [],
+      },
+      skills: [],
+      preferences: {
+        preferredLocations: [],
+        studyMode: "Full-time",
+        startDate: "",
+        budgetRange: {
+          min: 0,
+          max: 100000,
+        },
+      },
+      documents: {},
+    };
+  });
+  
+  // Save data to store (only when data changes, not on every render)
+  const saveToStore = useCallback(() => {
+    if (initialized.current) {
+      storeSetProfileData(convertToUserProfile(profileData));
+      storeSetStep(currentStep);
+    }
+  }, [profileData, currentStep, storeSetProfileData, storeSetStep]);
+  
+  // Save changes to store
+  useEffect(() => {
+    if (!initialized.current) {
+      initialized.current = true;
+      return;
+    }
+    
+    const timeoutId = setTimeout(() => {
+      saveToStore();
+    }, 500); // Debounce updates
+    
+    return () => clearTimeout(timeoutId);
+  }, [profileData, currentStep, saveToStore]);
+  
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setAnimationDirection("forward");
@@ -213,6 +295,90 @@ export default function ProfileWizard() {
   const handleComplete = () => {
     console.log("Profile completed:", profileData);
   };
+
+  // Helper function to convert ProfileData to UserProfile
+  function convertToUserProfile(data: ProfileData): UserProfile {
+    return {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      phone: data.phone || undefined,
+      preferredName: data.preferredName || undefined,
+      linkedInProfile: data.linkedInProfile || null,
+      education: data.education.map(ed => ({
+        degreeLevel: ed.degreeLevel,
+        institution: ed.institution,
+        fieldOfStudy: ed.fieldOfStudy,
+        graduationYear: ed.graduationYear,
+        gpa: ed.gpa || null
+      })),
+      careerGoals: {
+        shortTerm: data.careerGoals.shortTerm,
+        longTerm: data.careerGoals.longTerm,
+        desiredIndustry: data.careerGoals.desiredIndustry,
+        desiredRoles: data.careerGoals.desiredRoles
+      },
+      skills: data.skills,
+      preferences: {
+        preferredLocations: data.preferences.preferredLocations,
+        studyMode: data.preferences.studyMode,
+        startDate: data.preferences.startDate,
+        budgetRange: {
+          min: data.preferences.budgetRange.min,
+          max: data.preferences.budgetRange.max
+        }
+      },
+      documents: {
+        resume: data.documents.resume || null,
+        transcripts: data.documents.transcripts || null,
+        statementOfPurpose: data.documents.statementOfPurpose || null,
+        otherDocuments: data.documents.otherDocuments || null
+      },
+      vectorStoreId: data.vectorStoreId
+    };
+  }
+  
+  // Helper function to convert UserProfile to ProfileData
+  function convertToProfileData(data: UserProfile): ProfileData {
+    return {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      phone: data.phone || "",
+      preferredName: data.preferredName || "",
+      linkedInProfile: data.linkedInProfile || undefined,
+      education: data.education.map(ed => ({
+        degreeLevel: ed.degreeLevel as DegreeLevel,
+        institution: ed.institution,
+        fieldOfStudy: ed.fieldOfStudy,
+        graduationYear: ed.graduationYear,
+        gpa: ed.gpa || undefined
+      })),
+      careerGoals: {
+        shortTerm: data.careerGoals.shortTerm,
+        longTerm: data.careerGoals.longTerm,
+        desiredIndustry: data.careerGoals.desiredIndustry,
+        desiredRoles: data.careerGoals.desiredRoles
+      },
+      skills: data.skills,
+      preferences: {
+        preferredLocations: data.preferences.preferredLocations,
+        studyMode: data.preferences.studyMode,
+        startDate: data.preferences.startDate,
+        budgetRange: {
+          min: data.preferences.budgetRange.min,
+          max: data.preferences.budgetRange.max
+        }
+      },
+      documents: {
+        resume: data.documents?.resume || undefined,
+        transcripts: data.documents?.transcripts || undefined,
+        statementOfPurpose: data.documents?.statementOfPurpose || undefined,
+        otherDocuments: data.documents?.otherDocuments || undefined
+      },
+      vectorStoreId: data.vectorStoreId
+    };
+  }
 
   // Animation variants for step transitions
   const slideVariants = {
@@ -254,7 +420,7 @@ export default function ProfileWizard() {
         </motion.div>
       );
     } else if (currentStep === 1) {
-      // Import Options step
+      // Import options step
       return (
         <motion.div
           key={currentStep}
@@ -292,7 +458,7 @@ export default function ProfileWizard() {
         </motion.div>
       );
     } else {
-      // Regular steps
+      // All other steps
       return (
         <motion.div
           key={currentStep}
@@ -312,112 +478,101 @@ export default function ProfileWizard() {
     }
   };
 
-  const completionAnimation = {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 500, damping: 20 } },
-    exit: { opacity: 0, scale: 1.2, transition: { duration: 0.2 } }
-  };
-
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
+    <div>
+      {/* Progress steps indicator */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Create Your Profile</h1>
-        <p className="text-zinc-600">
-          Complete the steps below to set up your personal educational profile.
-        </p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {steps.map((step, index) => (
+            <button
+              key={index}
+              className={`flex flex-col items-center p-2 ${
+                index === currentStep
+                  ? "text-primary"
+                  : canNavigateToStep.includes(index)
+                  ? "text-gray-700 cursor-pointer"
+                  : "text-gray-400 cursor-not-allowed"
+              }`}
+              onClick={() => handleStepClick(index)}
+              disabled={!canNavigateToStep.includes(index)}
+            >
+              <div className="relative">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                    index === currentStep
+                      ? "border-primary bg-primary/10"
+                      : canNavigateToStep.includes(index) && index < currentStep
+                      ? "border-green-500 bg-green-100"
+                      : "border-gray-300 bg-gray-100"
+                  }`}
+                >
+                  {canNavigateToStep.includes(index) && index < currentStep ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  ) : (
+                    <span>{index + 1}</span>
+                  )}
+                </div>
+                {index < steps.length - 1 && (
+                  <div
+                    className={`absolute top-1/2 left-full w-8 h-0.5 -translate-y-1/2 ${
+                      canNavigateToStep.includes(index + 1) ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  ></div>
+                )}
+              </div>
+              <div className="text-xs mt-1 text-center max-w-[80px]">{step.name}</div>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="relative">
-        {/* Step completion animation overlay */}
-        <AnimatePresence>
-          {showCompletionMessage && (
-            <motion.div 
-              className="absolute inset-0 flex items-center justify-center z-10 bg-white/70 backdrop-blur-sm rounded-lg"
-              variants={completionAnimation}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <div className="bg-green-100 p-4 rounded-full">
-                <CheckCircle2 className="h-10 w-10 text-green-600" />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* Step completion animation */}
+      <AnimatePresence>
+        {showCompletionMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
+          >
+            <div className="bg-green-100 text-green-800 rounded-lg p-4 shadow-lg flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6" />
+              <span className="font-medium">Step completed!</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Progress steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between max-w-xl mx-auto">
-            {steps.map((step, idx) => (
-              <TooltipProvider key={idx} delayDuration={300}>
+      <div className="w-full max-w-4xl mx-auto">
+        <Card className="p-6">
+          {/* Step title and description */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-semibold">{steps[currentStep].name}</h2>
+              <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div 
-                      className={`flex flex-col items-center ${
-                        canNavigateToStep.includes(idx) 
-                          ? "cursor-pointer hover:opacity-80 transition-opacity" 
-                          : "cursor-not-allowed opacity-70"
-                      }`}
-                      onClick={() => handleStepClick(idx)}
-                    >
-                      <motion.div 
-                        whileHover={canNavigateToStep.includes(idx) ? { scale: 1.1 } : {}}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                          idx < currentStep 
-                            ? "bg-green-500 text-white ring-2 ring-offset-2 ring-green-200"
-                            : idx === currentStep
-                              ? "bg-blue-600 text-white ring-2 ring-offset-2 ring-blue-200"
-                              : canNavigateToStep.includes(idx)
-                                ? "bg-gray-200 text-gray-700 ring-2 ring-offset-2 ring-gray-100"
-                                : "bg-gray-200 text-gray-500"
-                        }`}
-                      >
-                        {idx < currentStep ? (
-                          <CheckCircle2 className="h-5 w-5" />
-                        ) : (
-                          <span>{idx + 1}</span>
-                        )}
-                      </motion.div>
-                      <span className={`text-xs mt-2 hidden md:block ${
-                        idx === currentStep ? "font-medium text-blue-700" : ""
-                      }`}>
-                        {step.name}
-                      </span>
+                    <div className="bg-gray-100 p-2 rounded-full cursor-help">
+                      <Info className="w-5 h-5 text-gray-500" />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p>{step.description}</p>
-                    {!canNavigateToStep.includes(idx) && idx > 0 && (
-                      <p className="text-xs text-amber-600 mt-1 flex items-center">
-                        <Info className="h-3 w-3 mr-1" /> Complete previous steps first
-                      </p>
-                    )}
+                  <TooltipContent>
+                    <p className="max-w-xs">{steps[currentStep].description}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            ))}
+            </div>
+            <p className="text-gray-600 mt-1">{steps[currentStep].description}</p>
           </div>
-          <div className="relative max-w-xl mx-auto mt-4">
-            <div className="absolute top-1/2 left-4 right-4 h-2 bg-gray-200 -translate-y-1/2 rounded-full" />
-            <motion.div 
-              className="absolute top-1/2 left-4 h-2 bg-blue-600 -translate-y-1/2 rounded-full"
-              style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
-              initial={{ width: 0 }}
-              animate={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
-              transition={{ duration: 0.5 }}
-            />
-          </div>
-        </div>
 
-        {/* Main content */}
-        <Card className="p-6 shadow-md">
-          <AnimatePresence mode="wait" custom={animationDirection}>
+          {/* Step content */}
+          <AnimatePresence mode="wait" initial={false} custom={animationDirection}>
             {renderCurrentStep()}
           </AnimatePresence>
 
           {/* Navigation buttons */}
-          {currentStep !== 0 && currentStep !== 1 && currentStep !== steps.length - 1 && (
-            <div className="flex justify-between mt-8 pt-4 border-t">
+          {currentStep > 0 && currentStep < steps.length - 1 && (
+            <div className="flex justify-between mt-6">
               <Button
                 variant="outline"
                 onClick={handlePrevious}

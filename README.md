@@ -104,3 +104,50 @@ The project is divided into several phases:
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Environment Variables
+
+### Setup Instructions
+
+The application requires the following environment variables to be set:
+
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `PERPLEXITY_API_KEY`: Your Perplexity API key for program research
+- `NEXT_PUBLIC_API_URL`: Base URL for API calls (use http://localhost:3000 for local development)
+
+Follow these steps to configure environment variables:
+
+1. Create a `.env.local` file in the project root (this file is ignored by git)
+2. Add your environment variables to this file:
+   ```
+   OPENAI_API_KEY=your-openai-api-key-here
+   PERPLEXITY_API_KEY=your-perplexity-api-key-here
+   NEXT_PUBLIC_API_URL=http://localhost:3000
+   ```
+3. For production deployment, set these variables in your hosting platform's environment configuration
+
+### Security Best Practices
+
+- **Never commit API keys to version control**
+- Always use `.env.local` for local development (included in `.gitignore`)
+- For production, use your hosting platform's environment variable management system
+- Rotate API keys periodically for enhanced security
+- Implement proper access controls for your API keys in OpenAI and Perplexity dashboards
+
+### Production Deployment
+
+When deploying to production:
+
+1. Set environment variables through your hosting platform (Vercel, Netlify, etc.)
+2. Ensure `NEXT_PUBLIC_API_URL` points to your production domain
+3. Consider using environment-specific settings like `NODE_ENV` to handle different configurations
+
+### Perplexity API Integration
+
+The recommendation engine uses the Perplexity API to research educational programs. To obtain a Perplexity API key:
+
+1. Visit [Perplexity AI's API Settings page](https://www.perplexity.ai/pplx-api)
+2. Register and generate an API key
+3. Add the API key to your `.env.local` file as `PERPLEXITY_API_KEY`
+
+If the Perplexity API is unavailable, the system will fall back to using OpenAI for research.

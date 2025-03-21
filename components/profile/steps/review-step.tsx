@@ -54,6 +54,9 @@ export default function ReviewStep({
         throw new Error("Vector store not found. Please restart the profile setup.");
       }
       
+      // Store the profile data directly in localStorage for faster access
+      localStorage.setItem('userProfileData', JSON.stringify(profileData));
+      
       // Create a JSON file with all profile data
       const profileJson = JSON.stringify(profileData, null, 2);
       const profileBlob = new Blob([profileJson], { type: "application/json" });

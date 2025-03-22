@@ -5,8 +5,6 @@ import FileUpload from "./file-upload";
 interface DocumentUploadProps {
   children: React.ReactNode;
   allowedFileTypes?: string[];
-  maxSizeMB?: number;
-  endpoint?: string;
   onSuccess: (fileId: string) => void;
   className?: string;
 }
@@ -14,8 +12,6 @@ interface DocumentUploadProps {
 export default function DocumentUpload({
   children,
   allowedFileTypes = [],
-  maxSizeMB = 5,
-  endpoint = "/api/upload/document",
   onSuccess,
   className = "",
 }: DocumentUploadProps) {

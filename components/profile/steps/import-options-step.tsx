@@ -49,7 +49,7 @@ export default function ImportOptionsStep({
     statementOfPurpose: !!profileData.documents.statementOfPurpose,
   });
   
-  const { loginWithPopup, getAccessTokenSilently, user } = useAuth0();
+  const { loginWithPopup, getAccessTokenSilently } = useAuth0();
 
   // Add a useEffect for streaming animations
   useEffect(() => {
@@ -243,7 +243,7 @@ export default function ImportOptionsStep({
         // Collect document IDs
         const documentIds = Object.entries(profileData.documents)
           .filter(([key, value]) => !!value && key !== 'otherDocuments')
-          .map(([_, value]) => value as string);
+          .map(([_key, value]) => value as string);
         
         if (documentIds.length === 0) {
           throw new Error("No document IDs found.");
@@ -371,7 +371,6 @@ export default function ImportOptionsStep({
 
   // Calculate the number of uploaded documents
   const uploadedCount = Object.values(uploadedFiles).filter(Boolean).length;
-  const uploadProgress = (uploadedCount / 3) * 100;
   const linkedInImported = importStatus === "success";
   const hasImportedData = linkedInImported || uploadedCount > 0;
 
@@ -548,7 +547,7 @@ export default function ImportOptionsStep({
               <h3 className="text-xl font-medium text-center">Import from LinkedIn</h3>
               <p className="text-sm text-center text-zinc-600 max-w-md">
                 Automatically fill your profile details with information from your LinkedIn account.
-                We'll only access the data you authorize.
+                We&apos;ll only access the data you authorize.
               </p>
               
               {importStatus === "success" && (
@@ -621,8 +620,6 @@ export default function ImportOptionsStep({
               ) : (
                 <DocumentUpload
                   allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
-                  maxSizeMB={5}
-                  endpoint="/api/upload/document"
                   onSuccess={(fileId) => handleFileUploaded(fileId, "resume")}
                   className="h-20"
                 >
@@ -670,8 +667,6 @@ export default function ImportOptionsStep({
               ) : (
                 <DocumentUpload
                   allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
-                  maxSizeMB={5}
-                  endpoint="/api/upload/document"
                   onSuccess={(fileId) => handleFileUploaded(fileId, "transcripts")}
                   className="h-20"
                 >
@@ -719,8 +714,6 @@ export default function ImportOptionsStep({
               ) : (
                 <DocumentUpload
                   allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
-                  maxSizeMB={5}
-                  endpoint="/api/upload/document"
                   onSuccess={(fileId) => handleFileUploaded(fileId, "statementOfPurpose")}
                   className="h-20"
                 >

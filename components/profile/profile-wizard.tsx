@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Info, Trash2, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import useProfileStore from "@/stores/useProfileStore";
+import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import HydrationLoading from "@/components/ui/hydration-loading";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
@@ -124,6 +125,9 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     setVectorStoreId,
     hydrated
   } = useProfileStore();
+  
+  // Get reset function from recommendations store
+  const { resetState: resetRecommendations } = useRecommendationsStore();
   
   // Refs to track initialization status
   const initializedRef = useRef(false);
@@ -326,19 +330,30 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
   // Add a reset function
   const handleReset = async () => {
-    // Show confirmation dialog
-    if (!confirm("Are you sure you want to reset your profile? This action cannot be undone.")) {
-      return;
-    }
-    
     try {
-      // Clear profile data from localStorage
-      localStorage.removeItem('userProfileData');
-      localStorage.removeItem('userVectorStoreId');
+      setIsResetting(true);
       
-      // Reset all stores
+      // Get the vector store ID
+      const vectorStoreId = localStorage.getItem('userVectorStoreId');
+      
+      // First clean up the vector store and uploaded files
+      if (vectorStoreId) {
+        const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!cleanupResponse.ok) {
+          console.error('Failed to clean up vector store:', cleanupResponse.statusText);
+        }
+      }
+      
+      // Clear localStorage
+      localStorage.removeItem('userVectorStoreId');
+      localStorage.removeItem('userProfileData');
+      
+      // Reset all the stores
       setStoredProfileData(null);
-      setStoredCurrentStep(0);
+      resetRecommendations();
       setVectorStoreId(null);
       setProfileComplete(false);
       
@@ -381,8 +396,9 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       // Redirect to welcome step
       router.push("/profile");
     } catch (error) {
-      console.error("Error resetting profile:", error);
-      alert("There was an error resetting your profile. Please try again.");
+      console.error('Error resetting profile:', error);
+    } finally {
+      setIsResetting(false);
     }
   };
 

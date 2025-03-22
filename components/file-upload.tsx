@@ -11,7 +11,6 @@ import {
 import { Button } from "./ui/button";
 import { FilePlus2, Plus, Trash2, CircleX } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-import { Input } from "./ui/input";
 import {
   Tooltip,
   TooltipContent,

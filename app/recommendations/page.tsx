@@ -103,7 +103,7 @@ export default function RecommendationsPage() {
   const [isResetting, setIsResetting] = useState(false);
 
   // Memoize the fetchRecommendations function to use in useEffect
-  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [vectorStore, favoritesIds, setRecommendations, setUserProfile, setLoading, setError]);
+  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [vectorStore, favoritesIds, setRecommendations, setUserProfile, setLoading, setError, userProfile]);
 
   // Redirect to profile page if profile is not complete
   useEffect(() => {
@@ -268,61 +268,36 @@ export default function RecommendationsPage() {
     try {
       setIsResetting(true);
       
-      // Get vector store ID from localStorage
+      // Get the vector store ID
       const vectorStoreId = localStorage.getItem('userVectorStoreId');
       
-      // If vector store exists, clean it up via the API
+      // First clean up the vector store and uploaded files
       if (vectorStoreId) {
-        setLoading(true); // Show loading state
-        
         const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
-          method: 'DELETE',
+          method: 'DELETE'
         });
         
         if (!cleanupResponse.ok) {
-          console.error('Error cleaning up vector store:', await cleanupResponse.json());
-        } else {
-          console.log('Vector store cleaned up successfully');
+          console.error('Failed to clean up vector store:', cleanupResponse.statusText);
         }
-        
-        setLoading(false);
       }
       
       // Clear localStorage
       localStorage.removeItem('userVectorStoreId');
       localStorage.removeItem('userProfileData');
-      localStorage.removeItem('vista-profile-storage');
-      localStorage.removeItem('vista-recommendations-storage');
       
-      // Reset state in all stores
+      // Reset all the stores
       resetProfile();
       resetRecommendations();
-      setProfileComplete(false);
       setVectorStoreId(null);
-      
-      // Important: Reset the completedSteps to just [0]
-      useProfileStore.setState({
-        ...useProfileStore.getState(),
-        completedSteps: [0]
-      });
+      setProfileComplete(false);
       
       // Redirect to profile page
       router.push('/profile');
-      
-      // Force reload to ensure all state is cleared
-      setTimeout(() => {
-        window.location.reload();
-      }, 100);
     } catch (error) {
-      console.error("Error resetting data:", error);
-      setError("There was an error resetting your data. Please try again.");
-      
+      console.error('Error resetting profile:', error);
+    } finally {
       setIsResetting(false);
-      
-      // Force reload anyway to ensure a clean state
-      setTimeout(() => {
-        window.location.reload();
-      }, 100);
     }
   };
 

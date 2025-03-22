@@ -37,7 +37,7 @@ export default function WebSearchSettings() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <div className="text-zinc-600 text-sm">User&apos;s location</div>
+        <div className="text-zinc-600 text-sm">User's location</div>
         <div
           className="text-zinc-400 text-sm px-1 transition-colors hover:text-zinc-600 cursor-pointer"
           onClick={handleClear}

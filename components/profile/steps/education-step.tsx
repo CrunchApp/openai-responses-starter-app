@@ -62,10 +62,10 @@ export default function EducationStep({
 
   const degreeLevels = [
     { value: "high_school", label: "High School Diploma" },
-    { value: "associates", label: "Associate&apos;s Degree" },
-    { value: "bachelors", label: "Bachelor&apos;s Degree" },
-    { value: "masters", label: "Master&apos;s Degree" },
-    { value: "doctorate", label: "Doctor&apos;s Degree" },
+    { value: "associates", label: "Associate's Degree" },
+    { value: "bachelors", label: "Bachelor's Degree" },
+    { value: "masters", label: "Master's Degree" },
+    { value: "doctorate", label: "Doctor's Degree" },
     { value: "other", label: "Other" },
   ];
 

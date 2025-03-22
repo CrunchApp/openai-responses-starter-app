@@ -547,7 +547,7 @@ export default function ImportOptionsStep({
               <h3 className="text-xl font-medium text-center">Import from LinkedIn</h3>
               <p className="text-sm text-center text-zinc-600 max-w-md">
                 Automatically fill your profile details with information from your LinkedIn account.
-                We&apos;ll only access the data you authorize.
+                We'll only access the data you authorize.
               </p>
               
               {importStatus === "success" && (
@@ -732,7 +732,7 @@ export default function ImportOptionsStep({
         <p className="text-sm text-zinc-500 mb-4 sm:mb-0">
           {hasImportedData 
             ? "You can continue filling your profile in the next steps."
-            : "You can&apos;t continue without importing data and fill your profile manually."}
+            : "You can't continue without importing data and fill your profile manually."}
         </p>
         <Button 
           onClick={handleContinue}

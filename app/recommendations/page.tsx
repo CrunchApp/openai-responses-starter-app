@@ -337,7 +337,7 @@ export default function RecommendationsPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will delete all your profile data, recommendations, and saved programs. You&apos;ll need to start over from the beginning. This action cannot be undone.
+                    This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -652,7 +652,7 @@ export default function RecommendationsPage() {
                   </div>
                   <h3 className="text-xl font-bold mb-2">No recommendations found</h3>
                   <p className="text-zinc-600 mb-6 max-w-md mx-auto">
-                    We couldn&apos;t find programs matching your current profile. Try adjusting your preferences to see more recommendations.
+                    We couldn't find programs matching your current profile. Try adjusting your preferences to see more recommendations.
                   </p>
                   <Button onClick={() => router.push("/profile?edit=true")}>
                     <Edit className="w-4 h-4 mr-2" />
@@ -723,7 +723,7 @@ export default function RecommendationsPage() {
                   <Scroll className="h-10 w-10 mx-auto text-zinc-300 mb-4" />
                   <h3 className="text-lg font-medium text-zinc-700 mb-2">No applications in progress</h3>
                   <p className="text-zinc-500 mb-4">
-                    When you&apos;re ready to apply to programs, you can track your applications here.
+                    When you're ready to apply to programs, you can track your applications here.
                   </p>
                   <Button variant="outline" onClick={() => setSelectedTab("recommendations")}>
                     Explore Programs

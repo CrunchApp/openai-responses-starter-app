@@ -87,7 +87,7 @@ export default function WelcomeStep({
         </div>
         <h2 className="text-3xl font-bold text-gray-900">Welcome to Vista</h2>
         <p className="text-zinc-500 max-w-md mx-auto">
-          Your personal education adviser, powered by AI. Let&apos;s start by getting to know you.
+          Your personal education adviser, powered by AI. Let's start by getting to know you.
         </p>
       </motion.div>
 
@@ -154,7 +154,7 @@ export default function WelcomeStep({
             </>
           ) : (
             <>
-              Let&apos;s Get Started <ArrowRight className="ml-2 h-4 w-4" />
+              Let's Get Started <ArrowRight className="ml-2 h-4 w-4" />
             </>
           )}
         </Button>

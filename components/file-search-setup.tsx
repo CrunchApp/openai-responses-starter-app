@@ -92,7 +92,6 @@ export default function FileSearchSetup() {
       <div className="flex mt-4">
         <FileUpload
           vectorStoreId={vectorStore?.id ?? ""}
-          vectorStoreName={vectorStore?.name ?? ""}
           onAddStore={(id) => handleAddStore(id)}
           onUnlinkStore={() => unlinkStore()}
         />

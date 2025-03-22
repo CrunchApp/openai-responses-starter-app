@@ -243,7 +243,7 @@ export default function ImportOptionsStep({
         // Collect document IDs
         const documentIds = Object.entries(profileData.documents)
           .filter(([key, value]) => !!value && key !== 'otherDocuments')
-          .map(([_key, value]) => value as string);
+          .map(([_, value]) => value as string);
         
         if (documentIds.length === 0) {
           throw new Error("No document IDs found.");

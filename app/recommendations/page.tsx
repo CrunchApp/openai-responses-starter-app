@@ -131,9 +131,6 @@ export default function RecommendationsPage() {
     }
   }, [hydrated, vectorStore, fileSearchEnabled, recommendations.length, isLoading, fetchRecommendationsCallback, setFileSearchEnabled]);
   
-  // Get favorite recommendations only after hydration
-  const favoriteRecommendations = hydrated ? getFavoriteRecommendations() : [];
-  
   // Fetch recommendations from the API
   async function fetchRecommendations() {
     if (vectorStore && vectorStore.id) {
@@ -341,7 +338,7 @@ export default function RecommendationsPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
+                    This will delete all your profile data, recommendations, and saved programs. You&apos;ll need to start over from the beginning. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

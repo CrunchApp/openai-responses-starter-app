@@ -228,8 +228,6 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
     max_num_results: 10
   };
 
-  // No longer trying to use file_ids or filters - using the query instead
-
   try {
     // First, call OpenAI Responses API with file search tool to gather information
     let responsesApiResult;

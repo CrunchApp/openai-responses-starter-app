@@ -12,21 +12,29 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import useProfileStore from "@/stores/useProfileStore";
+import useRecommendationsStore from "@/stores/useRecommendationsStore";
 
 interface ReviewStepProps {
   profileData: ProfileData;
   setProfileData: React.Dispatch<React.SetStateAction<ProfileData>>;
   onComplete: () => void;
+  isEditMode?: boolean;
 }
 
 export default function ReviewStep({
   profileData,
   setProfileData,
   onComplete,
+  isEditMode = false
 }: ReviewStepProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedSection, setExpandedSection] = useState("personal");
   const router = useRouter();
+  
+  // Use our stores
+  const { setVectorStoreId, setProfileComplete } = useProfileStore();
+  const { setUserProfile } = useRecommendationsStore();
   const { setVectorStore, setFileSearchEnabled } = useToolsStore();
 
   // Add a useEffect to check for uploaded documents in localStorage
@@ -56,6 +64,48 @@ export default function ReviewStep({
       
       // Store the profile data directly in localStorage for faster access
       localStorage.setItem('userProfileData', JSON.stringify(profileData));
+      
+      // Save to our recommendation store for use in recommendation page
+      setUserProfile({
+        firstName: profileData.firstName,
+        lastName: profileData.lastName,
+        email: profileData.email,
+        phone: profileData.phone,
+        preferredName: profileData.preferredName,
+        linkedInProfile: profileData.linkedInProfile,
+        goal: profileData.education?.[0]?.degreeLevel || "Master's",
+        desiredField: profileData.education?.[0]?.fieldOfStudy,
+        education: profileData.education.map(edu => ({
+          degreeLevel: edu.degreeLevel,
+          institution: edu.institution,
+          fieldOfStudy: edu.fieldOfStudy,
+          graduationYear: edu.graduationYear,
+          gpa: edu.gpa || null
+        })),
+        careerGoals: {
+          shortTerm: profileData.careerGoals.shortTerm,
+          longTerm: profileData.careerGoals.longTerm,
+          desiredIndustry: profileData.careerGoals.desiredIndustry,
+          desiredRoles: profileData.careerGoals.desiredRoles
+        },
+        skills: profileData.skills,
+        preferences: {
+          preferredLocations: profileData.preferences.preferredLocations,
+          studyMode: profileData.preferences.studyMode,
+          startDate: profileData.preferences.startDate,
+          budgetRange: {
+            min: profileData.preferences.budgetRange.min,
+            max: profileData.preferences.budgetRange.max
+          }
+        },
+        documents: {
+          resume: profileData.documents.resume || null,
+          transcripts: profileData.documents.transcripts || null,
+          statementOfPurpose: profileData.documents.statementOfPurpose || null,
+          otherDocuments: profileData.documents.otherDocuments || null
+        },
+        vectorStoreId
+      });
       
       // Create a JSON file with all profile data
       const profileJson = JSON.stringify(profileData, null, 2);
@@ -105,6 +155,10 @@ export default function ReviewStep({
         }));
       }
       
+      // Update our stores
+      setVectorStoreId(vectorStoreId);
+      setProfileComplete(true);
+      
       // Store the vector store in global state for the AI assistant to use
       setVectorStore({
         id: vectorStoreId,
@@ -114,11 +168,13 @@ export default function ReviewStep({
       // Enable file search to use the vector store
       setFileSearchEnabled(true);
       
-      // Complete the profile setup
-      onComplete();
-      
-      // Redirect to recommendations
-      router.push("/recommendations");
+      // If in edit mode, redirect directly to recommendations page
+      if (isEditMode) {
+        router.push("/recommendations");
+      } else {
+        // Complete the profile setup with animation
+        onComplete();
+      }
     } catch (error) {
       console.error("Error completing profile:", error);
       alert("There was an error completing your profile. Please try again.");

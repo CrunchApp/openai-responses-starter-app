@@ -75,7 +75,6 @@ export default function RecommendationsPage() {
     setLoading,
     setError,
     toggleFavorite,
-    getFavoriteRecommendations,
     hydrated
   } = useRecommendationsStore();
     

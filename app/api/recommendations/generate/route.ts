@@ -338,7 +338,7 @@ USER PROFILE DETAILS:
 - Target start date: ${userProfile.preferences.startDate}
 - Documents submitted: ${userProfile.documents ? 
     Object.entries(userProfile.documents)
-      .filter(([_, value]) => value)
+      .filter(([, value]) => value)
       .map(([key]) => key)
       .join(', ') || 'None' 
     : 'None'

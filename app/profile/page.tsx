@@ -1,11 +1,12 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, Suspense } from "react";
 import ProfileWizard from "@/components/profile/profile-wizard";
 import useProfileStore from "@/stores/useProfileStore";
 import { useRouter, useSearchParams } from "next/navigation";
 import useToolsStore from "@/stores/useToolsStore";
 
-export default function ProfilePage() {
+// Create a client component that uses useSearchParams
+function ProfileContent() {
   const { isProfileComplete, vectorStoreId } = useProfileStore();
   const { setVectorStore } = useToolsStore();
   const router = useRouter();
@@ -35,5 +36,14 @@ export default function ProfilePage() {
       </h1>
       <ProfileWizard isEditMode={isEditMode} />
     </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ProfileContent />
+    </Suspense>
   );
 } 

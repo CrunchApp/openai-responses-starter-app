@@ -36,12 +36,11 @@ export default function Home() {
             <Link href="/chat" className="text-sm font-medium hover:text-primary transition-colors">
               AI Advisor
             </Link>
-            <Button variant="outline" size="sm" className="border-primary">
-              Sign In
-            </Button>
-            <Button size="sm">
-              Sign Up
-            </Button>
+            <Link href="/profile">
+              <Button size="sm">
+                Sign Up
+              </Button>
+            </Link>
           </nav>
           
           {/* Mobile Menu Button */}
@@ -66,12 +65,11 @@ export default function Home() {
               <Link href="/chat" className="text-sm font-medium hover:text-primary transition-colors">
                 AI Advisor
               </Link>
-              <Button variant="outline" size="sm" className="border-primary">
-                Sign In
-              </Button>
-              <Button size="sm">
-                Sign Up
-              </Button>
+              <Link href="/profile">
+                <Button size="sm" className="w-full">
+                  Sign Up
+                </Button>
+              </Link>
             </nav>
           </div>
         )}

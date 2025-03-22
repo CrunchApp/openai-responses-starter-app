@@ -80,8 +80,8 @@ export default function RecommendationsPage() {
     
   // Local UI state
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState("recommendations");
-  const [feedbackProgram, setFeedbackProgram] = useState<string | null>(null);
+  const [, setSelectedTab] = useState("recommendations");
+  const [, setFeedbackProgram] = useState<string | null>(null);
   
   // Refs to track initialization status
   const initializedRef = useRef(false);

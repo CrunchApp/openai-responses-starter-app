@@ -18,7 +18,7 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
       throw new Error('Vector store ID is required to generate recommendations');
     }
 
-    // Use cached profile if provided (from client-side store)
+    // Use cached profile if provided (from client-side localStorage)
     let userProfile = cachedUserProfile;
     
     // If no cached profile is provided, fetch from vector store
@@ -79,7 +79,7 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
         vectorStoreId 
       }),
       // Use a longer timeout as this operation can take time
-      signal: AbortSignal.timeout(180000), // 180 second timeout
+      signal: AbortSignal.timeout(120000), // 120 second timeout
       cache: 'no-store',
     });
 

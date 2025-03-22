@@ -87,7 +87,7 @@ export default function WelcomeStep({
         </div>
         <h2 className="text-3xl font-bold text-gray-900">Welcome to Vista</h2>
         <p className="text-zinc-500 max-w-md mx-auto">
-          Your personal education adviser, powered by AI. Let's start by getting to know you.
+          Your personal education adviser, powered by AI. Let&apos;s start by getting to know you.
         </p>
       </motion.div>
 

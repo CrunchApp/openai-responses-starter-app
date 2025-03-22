@@ -21,26 +21,25 @@ import {
 
 interface FileUploadProps {
   vectorStoreId?: string;
-  vectorStoreName?: string;
   onAddStore?: (id: string) => void;
   onUnlinkStore?: () => void;
   customTrigger?: React.ReactNode;
   dialogOpen?: boolean;
   setDialogOpen?: (open: boolean) => void;
+  acceptedFileTypes?: string[];
 }
 
 export default function FileUpload({
   vectorStoreId,
-  vectorStoreName,
   onAddStore = () => {},
   onUnlinkStore = () => {},
   customTrigger,
   dialogOpen,
   setDialogOpen: externalSetDialogOpen,
+  acceptedFileTypes = []
 }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [userVectorStoreId, setUserVectorStoreId] = useState<string | null>(null);
-  const [newStoreName, setNewStoreName] = useState<string>("Default store");
   const [uploading, setUploading] = useState<boolean>(false);
   const [internalDialogOpen, setInternalDialogOpen] = useState<boolean>(false);
   const [storeError, setStoreError] = useState<string | null>(null);
@@ -62,34 +61,6 @@ export default function FileUpload({
     }
   }, [vectorStoreId, onAddStore]);
 
-  const acceptedFileTypes = {
-    "text/x-c": [".c"],
-    "text/x-c++": [".cpp"],
-    "text/x-csharp": [".cs"],
-    "text/css": [".css"],
-    "application/msword": [".doc"],
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-      ".docx",
-    ],
-    "text/x-golang": [".go"],
-    "text/html": [".html"],
-    "text/x-java": [".java"],
-    "text/javascript": [".js"],
-    "application/json": [".json"],
-    "text/markdown": [".md"],
-    "application/pdf": [".pdf"],
-    "text/x-php": [".php"],
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-      [".pptx"],
-    "text/x-python": [".py"],
-    "text/x-script.python": [".py"],
-    "text/x-ruby": [".rb"],
-    "application/x-sh": [".sh"],
-    "text/x-tex": [".tex"],
-    "application/typescript": [".ts"],
-    "text/plain": [".txt"],
-  };
-
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       setFile(acceptedFiles[0]);
@@ -98,8 +69,8 @@ export default function FileUpload({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    multiple: false,
-    accept: acceptedFileTypes,
+    accept: acceptedFileTypes.length ? Object.fromEntries(acceptedFileTypes.map(type => [type, []])) : undefined,
+    maxFiles: 1
   });
 
   const removeFile = () => {

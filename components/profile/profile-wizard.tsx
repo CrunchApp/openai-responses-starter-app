@@ -326,42 +326,21 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
   // Add a reset function
   const handleReset = async () => {
+    // Show confirmation dialog
+    if (!confirm("Are you sure you want to reset your profile? This action cannot be undone.")) {
+      return;
+    }
+    
     try {
-      setIsResetting(true);
-      
-      // Get vector store ID from localStorage
-      const vectorStoreId = localStorage.getItem('userVectorStoreId');
-      
-      // If vector store exists, clean it up via the API
-      if (vectorStoreId) {
-        // Show loading state or some indication of cleanup
-        const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
-          method: 'DELETE',
-        });
-        
-        if (!cleanupResponse.ok) {
-          console.error('Error cleaning up vector store:', await cleanupResponse.json());
-        } else {
-          console.log('Vector store cleaned up successfully');
-        }
-      }
-      
-      // Clear localStorage
-      localStorage.removeItem('userVectorStoreId');
+      // Clear profile data from localStorage
       localStorage.removeItem('userProfileData');
-      localStorage.removeItem('vista-profile-storage');
+      localStorage.removeItem('userVectorStoreId');
       
-      // Reset the store state - important to reset completedSteps to prevent skipping
+      // Reset all stores
       setStoredProfileData(null);
       setStoredCurrentStep(0);
-      setProfileComplete(false);
       setVectorStoreId(null);
-      
-      // Important: Reset the completedSteps to just [0]
-      useProfileStore.setState({
-        ...useProfileStore.getState(),
-        completedSteps: [0]
-      });
+      setProfileComplete(false);
       
       // Reset local state
       setProfileData({
@@ -393,37 +372,25 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       setCurrentStep(0);
       setCanNavigateToStep([0]);
       
-      // Set initialization flag to true since we're actively changing state
-      initializedRef.current = true;
-      localChangesRef.current = true;
+      // Reset completed steps in store
+      useProfileStore.setState(state => ({
+        ...state,
+        completedSteps: [0]
+      }));
       
-      // Force reload to clear any other cached state
-      window.location.reload();
+      // Redirect to welcome step
+      router.push("/profile");
     } catch (error) {
       console.error("Error resetting profile:", error);
       alert("There was an error resetting your profile. Please try again.");
-      
-      setIsResetting(false);
-      
-      // Force reload anyway to ensure a clean state
-      window.location.reload();
     }
   };
 
-  // Animation variants for step transitions
-  const slideVariants = {
-    enter: (direction: string) => ({
-      x: direction === "forward" ? "100%" : "-100%",
-      opacity: 0,
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-    },
-    exit: (direction: string) => ({
-      x: direction === "forward" ? "-100%" : "100%",
-      opacity: 0,
-    }),
+  // Animation variants for the completion animation
+  const completionAnimation = {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 500, damping: 20 } },
+    exit: { opacity: 0, scale: 1.2, transition: { duration: 0.2 } }
   };
 
   // Render the current step with proper typing
@@ -448,12 +415,6 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     }
 
     return <CurrentStepComponent {...props} />;
-  };
-
-  const completionAnimation = {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 500, damping: 20 } },
-    exit: { opacity: 0, scale: 1.2, transition: { duration: 0.2 } }
   };
 
   // If not hydrated yet, show loading indicator

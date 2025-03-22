@@ -108,8 +108,8 @@ export default function CareerGoalsStep({
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Career Goals</h2>
-      <p className="text-sm text-zinc-500 mb-6">
-        Tell us about your career aspirations so we can suggest the most relevant educational paths.
+      <p className="text-zinc-500 max-w-md mx-auto">
+        Let&apos;s understand your career aspirations to provide better recommendations.
       </p>
 
       <div className="space-y-4">
@@ -188,7 +188,7 @@ export default function CareerGoalsStep({
         <div className="mt-6">
           <Label>Desired Industries</Label>
           <p className="text-sm text-zinc-500 mb-2">
-            Industries you're interested in working in
+            Industries you&apos;re interested in working in
           </p>
 
           <div className="flex flex-wrap gap-2 mb-2">
@@ -236,8 +236,8 @@ export default function CareerGoalsStep({
         {/* Roles Section */}
         <div className="mt-6">
           <Label>Desired Roles</Label>
-          <p className="text-sm text-zinc-500 mb-2">
-            Specific job titles or roles you're aiming for
+          <p className="text-sm text-zinc-500">
+            Select the roles you&apos;re interested in pursuing
           </p>
 
           <div className="flex flex-wrap gap-2 mb-2">

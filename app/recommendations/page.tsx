@@ -1,6 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
-import Link from "next/link";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { 
   BookOpen, 
   Calendar, 
@@ -18,7 +17,6 @@ import {
   ThumbsUp, 
   User,
   AlertCircle,
-  RefreshCcw,
   Trash2,
   Loader2
 } from "lucide-react";
@@ -53,13 +51,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { generateRecommendations } from "./actions";
-import { RecommendationProgram, UserProfile } from "./types";
 import HydrationLoading from "@/components/ui/hydration-loading";
 
 export default function RecommendationsPage() {
@@ -73,7 +69,6 @@ export default function RecommendationsPage() {
     userProfile, 
     isLoading, 
     error: errorMessage, 
-    lastGeneratedAt,
     favoritesIds,
     setRecommendations,
     setUserProfile,
@@ -85,8 +80,8 @@ export default function RecommendationsPage() {
   } = useRecommendationsStore();
     
   // Local UI state
-  const [activeTab, setActiveTab] = useState("recommendations");
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState("recommendations");
   const [feedbackProgram, setFeedbackProgram] = useState<string | null>(null);
   
   // Refs to track initialization status
@@ -106,6 +101,9 @@ export default function RecommendationsPage() {
 
   // Add reset loading state
   const [isResetting, setIsResetting] = useState(false);
+
+  // Memoize the fetchRecommendations function to use in useEffect
+  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [vectorStore, favoritesIds, setRecommendations, setUserProfile, setLoading, setError]);
 
   // Redirect to profile page if profile is not complete
   useEffect(() => {
@@ -128,10 +126,10 @@ export default function RecommendationsPage() {
       // Fetch recommendations if needed
       if (vectorStore?.id && !recommendations.length && !isLoading && !fetchingRef.current) {
         fetchingRef.current = true;
-        fetchRecommendations();
+        fetchRecommendationsCallback();
       }
     }
-  }, [hydrated, vectorStore, fileSearchEnabled, recommendations.length, isLoading]);
+  }, [hydrated, vectorStore, fileSearchEnabled, recommendations.length, isLoading, fetchRecommendationsCallback, setFileSearchEnabled]);
   
   // Get favorite recommendations only after hydration
   const favoriteRecommendations = hydrated ? getFavoriteRecommendations() : [];
@@ -402,7 +400,7 @@ export default function RecommendationsPage() {
             </div>
           )}
           
-          <Tabs defaultValue="recommendations" className="w-full" onValueChange={setActiveTab}>
+          <Tabs defaultValue="recommendations" className="w-full" onValueChange={setSelectedTab}>
             <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="recommendations" className="text-sm md:text-base">
                 <BookOpen className="w-4 h-4 mr-2 hidden md:inline" />
@@ -683,7 +681,7 @@ export default function RecommendationsPage() {
                   </div>
                   <h3 className="text-xl font-bold mb-2">No recommendations found</h3>
                   <p className="text-zinc-600 mb-6 max-w-md mx-auto">
-                    We couldn't find programs matching your current profile. Try adjusting your preferences to see more recommendations.
+                    We couldn&apos;t find programs matching your current profile. Try adjusting your preferences to see more recommendations.
                   </p>
                   <Button onClick={() => router.push("/profile?edit=true")}>
                     <Edit className="w-4 h-4 mr-2" />
@@ -738,7 +736,7 @@ export default function RecommendationsPage() {
                     <p className="text-zinc-500 mb-4">
                       When you find programs you like, click the heart icon to save them for later.
                     </p>
-                    <Button variant="outline" onClick={() => setActiveTab("recommendations")}>
+                    <Button variant="outline" onClick={() => setSelectedTab("recommendations")}>
                       Browse Recommendations
                     </Button>
                   </div>
@@ -754,9 +752,9 @@ export default function RecommendationsPage() {
                   <Scroll className="h-10 w-10 mx-auto text-zinc-300 mb-4" />
                   <h3 className="text-lg font-medium text-zinc-700 mb-2">No applications in progress</h3>
                   <p className="text-zinc-500 mb-4">
-                    When you're ready to apply to programs, you can track your applications here.
+                    When you&apos;re ready to apply to programs, you can track your applications here.
                   </p>
-                  <Button variant="outline" onClick={() => setActiveTab("recommendations")}>
+                  <Button variant="outline" onClick={() => setSelectedTab("recommendations")}>
                     Explore Programs
                   </Button>
                 </div>

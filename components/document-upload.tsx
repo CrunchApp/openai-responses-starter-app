@@ -1,6 +1,5 @@
 "use client";
 import React, { useState } from "react";
-import { Upload } from "lucide-react";
 import FileUpload from "./file-upload";
 
 interface DocumentUploadProps {
@@ -20,7 +19,6 @@ export default function DocumentUpload({
   onSuccess,
   className = "",
 }: DocumentUploadProps) {
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -44,8 +42,6 @@ export default function DocumentUpload({
     } catch (error) {
       console.error("Error in document upload: ", error);
       setError(error instanceof Error ? error.message : "An unknown error occurred");
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -67,6 +63,7 @@ export default function DocumentUpload({
         customTrigger={CustomTrigger}
         dialogOpen={isDialogOpen}
         setDialogOpen={setIsDialogOpen}
+        acceptedFileTypes={allowedFileTypes}
       />
       
       {error && (

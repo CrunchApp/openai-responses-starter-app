@@ -27,7 +27,7 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage }) => {
       onSendMessage(inputMessageText);
       setinputMessageText("");
     }
-  }, [onSendMessage, inputMessageText]);
+  }, [onSendMessage, inputMessageText, isComposing]);
 
   useEffect(() => {
     scrollToBottom();
@@ -45,7 +45,7 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage }) => {
             </div>
             <h2 className="text-xl font-medium text-gray-800 mb-2">Welcome to Vista Education Adviser</h2>
             <p className="text-gray-600 max-w-md mb-8">
-              I'm here to help you navigate your educational journey. Ask me about programs, career paths, application tips, and more.
+              I&apos;m here to help you navigate your educational journey. Ask me about programs, career paths, application tips, and more.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-md w-full">
               {["What programs would suit my interests?", "How do I apply for scholarships?", "What career paths are available with my degree?", "How can I prepare for university interviews?"].map((suggestion, index) => (

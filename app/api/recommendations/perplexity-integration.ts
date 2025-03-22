@@ -415,7 +415,7 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
     // Calculate match scores based on pathway alignment
     const enrichedPrograms = programs.map((program, index) => {
       // Calculate base match score starting from 95 and decreasing by 3 per rank
-      let baseScore = Math.max(70, 95 - (index * 3));
+      const baseScore = Math.max(70, 95 - (index * 3));
       
       // Adjust score based on pathway alignment
       let alignmentBonus = 0;

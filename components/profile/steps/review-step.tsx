@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { ProfileData } from "../profile-wizard";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronRight, Edit2, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award } from "lucide-react";
+import { Check, ChevronRight, Edit, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award } from "lucide-react";
 import { useRouter } from "next/navigation";
 import useToolsStore from "@/stores/useToolsStore";
 import { motion } from "framer-motion";

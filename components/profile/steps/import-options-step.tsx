@@ -128,7 +128,6 @@ export default function ImportOptionsStep({
     setErrorMessage(null);
     
     try {
-      // Login with Auth0, specifying LinkedIn as the connection
       await loginWithPopup({
         authorizationParams: {
           connection: 'linkedin',
@@ -374,7 +373,6 @@ export default function ImportOptionsStep({
   const uploadedCount = Object.values(uploadedFiles).filter(Boolean).length;
   const uploadProgress = (uploadedCount / 3) * 100;
   const linkedInImported = importStatus === "success";
-
   const hasImportedData = linkedInImported || uploadedCount > 0;
 
   // Add this extraction animation JSX at the appropriate point in your return statement (inside document upload content)
@@ -741,7 +739,7 @@ export default function ImportOptionsStep({
         <p className="text-sm text-zinc-500 mb-4 sm:mb-0">
           {hasImportedData 
             ? "You can continue filling your profile in the next steps."
-            : "You can continue without importing data and fill your profile manually."}
+            : "You can&apos;t continue without importing data and fill your profile manually."}
         </p>
         <Button 
           onClick={handleContinue}

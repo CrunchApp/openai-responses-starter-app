@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { userProfile, vectorStoreId } = await request.json();
+    const { userProfile } = await request.json();
     
     if (!userProfile) {
       return NextResponse.json(
@@ -403,9 +403,24 @@ function enhanceRecommendationsWithMatchScores(recommendations: any[], userProfi
 // Helper functions for calculating match scores
 
 function calculateCareerAlignment(recommendation: any, userProfile: UserProfile): number {
-  // In a real implementation, this would analyze the alignment between the program
-  // and the user's career goals, desired industries, and roles
-  return Math.floor(Math.random() * 15) + 80; // Placeholder: 80-95
+  // Calculate alignment score based on matching fields and career goals
+  const programField = recommendation.fieldOfStudy?.toLowerCase() || '';
+  const desiredIndustries = userProfile.careerGoals.desiredIndustry.map(i => i.toLowerCase());
+  const desiredRoles = userProfile.careerGoals.desiredRoles.map(r => r.toLowerCase());
+  
+  let score = 75; // Base score
+  
+  // Check if program field matches any desired industry
+  if (desiredIndustries.some(industry => programField.includes(industry))) {
+    score += 10;
+  }
+  
+  // Check if program aligns with desired roles
+  if (desiredRoles.some(role => programField.includes(role))) {
+    score += 10;
+  }
+  
+  return Math.min(95, score); // Cap at 95
 }
 
 function calculateBudgetFit(recommendation: any, userProfile: UserProfile): number {
@@ -458,7 +473,29 @@ function extractCountry(location: string): string | null {
 }
 
 function calculateAcademicFit(recommendation: any, userProfile: UserProfile): number {
-  // In a real implementation, this would analyze how well the program
-  // fits with the user's educational background and skills
-  return Math.floor(Math.random() * 20) + 75; // Placeholder: 75-95
+  const programLevel = recommendation.degreeLevel?.toLowerCase() || '';
+  const userEducation = userProfile.education;
+  
+  let score = 75; // Base score
+  
+  // Check if the program level is appropriate given user's education
+  const highestDegree = userEducation
+    .sort((a, b) => Number(b.graduationYear) - Number(a.graduationYear))[0]?.degreeLevel.toLowerCase();
+    
+  // Appropriate progression (e.g., Bachelor's to Master's)
+  if (
+    (highestDegree?.includes('bachelor') && programLevel.includes('master')) ||
+    (highestDegree?.includes('master') && programLevel.includes('phd')) ||
+    (!highestDegree && programLevel.includes('bachelor'))
+  ) {
+    score += 15;
+  }
+  
+  // Check if program field matches user's background
+  const userFields = userEducation.map(edu => edu.fieldOfStudy.toLowerCase());
+  if (userFields.some(field => recommendation.fieldOfStudy?.toLowerCase().includes(field))) {
+    score += 5;
+  }
+  
+  return Math.min(95, score); // Cap at 95
 } 

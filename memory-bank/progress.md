@@ -29,3 +29,24 @@
 - Added document extraction functionality with API endpoint
 - Implemented extraction animation and progress tracking
 - Added error handling and user feedback for document processing
+
+### March 23, 2025 - Key Architectural Decisions
+- Decided to use Next.js API routes for backend functionality instead of FastAPI
+  - Simplified deployment with a unified Vercel instance
+  - Reduced infrastructure complexity for the PoC
+  - Faster development with shared TypeScript across frontend and backend
+  - Documented future migration path to FastAPI microservices
+- Decided to use OpenAI Vector Store for data storage instead of PostgreSQL
+  - Native integration with OpenAI models for recommendations and chatbot
+  - Simplified vector search capabilities
+  - Reduced infrastructure requirements
+  - Documented future migration path to PostgreSQL
+- Updated all memory-bank files to reflect these architectural decisions
+- Began vector store integration for data storage and retrieval
+
+### Upcoming Milestones
+- Complete profile management feature set
+- Enhance vector store operations for recommendations
+- Develop rule-based recommendation engine
+- Implement chatbot interface using OpenAI
+- Integrate social login (OAuth) with Google and LinkedIn

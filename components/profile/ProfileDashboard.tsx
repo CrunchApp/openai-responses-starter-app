@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { ProfileData } from "../profile-wizard";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronRight, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award } from "lucide-react";
+import { Check, ChevronRight, FileText, User, BookOpen, Briefcase, Settings, Award, Edit, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import useToolsStore from "@/stores/useToolsStore";
+import useProfileStore from "@/stores/useProfileStore";
+import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import { motion } from "framer-motion";
 import {
   Accordion,
@@ -12,206 +12,47 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import useProfileStore from "@/stores/useProfileStore";
-import useRecommendationsStore from "@/stores/useRecommendationsStore";
+import Link from "next/link";
 
-interface ReviewStepProps {
-  profileData: ProfileData;
-  setProfileData: React.Dispatch<React.SetStateAction<ProfileData>>;
-  onComplete: () => void;
-  isEditMode?: boolean;
-}
-
-export default function ReviewStep({
-  profileData,
-  setProfileData,
-  onComplete,
-  isEditMode = false
-}: ReviewStepProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+export default function ProfileDashboard() {
   const [expandedSection, setExpandedSection] = useState("personal");
   const router = useRouter();
   
   // Use our stores
-  const { setVectorStoreId, setProfileComplete } = useProfileStore();
-  const { setUserProfile } = useRecommendationsStore();
-  const { setVectorStore, setFileSearchEnabled } = useToolsStore();
+  const { userProfile } = useRecommendationsStore();
 
-  // Add a useEffect to check for uploaded documents in localStorage
+  // If we don't have profile data, get it from localStorage
   useEffect(() => {
-    // Check if documents need to be updated from the vector store
-    const vectorStoreId = localStorage.getItem('userVectorStoreId');
-    
-    if (vectorStoreId && !profileData.vectorStoreId) {
-      // If there's a vector store ID in localStorage but not in profileData, update it
-      setProfileData(prev => ({
-        ...prev,
-        vectorStoreId: vectorStoreId
-      }));
+    if (!userProfile || Object.keys(userProfile).length === 0) {
+      const storedProfileData = localStorage.getItem('userProfileData');
+      if (storedProfileData) {
+        try {
+          const profileData = JSON.parse(storedProfileData);
+          // This would need to be connected to your store in the real implementation
+          console.log("Retrieved profile data from localStorage", profileData);
+        } catch (error) {
+          console.error("Error parsing profile data from localStorage", error);
+        }
+      }
     }
-  }, [profileData.vectorStoreId, setProfileData]);
-
-  const handleCompleteProfile = async () => {
-    try {
-      setIsSubmitting(true);
-      
-      // Get the vector store ID from localStorage (created during welcome step)
-      const vectorStoreId = localStorage.getItem('userVectorStoreId');
-      
-      if (!vectorStoreId) {
-        throw new Error("Vector store not found. Please restart the profile setup.");
-      }
-      
-      // Store the profile data directly in localStorage for faster access
-      localStorage.setItem('userProfileData', JSON.stringify(profileData));
-      
-      // Save to our recommendation store for use in recommendation page
-      setUserProfile({
-        firstName: profileData.firstName,
-        lastName: profileData.lastName,
-        email: profileData.email,
-        phone: profileData.phone,
-        preferredName: profileData.preferredName,
-        linkedInProfile: profileData.linkedInProfile,
-        goal: profileData.education?.[0]?.degreeLevel || "Master's",
-        desiredField: profileData.education?.[0]?.fieldOfStudy,
-        education: profileData.education.map(edu => ({
-          degreeLevel: edu.degreeLevel,
-          institution: edu.institution,
-          fieldOfStudy: edu.fieldOfStudy,
-          graduationYear: edu.graduationYear,
-          gpa: edu.gpa || null
-        })),
-        careerGoals: {
-          shortTerm: profileData.careerGoals.shortTerm,
-          longTerm: profileData.careerGoals.longTerm,
-          desiredIndustry: profileData.careerGoals.desiredIndustry,
-          desiredRoles: profileData.careerGoals.desiredRoles
-        },
-        skills: profileData.skills,
-        preferences: {
-          preferredLocations: profileData.preferences.preferredLocations,
-          studyMode: profileData.preferences.studyMode,
-          startDate: profileData.preferences.startDate,
-          budgetRange: {
-            min: profileData.preferences.budgetRange.min,
-            max: profileData.preferences.budgetRange.max
-          }
-        },
-        documents: {
-          resume: profileData.documents.resume || null,
-          transcripts: profileData.documents.transcripts || null,
-          statementOfPurpose: profileData.documents.statementOfPurpose || null,
-          otherDocuments: profileData.documents.otherDocuments || null
-        },
-        vectorStoreId
-      });
-      
-      // Create a JSON file with all profile data
-      const profileJson = JSON.stringify(profileData, null, 2);
-      const profileBlob = new Blob([profileJson], { type: "application/json" });
-      const base64Content = await blobToBase64(profileBlob);
-      
-      // Upload profile data as a JSON file
-      const fileObject = {
-        name: "user_profile.json",
-        content: base64Content,
-      };
-      
-      const uploadResponse = await fetch("/api/vector_stores/upload_file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileObject,
-        }),
-      });
-      
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload profile data");
-      }
-      
-      const uploadData = await uploadResponse.json();
-      const fileId = uploadData.id;
-      
-      // Add the file to the vector store
-      const addFileResponse = await fetch("/api/vector_stores/add_file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileId,
-          vectorStoreId,
-        }),
-      });
-      
-      if (!addFileResponse.ok) {
-        throw new Error("Failed to add file to vector store");
-      }
-      
-      // Make sure the profile data has the vector store ID
-      if (!profileData.vectorStoreId) {
-        setProfileData(prev => ({
-          ...prev,
-          vectorStoreId
-        }));
-      }
-      
-      // Update our stores
-      setVectorStoreId(vectorStoreId);
-      setProfileComplete(true);
-      
-      // Store the vector store in global state for the AI assistant to use
-      setVectorStore({
-        id: vectorStoreId,
-        name: `${profileData.firstName} ${profileData.lastName}'s Profile`,
-      });
-      
-      // Enable file search to use the vector store
-      setFileSearchEnabled(true);
-      
-      // If in edit mode, redirect directly to recommendations page
-      if (isEditMode) {
-        router.push("/dashboard");
-      } else {
-        // Complete the profile setup with animation
-        onComplete();
-      }
-    } catch (error) {
-      console.error("Error completing profile:", error);
-      alert("There was an error completing your profile. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  // Helper function to convert Blob to Base64
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:application/json;base64,")
-        const base64Content = base64String.split(',')[1];
-        resolve(base64Content);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
+  }, [userProfile]);
 
   // Calculate profile completion percentage
   const calculateCompletion = () => {
+    if (!userProfile) return 0;
+    
     let completed = 0;
     let total = 0;
     
     // Personal info
-    if (profileData.firstName) completed++;
-    if (profileData.lastName) completed++;
-    if (profileData.email) completed++;
-    if (profileData.phone) completed++;
+    if (userProfile.firstName) completed++;
+    if (userProfile.lastName) completed++;
+    if (userProfile.email) completed++;
+    if (userProfile.phone) completed++;
     total += 4;
     
     // Education
-    profileData.education.forEach(edu => {
+    userProfile.education?.forEach(edu => {
       if (edu.degreeLevel) completed++;
       if (edu.institution) completed++;
       if (edu.fieldOfStudy) completed++;
@@ -220,27 +61,27 @@ export default function ReviewStep({
     });
     
     // Career Goals
-    if (profileData.careerGoals.shortTerm) completed++;
-    if (profileData.careerGoals.longTerm) completed++;
-    if (profileData.careerGoals.desiredIndustry.length > 0) completed++;
-    if (profileData.careerGoals.desiredRoles.length > 0) completed++;
+    if (userProfile.careerGoals?.shortTerm) completed++;
+    if (userProfile.careerGoals?.longTerm) completed++;
+    if (userProfile.careerGoals?.desiredIndustry?.length > 0) completed++;
+    if (userProfile.careerGoals?.desiredRoles?.length > 0) completed++;
     total += 4;
     
     // Skills
-    if (profileData.skills.length > 0) completed++;
+    if (userProfile.skills?.length > 0) completed++;
     total += 1;
     
     // Preferences
-    if (profileData.preferences.preferredLocations.length > 0) completed++;
-    if (profileData.preferences.studyMode) completed++;
-    if (profileData.preferences.startDate) completed++;
-    if (profileData.preferences.budgetRange.max > 0) completed++;
+    if (userProfile.preferences?.preferredLocations?.length > 0) completed++;
+    if (userProfile.preferences?.studyMode) completed++;
+    if (userProfile.preferences?.startDate) completed++;
+    if (userProfile.preferences?.budgetRange?.max > 0) completed++;
     total += 4;
     
     // Documents
-    if (profileData.documents.resume) completed++;
-    if (profileData.documents.transcripts) completed++;
-    if (profileData.documents.statementOfPurpose) completed++;
+    if (userProfile.documents?.resume) completed++;
+    if (userProfile.documents?.transcripts) completed++;
+    if (userProfile.documents?.statementOfPurpose) completed++;
     total += 3;
     
     return Math.round((completed / total) * 100);
@@ -248,18 +89,52 @@ export default function ReviewStep({
   
   const completionPercentage = calculateCompletion();
 
+  // If no profile data is available, show a message
+  if (!userProfile) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-6">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+          <User className="h-16 w-16 text-blue-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">No Profile Found</h2>
+          <p className="text-gray-600 mb-6">
+            You haven't created a profile yet. Create one to receive personalized education recommendations.
+          </p>
+          <Button 
+            onClick={() => router.push('/profile')}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Create Profile
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <h2 className="text-xl font-semibold mb-2">Review Your Profile</h2>
-        <p className="text-sm text-zinc-500 mb-4">
-          Please review all your information before finalizing your profile.
-        </p>
-      </motion.div>
+    <div className="space-y-6 max-w-4xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <Link href="/chat" className="flex items-center text-blue-600 hover:text-blue-800 mb-4">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            <span className="text-sm">Back to Chat</span>
+          </Link>
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="text-2xl font-bold"
+          >
+            Your Profile Dashboard
+          </motion.h1>
+          <p className="text-gray-600">
+            View and manage your education profile information
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => router.push("/profile?edit=true")}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit Profile
+                      </Button>
+      </div>
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -291,12 +166,12 @@ export default function ReviewStep({
           {completionPercentage === 100 ? (
             <div className="flex items-center">
               <Check className="mr-2 h-4 w-4 text-green-500" />
-              Your profile is complete and ready for submission!
+              Your profile is complete!
             </div>
           ) : (
             <div className="flex items-center">
-              <AlertCircle className="mr-2 h-4 w-4 text-amber-500" />
-              Your profile is {completionPercentage}% complete. You can still proceed, but more details will help us provide better recommendations.
+              <Check className="mr-2 h-4 w-4 text-amber-500" />
+              Your profile is {completionPercentage}% complete. Consider adding more details for better recommendations.
             </div>
           )}
         </div>
@@ -326,20 +201,20 @@ export default function ReviewStep({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-zinc-500">First Name</p>
-                    <p className="font-medium">{profileData.firstName || "Not provided"}</p>
+                    <p className="font-medium">{userProfile.firstName || "Not provided"}</p>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-zinc-500">Last Name</p>
-                    <p className="font-medium">{profileData.lastName || "Not provided"}</p>
+                    <p className="font-medium">{userProfile.lastName || "Not provided"}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Email</p>
-                  <p className="font-medium">{profileData.email || "Not provided"}</p>
+                  <p className="font-medium">{userProfile.email || "Not provided"}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Phone</p>
-                  <p className="font-medium">{profileData.phone || "Not provided"}</p>
+                  <p className="font-medium">{userProfile.phone || "Not provided"}</p>
                 </div>
               </div>
             </AccordionContent>
@@ -366,7 +241,7 @@ export default function ReviewStep({
             </AccordionTrigger>
             <AccordionContent className="px-6 py-4 bg-white">
               <div className="pl-10 space-y-4 py-2">
-                {profileData.education.map((edu, index) => (
+                {userProfile.education?.map((edu, index) => (
                   <motion.div
                     key={index}
                     initial={{ opacity: 0, y: 10 }}
@@ -441,20 +316,20 @@ export default function ReviewStep({
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Short-term Goals</p>
                   <p className="font-medium">
-                    {profileData.careerGoals.shortTerm || "Not provided"}
+                    {userProfile.careerGoals?.shortTerm || "Not provided"}
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Long-term Goals</p>
                   <p className="font-medium">
-                    {profileData.careerGoals.longTerm || "Not provided"}
+                    {userProfile.careerGoals?.longTerm || "Not provided"}
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500 mb-2">Skills</p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {profileData.skills.length > 0 ? (
-                      profileData.skills.map((skill, index) => (
+                    {userProfile.skills?.length > 0 ? (
+                      userProfile.skills.map((skill, index) => (
                         <span
                           key={index}
                           className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium"
@@ -470,8 +345,8 @@ export default function ReviewStep({
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500 mb-2">Desired Industries</p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {profileData.careerGoals.desiredIndustry.length > 0 ? (
-                      profileData.careerGoals.desiredIndustry.map(
+                    {userProfile.careerGoals?.desiredIndustry?.length > 0 ? (
+                      userProfile.careerGoals.desiredIndustry.map(
                         (industry, index) => (
                           <span
                             key={index}
@@ -491,8 +366,8 @@ export default function ReviewStep({
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500 mb-2">Desired Roles</p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {profileData.careerGoals.desiredRoles.length > 0 ? (
-                      profileData.careerGoals.desiredRoles.map((role, index) => (
+                    {userProfile.careerGoals?.desiredRoles?.length > 0 ? (
+                      userProfile.careerGoals.desiredRoles.map((role, index) => (
                         <span
                           key={index}
                           className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs font-medium"
@@ -535,8 +410,8 @@ export default function ReviewStep({
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500 mb-2">Preferred Locations</p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {profileData.preferences.preferredLocations.length > 0 ? (
-                      profileData.preferences.preferredLocations.map(
+                    {userProfile.preferences?.preferredLocations?.length > 0 ? (
+                      userProfile.preferences.preferredLocations.map(
                         (location, index) => (
                           <span
                             key={index}
@@ -556,14 +431,14 @@ export default function ReviewStep({
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Study Mode</p>
                   <p className="font-medium">
-                    {profileData.preferences.studyMode || "Not provided"}
+                    {userProfile.preferences?.studyMode || "Not provided"}
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Preferred Start Date</p>
                   <p className="font-medium">
-                    {profileData.preferences.startDate
-                      ? new Date(profileData.preferences.startDate).toLocaleDateString(
+                    {userProfile.preferences?.startDate
+                      ? new Date(userProfile.preferences.startDate).toLocaleDateString(
                           "en-US",
                           { year: "numeric", month: "long" }
                         )
@@ -573,8 +448,8 @@ export default function ReviewStep({
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-zinc-500">Budget Range</p>
                   <p className="font-medium">
-                    ${profileData.preferences.budgetRange.min.toLocaleString()} - $
-                    {profileData.preferences.budgetRange.max.toLocaleString()}
+                    ${userProfile.preferences?.budgetRange?.min?.toLocaleString() || 0} - $
+                    {userProfile.preferences?.budgetRange?.max?.toLocaleString() || 0}
                   </p>
                 </div>
               </div>
@@ -614,7 +489,7 @@ export default function ReviewStep({
                       </div>
                     </div>
                     <div>
-                      {profileData.documents.resume ? (
+                      {userProfile.documents?.resume ? (
                         <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                           <Check size={14} className="mr-1" />
                           Uploaded
@@ -638,7 +513,7 @@ export default function ReviewStep({
                       </div>
                     </div>
                     <div>
-                      {profileData.documents.transcripts ? (
+                      {userProfile.documents?.transcripts ? (
                         <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                           <Check size={14} className="mr-1" />
                           Uploaded
@@ -662,7 +537,7 @@ export default function ReviewStep({
                       </div>
                     </div>
                     <div>
-                      {profileData.documents.statementOfPurpose ? (
+                      {userProfile.documents?.statementOfPurpose ? (
                         <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                           <Check size={14} className="mr-1" />
                           Uploaded
@@ -680,51 +555,6 @@ export default function ReviewStep({
           </AccordionItem>
         </motion.div>
       </Accordion>
-
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.7 }}
-        className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl overflow-hidden shadow-md mt-8"
-      >
-        <div className="p-6 text-white">
-          <div className="flex items-start">
-            <div className="p-3 rounded-full bg-white/20 mr-4">
-              <Award className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Ready to Complete Your Profile</h3>
-              <p className="text-white/80 text-sm mb-4">
-                Your information will be used to create personalized educational recommendations.
-                Click the button below to finalize your profile and access your AI Education Adviser.
-              </p>
-              
-              <div className="flex justify-end mt-4">
-                <Button 
-                  onClick={handleCompleteProfile} 
-                  disabled={isSubmitting}
-                  className="bg-white hover:bg-white/90 text-blue-700 font-medium px-6 py-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2 text-base"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      Complete Profile
-                      <ChevronRight className="h-5 w-5" />
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
     </div>
   );
 } 

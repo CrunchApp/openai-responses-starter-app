@@ -3,18 +3,17 @@ description: Understanding the project and its overview
 globs: 
 alwaysApply: true
 ---
-
-You're the CTO of Vista. You're going to create Vista Education Adviser based on the model  openai-responses-starter-app repository, a clone of which you've been given to begin with. Create Vista according to the provided Roadmap.
+# You're the CTO of Vista. You're going to create Vista Education Adviser based on the model  openai-responses-starter-app repository, a clone of which you've been given to begin with. Create Vista according to the provided Roadmap.
 
 # Vista Education Adviser PoC – Roadmap
 
 The Vista Education Adviser Proof of Concept (PoC) will target core features with a lean, cost‐effective approach. The focus areas include:
 
 - **Personalized Recommendation Engine:**  
-  Provide tailored education/career paths based on a user’s profile. Initially, use a simple rule‐based system to generate recommendations, with plans to incorporate AI‐driven logic later for more sophisticated matching.
+  Provide tailored education/career paths based on a user's profile. Initially, use a simple rule‐based system to generate recommendations, with plans to incorporate AI‐driven logic later for more sophisticated matching.
 
 - **AI Chatbot Guidance:**  
-  Integrate an AI‐powered chatbot (using OpenAI’s API) to answer user queries and offer guidance. This chatbot will simulate a counseling session, providing answers about programs, application tips, etc., and refine its responses by “learning” from conversation history.
+  Integrate an AI‐powered chatbot (using OpenAI's API) to answer user queries and offer guidance. This chatbot will simulate a counseling session, providing answers about programs, application tips, etc., and refine its responses by "learning" from conversation history.
 
 - **User Authentication (Email & Social Login):**  
   Implement secure authentication. Support standard email/password sign-up (with hashed passwords) and social logins via Google and LinkedIn OAuth for quick onboarding, ensuring a unified user account regardless of sign‐in method.
@@ -28,9 +27,9 @@ The Vista Education Adviser Proof of Concept (PoC) will target core features wit
 
 - **Cost-Efficient Deployment:**  
   Deploy the PoC on minimal-cost tiers.  
-  • Use **Vercel** for hosting the Next.js frontend (leveraging its free tier and optimized Next.js support).  
-  • Use **Heroku** for the FastAPI backend (using free dynos and add-ons).  
-  Both platforms’ free-tier limitations (e.g. Heroku dyno sleep, Vercel function limits) will be monitored to ensure cost efficiency.
+  • Use **Vercel** for hosting the entire Next.js application (both frontend and API routes).  
+  • Leverage Vercel's free tier and optimized Next.js support for unified deployment.  
+  Vercel's free-tier limitations will be monitored to ensure cost efficiency.
 
 ---
 
@@ -50,11 +49,11 @@ The Vista Education Adviser Proof of Concept (PoC) will target core features wit
 
 - **Data Flow & Services:**
   - **Authentication & User Management:**  
-    User data is stored securely in a PostgreSQL database. The authentication service issues JWT tokens for API calls.
+    User data is stored securely in OpenAI Vector Store. The authentication service issues JWT tokens for API calls.
   - **Profile Management:**  
-    User profiles (personal details, education, career goals) are maintained by a dedicated profile service, optionally enriched via LinkedIn import.
+    User profiles (personal details, education, career goals) are maintained by a dedicated API route, optionally enriched via LinkedIn import.
   - **Recommendation Engine:**  
-    Processes the user’s profile with a rule-based engine to filter and rank a set of pre-defined education programs, returning a list of suggestions.
+    Processes the user's profile with a rule-based engine to filter and rank a set of pre-defined education programs, returning a list of suggestions.
   - **AI Chatbot Service:**  
     Accepts user queries, composes prompts (with context), calls a third-party AI API (OpenAI/Anthropic), and returns a natural-language response.
   - **External Integrations:**  
@@ -68,29 +67,30 @@ The Vista Education Adviser Proof of Concept (PoC) will target core features wit
   - **Data Protection:** Use HTTPS, encrypt sensitive data at rest, hash passwords, and support user data deletion.
 
 - **Deployment Environment:**
-  - **Frontend:** Hosted on Vercel for cost efficiency and fast global CDN.
-  - **Backend:** Hosted on Heroku using free/low-cost dynos and a managed PostgreSQL add-on.
-  - **Future-Proofing:** Architecture is modular to swap out third-party AI APIs with self-hosted models later.
+  - **Unified Application:** Hosted on Vercel for cost efficiency and fast global CDN.
+  - **Data Storage:** OpenAI Vector Store for data persistence.
+  - **Future-Proofing:** Architecture is modular to support future migration to FastAPI microservices with PostgreSQL when scaling beyond PoC.
 
 ---
 
 ### B. System Architecture Overview
 
-The PoC is structured as a set of microservices (or logical modules within a monorepo) in the backend, exposing RESTful endpoints consumed by the Next.js frontend.
+The PoC is structured as a Next.js monorepo with API routes for backend functionality:
 
-- **Backend (FastAPI):**
+- **API Routes (Next.js):**
   - `/api/auth/` – Handles authentication (registration, login, social OAuth callbacks).
   - `/api/profile/` – Manages user profile creation, updates, and LinkedIn import.
   - `/api/recommendations/` – Processes user profiles and returns tailored recommendations using rule-based logic.
   - `/api/chatbot/` – Forwards user queries to third-party AI APIs and returns AI-generated responses.
   - `/api/uploads/` – Handles file uploads for transcripts/SOPs.
+  - `/api/vector_stores/` - Manages operations for data persistence with OpenAI Vector Store.
 
 - **Frontend (Next.js with TypeScript):**
   - **Pages:** Login, signup, profile setup, recommendations, and chatbot interaction.
   - **Components:** Reusable UI elements such as forms, recommendation cards, and chat windows.
 
 - **Data Layer:**
-  - **Database:** PostgreSQL for structured data (user profiles, recommendation logs).
+  - **Storage:** OpenAI Vector Store for data persistence (user profiles, documents, recommendations).
   - **Caching (optional):** In-memory caching for frequent API responses to optimize costs and response times.
 
 - **Third-Party Services:**
@@ -98,93 +98,74 @@ The PoC is structured as a set of microservices (or logical modules within a mon
   - **LinkedIn API:** For social profile import.
   - **Google Custom Search:** For enriching program details.
 
-- **Inter-Service Communication:**
-  - Services communicate via well-defined REST endpoints.  
-  - The backend uses middleware for logging, JWT authentication, and error handling.
+- **API Design:**
+  - Services are organized as Next.js API routes in a monorepo structure.
+  - TypeScript interfaces ensure type safety across frontend and API code.
+  - The application uses middleware for logging, JWT authentication, and error handling.
 
 ---
 
-## 2. Suggested Project Directory Structure
+## 2. Revised Project Directory Structure
 
-
+```
 vista-education-adviser/          # Root of the project repository
-├── backend/                     # FastAPI backend services
-│   ├── app/                     # Main application package
-│   │   ├── api/                 # API routes for various modules
-│   │   │   ├── auth/            # Authentication module
-│   │   │   │   ├── routes.py    # Endpoints for login, signup, OAuth callbacks
-│   │   │   │   ├── schemas.py   # Pydantic models for auth data
-│   │   │   │   └── controllers.py  # Business logic for auth
-│   │   │   ├── profile/         # User profile management
-│   │   │   │   ├── routes.py    # Endpoints for profile CRUD and LinkedIn import
-│   │   │   │   └── schemas.py   # Models for user profile
-│   │   │   ├── recommendations/ # Recommendation service endpoints
-│   │   │   │   ├── routes.py    # Endpoint to generate recommendations
-│   │   │   │   ├── engine.py    # Rule-based recommendation logic (and future AI hook)
-│   │   │   │   └── schemas.py   # Data models for recommendations
-│   │   │   ├── chatbot/         # AI Chatbot endpoints
-│   │   │   │   ├── routes.py    # Endpoint to handle user queries
-│   │   │   │   ├── ai_client.py # Integration with OpenAI/Anthropic APIs
-│   │   │   │   └── schemas.py   # Models for chat messages
-│   │   │   └── uploads/         # File upload endpoints for transcripts/SOPs
-│   │   │       └── routes.py
-│   │   ├── core/                # Core configurations and utilities
-│   │   │   ├── config.py        # Environment configuration (DB, API keys, etc.)
-│   │   │   └── security.py      # Password hashing, JWT token utilities
-│   │   ├── models/              # ORM models (SQLAlchemy) for database tables
-│   │   │   ├── user.py          # User model with fields and relationships
-│   │   │   ├── recommendation.py# Recommendation result model
-│   │   │   └── document.py      # Model for uploaded documents
-│   │   ├── services/            # Business logic services that interface with models
-│   │   │   ├── auth_service.py  # Functions for registering/logging in users
-│   │   │   ├── recommendation_service.py  # Logic for processing recommendations
-│   │   │   ├── chatbot_service.py           # Abstraction for AI chatbot calls
-│   │   │   └── linkedin_service.py          # Helper functions for LinkedIn integration
-│   │   ├── tests/               # Unit and integration tests for backend components
-│   │   │   ├── test_auth.py
-│   │   │   ├── test_profile.py
-│   │   │   ├── test_recommendations.py
-│   │   │   └── test_chatbot.py
-│   │   └── main.py              # Entry point: creates FastAPI instance, includes routes
-│   ├── migrations/              # Database migration scripts (e.g., Alembic)
-│   ├── requirements.txt         # Python dependencies list
-│   └── Procfile                 # Heroku configuration for starting the backend
-├── frontend/                    # Next.js frontend application
-│   ├── components/              # Reusable UI components
-│   │   ├── auth/                # Components for login/sign-up forms
-│   │   │   ├── LoginForm.tsx
-│   │   │   └── SignupForm.tsx
-│   │   ├── profile/             # Components for the profile onboarding form
-│   │   │   └── ProfileForm.tsx
-│   │   ├── recommendations/     # Components to display recommendation cards
-│   │   │   └── RecommendationCard.tsx
-│   │   ├── chatbot/             # Chatbot UI components (chat window, messages)
-│   │   │   ├── ChatWindow.tsx
-│   │   │   └── ChatMessage.tsx
-│   │   └── common/              # Shared components (e.g., navigation bar)
-│   │       └── Navbar.tsx
-│   ├── pages/                   # Next.js pages (routing based on file structure)
-│   │   ├── index.tsx            # Landing page
-│   │   ├── login.tsx            # Login page
-│   │   ├── signup.tsx           # Signup page
-│   │   ├── profile.tsx          # Profile onboarding page
-│   │   ├── recommendations.tsx  # Page to display recommendations
-│   │   └── chatbot.tsx          # Dedicated page (or modal route) for the chatbot
-│   ├── public/                  # Public assets (images, icons, fonts)
-│   ├── styles/                  # Global CSS or utility styles (e.g., Tailwind config)
-│   │   └── globals.css
-│   ├── next.config.js           # Next.js configuration file
-│   ├── package.json             # NPM dependencies and scripts
-│   └── tsconfig.json            # TypeScript configuration
-├── docs/                        # Documentation for the project
-│   ├── architecture.md          # Detailed system architecture and data flow diagrams
-│   ├── requirements.md          # Functional and non-functional requirements
-│   └── design.md                # UI/UX design, wireframes, and style guide
-├── scripts/                     # Deployment or maintenance scripts
-│   └── deploy.sh                # Example deployment script (if needed)
-├── .gitignore                   # Files and folders to exclude from Git
-└── README.md 
-
+├── app/                         # Next.js App Router structure
+│   ├── api/                     # API routes for backend functionality
+│   │   ├── auth/                # Authentication module
+│   │   │   └── route.ts         # Endpoints for login, signup, OAuth callbacks
+│   │   ├── profile/             # User profile management
+│   │   │   └── route.ts         # Endpoints for profile CRUD and LinkedIn import
+│   │   ├── recommendations/     # Recommendation service endpoints
+│   │   │   └── route.ts         # Endpoint to generate recommendations
+│   │   ├── chatbot/             # AI Chatbot endpoints
+│   │   │   └── route.ts         # Endpoint to handle user queries
+│   │   ├── uploads/             # File upload endpoints for transcripts/SOPs
+│   │   │   └── route.ts         # Handles file uploads
+│   │   └── vector_stores/       # Vector store operations
+│   │       ├── services/        # Vector store service implementations
+│   │       ├── create_store/    # Create vector store endpoints
+│   │       ├── upload_file/     # Upload files to vector store
+│   │       └── retrieve_store/  # Retrieve data from vector store
+│   ├── (auth)/                  # Auth-related routes grouped
+│   │   ├── login/               # Login page
+│   │   │   └── page.tsx
+│   │   └── signup/              # Signup page
+│   │       └── page.tsx
+│   ├── profile/                 # Profile pages
+│   │   └── page.tsx             # Profile setup and management
+│   ├── recommendations/         # Recommendation pages
+│   │   └── page.tsx             # Page to display recommendations
+│   ├── chat/                    # Chatbot interaction
+│   │   └── page.tsx             # Chat interface
+│   ├── layout.tsx               # Root layout with providers
+│   └── page.tsx                 # Landing page
+├── components/                  # Reusable UI components
+│   ├── auth/                    # Authentication components
+│   │   ├── LoginForm.tsx
+│   │   └── SignupForm.tsx
+│   ├── profile/                 # Profile components
+│   │   └── ProfileForm.tsx
+│   ├── recommendations/         # Recommendation components
+│   │   └── RecommendationCard.tsx
+│   ├── chatbot/                 # Chatbot UI components
+│   │   ├── ChatWindow.tsx
+│   │   └── ChatMessage.tsx
+│   └── ui/                      # Common UI components
+│       └── Navbar.tsx
+├── lib/                         # Shared utilities and helpers
+│   ├── vector-store/            # Vector store client and utilities
+│   ├── auth/                    # Authentication utilities
+│   └── api-client/              # API client functions for frontend
+├── types/                       # TypeScript type definitions
+├── config/                      # Configuration files
+├── public/                      # Public assets
+├── styles/                      # Global CSS or Tailwind utilities
+├── memory-bank/                 # Project documentation
+├── next.config.mjs              # Next.js configuration
+├── package.json                 # NPM dependencies and scripts
+├── tsconfig.json                # TypeScript configuration
+└── .env.local                   # Environment variables (local)
+```
 
 ---
 
@@ -195,39 +176,45 @@ vista-education-adviser/          # Root of the project repository
 1. **User Authentication & Onboarding:**
    - **Frontend:**  
      - User visits the landing page, then chooses to sign up/login (email/password or social).
-     - Authentication forms (from `/components/auth/`) send requests to `/api/auth/` endpoints.
+     - Authentication forms (from `components/auth/`) send requests to `/api/auth/` endpoints.
    - **Backend:**  
-     - Authentication Service validates credentials, creates user records (in `models/user.ts`), and returns a JWT.
+     - Authentication API routes validate credentials, create user records in Vector Store, and return a JWT.
      - OAuth flows (handled in `/api/auth/`) import social data (e.g., LinkedIn).
 
 2. **Profile Completion & Data Storage:**
    - **Frontend:**  
      - After login, users fill out a multi-step profile form (`ProfileForm.tsx`), optionally importing data from LinkedIn.
    - **Backend:**  
-     - Profile API (`/api/profile/`) validates and stores profile data in the database.
+     - Profile API route (`/api/profile/`) validates and stores profile data in Vector Store.
 
 3. **Generating Recommendations:**
    - **Frontend:**  
-     - On the recommendations page (`recommendations.tsx`), the user requests tailored education/career suggestions.
+     - On the recommendations page (`recommendations/page.tsx`), the user requests tailored education/career suggestions.
    - **Backend:**  
-     - Recommendation Service (`/api/recommendations/routes.ts`) uses a rule-based engine (in `engine.ts`) to filter and rank pre-defined programs, returning suggestions.
+     - Recommendation API route (`/api/recommendations/route.ts`) uses a rule-based engine to filter and rank pre-defined programs, returning suggestions.
 
 4. **Chatbot Interaction:**
    - **Frontend:**  
      - The Chatbot UI (`ChatWindow.tsx`) allows users to submit questions.
    - **Backend:**  
-     - Chatbot Service (`/api/chatbot/routes.ts`) forwards queries to the AI client (in `ai_client.ts`) and returns LLM-generated responses.
+     - Chatbot API route (`/api/chatbot/route.ts`) forwards queries to OpenAI and returns AI-generated responses.
 
 5. **Document Uploads:**
    - **Frontend:**  
      - Users can upload documents via file inputs.
    - **Backend:**  
-     - Upload Service (`/api/uploads/routes.ts`) handles file reception and storage (temporary or cloud-based).
+     - Upload API route (`/api/uploads/route.ts`) handles file reception and storage in Vector Store.
 
 6. **Data Security & Compliance:**
-   - All endpoints are secured with JWT tokens and proper input validation.
+   - All API routes are secured with JWT tokens and proper input validation.
    - Sensitive data is encrypted and handled according to GDPR requirements.
 
----
+## 4. Future Migration Path
 
+While the PoC uses Next.js API routes with OpenAI Vector Store for simplicity and rapid development, the architecture is designed to support future migration:
 
+- **Backend Migration:** When scaling beyond PoC, transition from Next.js API routes to FastAPI microservices
+- **Database Migration:** Move from OpenAI Vector Store to PostgreSQL with SQLAlchemy ORM
+- **Deployment Evolution:** Maintain frontend on Vercel, while moving backend services to Heroku or similar
+
+This migration path allows us to start simple for the PoC while ensuring the architecture can evolve to support larger scale and more complex requirements in the future.

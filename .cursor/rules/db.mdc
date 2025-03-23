@@ -1,102 +1,246 @@
 ---
-description: Database rules for working with databases, SQLAlchemy schemas and creating backend apis
+description: Database rules for working with OpenAI Vector Stores and creating backend apis
 globs: 
 alwaysApply: false
 ---
-You are an expert database architect with extensive experience in designing robust, scalable schemas for modern applications. For the Vista Education Adviser PoC, adhere to the following database rules and conventions:
+# You are an expert in data storage and retrieval systems with extensive experience in designing robust, scalable data models for modern applications. For the Vista Education Adviser PoC, adhere to the following data storage rules and conventions:
 
-## Database Technology
+## Data Storage Technology
 
-### SQLAlchemy ORM with PostgreSQL
-Vista Education Adviser uses SQLAlchemy ORM with PostgreSQL for data persistence:
+### OpenAI Vector Store
+Vista Education Adviser currently uses OpenAI Vector Store for data persistence:
 
-- **Models**: Define in `app/models/` directory as Python classes that inherit from SQLAlchemy Base
-- **Migrations**: Use Alembic for database migrations (in the `migrations/` directory)
-- **Schemas**: Use Pydantic models for request/response validation in `app/api/<module>/schemas.py`
+- **Vector Store Operations**: Implement in `app/api/vector_stores/services/` directory
+- **Data Structure**: Organize data with appropriate metadata for effective retrieval
+- **TypeScript Interfaces**: Define in relevant module directories for type safety
 
-## Data Types and Field Conventions
+## Data Organization
 
-### String Types
-Use SQLAlchemy's string types with appropriate lengths:
+### Collection Structure
+Organize data into logical collections within the vector store:
 
 **Example:**
-```python
-# For status fields with specific values
-status = Column(String(20), nullable=False)  # values like: 'pending', 'cancelled', 'error'
+```typescript
+// Collections for different entity types
+const COLLECTIONS = {
+  USERS: 'users',
+  PROFILES: 'profiles',
+  EDUCATION: 'education',
+  RECOMMENDATIONS: 'recommendations',
+  DOCUMENTS: 'documents'
+};
 ```
 
-### String Field Types
-- **IDs**: Use `UUID` or `String` with appropriate length for ID fields
-- **Short Text**: Use `String` with length limit for fields like names, titles
-- **Long Text**: Use `Text` for unlimited length text fields like descriptions
+### Field Conventions
+- **IDs**: Use UUID v4 for primary identifiers to ensure uniqueness
+- **Metadata**: Store searchable attributes as metadata fields
+- **Content**: Store full-text searchable content for vector embedding
+- **Timestamps**: Include created_at and updated_at fields for all records
 
-## ID Generation and Table Naming Conventions
+## ID Generation and Naming Conventions
 
 ### ID Generation
 
-Use UUID v4 for primary keys to ensure uniqueness across distributed systems:
+Use UUID v4 for primary identifiers to ensure uniqueness across distributed systems:
 
 **Example:**
-```python
-import uuid
-from sqlalchemy import Column, String
-from sqlalchemy.dialects.postgresql import UUID
+```typescript
+import { v4 as uuidv4 } from 'uuid';
 
-# In a model file
-id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+// In a service file
+const newRecord = {
+  id: uuidv4(),
+  // other fields
+};
 ```
 
-### Table Naming
+### Collection Naming
 
-- Use plural, snake_case names for tables
-- Use singular, CamelCase for model class names
+- Use plural, lowercase names for collections
+- Use camelCase for field names in metadata
 
 **Example:**
-```python
-# Class name is singular
-class User(Base):
-    # Table name is plural
-    __tablename__ = "users"
+```typescript
+// Collection name is plural and lowercase
+const collection = 'users';
+
+// Field names are camelCase
+const user = {
+  id: '123e4567-e89b-12d3-a456-426614174000',
+  firstName: 'John',
+  lastName: 'Doe',
+  emailAddress: 'john.doe@example.com'
+};
 ```
 
 ## Relationships
 
-Define clear relationships between entities using SQLAlchemy's relationship tools:
+Define clear relationships between entities using consistent reference patterns:
 
 **Example:**
-```python
-# One-to-many relationship
-class User(Base):
-    __tablename__ = "users"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # ...other fields
-    
-    # Relationship to profiles (one user has one profile)
-    profile = relationship("Profile", back_populates="user", uselist=False)
+```typescript
+// One-to-many relationship: User to Recommendations
+// Store the user ID with each recommendation
+const recommendation = {
+  id: uuidv4(),
+  userId: '123e4567-e89b-12d3-a456-426614174000', // Reference to user
+  programName: 'Computer Science',
+  institution: 'Harvard University',
+  matchScore: 85
+};
 
-class Profile(Base):
-    __tablename__ = "profiles"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    # ...other fields
-    
-    # Relationship to user (one profile belongs to one user)
-    user = relationship("User", back_populates="profile")
+// Many-to-many relationship: Use an array of references
+const profile = {
+  id: uuidv4(),
+  userId: '123e4567-e89b-12d3-a456-426614174000',
+  preferredProgramIds: [
+    '789e4567-e89b-12d3-a456-426614174123',
+    '456e4567-e89b-12d3-a456-426614174456'
+  ]
+};
+```
+
+## Data Query Patterns
+
+### Basic Queries
+Implement wrapper functions for common query operations:
+
+**Example:**
+```typescript
+// Get a single record by ID
+async function getRecordById(collection: string, id: string) {
+  const record = await vectorStoreClient.get({
+    collection,
+    id
+  });
+  return record;
+}
+
+// Search records by metadata fields
+async function searchRecords(collection: string, filters: Record<string, any>) {
+  const results = await vectorStoreClient.search({
+    collection,
+    filter: filters
+  });
+  return results;
+}
+```
+
+### Vector Similarity Search
+Leverage vector embeddings for intelligent recommendations:
+
+**Example:**
+```typescript
+// Search for similar programs based on user profile
+async function findSimilarPrograms(userProfile: UserProfile) {
+  const query = `${userProfile.interests.join(' ')} ${userProfile.careerGoals} ${userProfile.fieldOfStudy}`;
+  
+  const results = await vectorStoreClient.similaritySearch({
+    collection: 'programs',
+    query,
+    k: 10 // Number of results to return
+  });
+  
+  return results;
+}
 ```
 
 ## Special Considerations
 
-### Users Table
-Include only authentication-related fields in the User model, with profile-specific fields in the Profile model:
+### Users Collection
+Include only authentication-related fields in the User data, with profile-specific fields in separate Profile data:
 
 **Example:**
-```python
-class User(Base):
-    __tablename__ = "users"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=True)  # Nullable for social auth users
-    is_active = Column(Boolean(), default=True)
-    auth_provider = Column(String(20), nullable=False, default="email")  # "email", "google", "linkedin"
+```typescript
+// User data for authentication
+const user = {
+  id: uuidv4(),
+  email: 'user@example.com',
+  passwordHash: '$2b$10$...', // Properly hashed password
+  isActive: true,
+  authProvider: 'email', // 'email', 'google', 'linkedin'
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+};
+
+// Separate profile data
+const profile = {
+  id: uuidv4(),
+  userId: user.id, // Reference to user
+  firstName: 'John',
+  lastName: 'Doe',
+  dateOfBirth: '1990-01-01',
+  nationality: 'US',
+  // other profile fields
+};
 ```
 
+### Document Storage
+For uploaded documents, store metadata in the vector store and the actual document content as embeddings:
+
+**Example:**
+```typescript
+// Document metadata
+const document = {
+  id: uuidv4(),
+  userId: '123e4567-e89b-12d3-a456-426614174000',
+  fileName: 'transcript.pdf',
+  fileType: 'application/pdf',
+  fileSize: 245789, // in bytes
+  uploadedAt: new Date().toISOString(),
+  description: 'University transcript'
+};
+
+// Store document content with embedding
+async function storeDocumentWithEmbedding(documentId: string, content: string) {
+  await vectorStoreClient.upsert({
+    collection: 'document_content',
+    id: documentId,
+    metadata: { documentId },
+    content // This will be automatically embedded
+  });
+}
+```
+
+## Data Validation
+
+Use TypeScript interfaces and Zod schemas to enforce data structure and validation:
+
+**Example:**
+```typescript
+import { z } from 'zod';
+
+// TypeScript interface
+export interface UserProfile {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string;
+  // other fields
+}
+
+// Zod schema for validation
+export const UserProfileSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  dateOfBirth: z.string().datetime().optional(),
+  // other fields with validation
+});
+
+// Validate data before storage
+function validateUserProfile(data: unknown): UserProfile {
+  return UserProfileSchema.parse(data);
+}
+```
+
+## Future Migration Path
+
+While the current architecture uses OpenAI Vector Store, there is a planned migration path to PostgreSQL with SQLAlchemy ORM when scaling beyond the PoC phase. Keep this in mind when designing data structures and access patterns:
+
+- Use consistent ID generation (UUID v4) that will work in both systems
+- Maintain clear entity relationships that can be mapped to relational database tables
+- Document data structures thoroughly to facilitate future migration
+- Consider using a data access layer pattern that can be updated to use SQLAlchemy in the future

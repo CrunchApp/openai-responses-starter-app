@@ -17,6 +17,7 @@ import useProfileStore from "@/stores/useProfileStore";
 import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import HydrationLoading from "@/components/ui/hydration-loading";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import useToolsStore from "@/stores/useToolsStore";
 
 // Define the degree level type
 type DegreeLevel = "" | "High School" | "Associate's" | "Bachelor's" | "Master's" | "Doctorate" | "Certificate" | "Other";
@@ -322,9 +323,9 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     // Mark profile as complete
     setProfileComplete(true);
     
-    // Redirect to recommendations after a delay
+    // Redirect to dashboard after a delay
     setTimeout(() => {
-      router.push("/recommendations");
+      router.push("/dashboard");
     }, 2000);
   };
 
@@ -344,6 +345,13 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
         
         if (!cleanupResponse.ok) {
           console.error('Failed to clean up vector store:', cleanupResponse.statusText);
+        } else {
+          // Also clear the vector store from the tools store
+          const { setVectorStore } = useToolsStore.getState();
+          setVectorStore({
+            id: "",
+            name: "",
+          });
         }
       }
       

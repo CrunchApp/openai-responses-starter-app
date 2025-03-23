@@ -1,17 +1,17 @@
 ---
-description: Guidelines for Backend API Architecture and Development Guidelines creating typesafe apis on hono restful API
+description: Guidelines for Backend API Architecture and Development Guidelines creating TypeScript apis
 globs: 
 alwaysApply: false
 ---
 # Vista Education Adviser – Backend API Architecture & Development Guidelines
 
-You are an expert Python backend engineer specializing in building modern, type-safe APIs using FastAPI and SQLAlchemy. Your expertise covers FastAPI for HTTP routing, SQLAlchemy with Alembic for database operations on PostgreSQL, and Pydantic for request/response validation. This document outlines the backend API architecture and provides development guidelines for the Vista Education Adviser PoC.
+You are an expert TypeScript engineer specializing in building modern, type-safe APIs using Next.js API routes. Your expertise covers Next.js API routes for HTTP endpoints, OpenAI Vector Store for data persistence, and TypeScript interfaces for type safety and validation. This document outlines the backend API architecture and provides development guidelines for the Vista Education Adviser PoC.
 
 ---
 
 ## Core Architecture
 
-Vista Education Adviser is designed as a modular FastAPI application that exposes RESTful endpoints for key functionalities such as:
+Vista Education Adviser is designed as a monorepo Next.js application that exposes RESTful API routes for key functionalities such as:
 
 - **User Authentication & Profile Management:**  
   Secure registration/login (via email/password and social OAuth for Google/LinkedIn), and profile CRUD operations.
@@ -25,168 +25,196 @@ Vista Education Adviser is designed as a modular FastAPI application that expose
 - **Document Uploads:**  
   Endpoints that enable users to upload files (transcripts, SOPs) for processing or storage.
 
-These services interact with a PostgreSQL database through SQLAlchemy ORM. Pydantic models ensure runtime type safety and data validation. Logging and error handling are implemented uniformly to maintain consistency and aid troubleshooting.
+These services interact with the OpenAI Vector Store for data persistence. TypeScript interfaces ensure runtime type safety and data validation. Logging and error handling are implemented uniformly to maintain consistency and aid troubleshooting.
 
 ---
 
 ## Tech Stack
 
-- **Server & Routing:** FastAPI  
-- **Database ORM:** SQLAlchemy with Alembic for migrations (using PostgreSQL)  
-- **Frontend Integration:** Next.js with React Query  
+- **Server & Routing:** Next.js API Routes  
+- **Database:** OpenAI Vector Store for data persistence
+- **Frontend Integration:** Next.js with React Query (same monorepo)
 - **Authentication:** JWT-based authentication, with OAuth flows for Google and LinkedIn  
-- **Validation:** Pydantic  
-- **Logging:** Python's logging module (or a custom logger)  
-- **Transport:** HTTP via Uvicorn (initially deployed using Heroku for the backend)
+- **Validation:** TypeScript interfaces and Zod for validation
+- **Logging:** Custom logger built on top of console or a dedicated logging library
+- **Transport:** HTTP via Vercel deployment
 
 ---
 
 ## Module Development Guidelines
 
-### 1. Database Layer
-- **Schema Updates:**  
-  - When a new column or table is needed, update the SQLAlchemy models in `app/models/` (e.g., add fields to `user.py`).
-  - Update migration scripts in the `migrations/` directory using Alembic.
+### 1. Data Layer
+- **Vector Store Operations:**  
+  - Implement wrapper functions in `app/api/vector_stores/services/` for CRUD operations.
+  - Structure data with appropriate metadata for effective retrieval.
 - **Type Safety & Validation:**  
-  - Create corresponding Pydantic schemas in the relevant module’s `schemas.py` for request and response validation.
+  - Create TypeScript interfaces in the relevant module's directory for request and response validation.
   - Example:
-    ```python
-    # app/api/profile/schemas.py
-    from pydantic import BaseModel, EmailStr
-
-    class UserProfile(BaseModel):
-        id: int
-        email: EmailStr
-        full_name: str
-        education: str | None = None
-        # Add other fields as required
+    ```typescript
+    // app/api/profile/types.ts
+    export interface UserProfile {
+      id: string;
+      email: string;
+      fullName: string;
+      education?: string;
+      // Add other fields as required
+    }
     ```
 
-### 2. Service Layer (e.g., `recommendation_service.py`)
+### 2. Service Layer (e.g., `app/api/recommendations/service.ts`)
 - **Implement Business Logic:**  
-  - Write functions that perform database queries and complex operations.
-  - Use the database connection from `core/config.py` and models from `models/`.
-  - Return strongly typed responses (using Pydantic models).
+  - Write functions that perform vector store operations and complex business logic.
+  - Use the vector store client from a centralized location.
+  - Return strongly typed responses using TypeScript interfaces.
 - **Example Implementation:**
-  ```python
-  # app/services/recommendation_service.py
-  from app.core.db import session
-  from app.models.recommendation import Recommendation
-  from app.api.recommendations.schemas import RecommendationResponse
+  ```typescript
+  // app/api/recommendations/service.ts
+  import { vectorStoreClient } from '../vector_stores/services/client';
+  import { Recommendation, UserProfile } from './types';
 
-  async def generate_recommendations(user_profile: dict) -> list[RecommendationResponse]:
-      # Simple rule-based filtering logic (to be enhanced later)
-      recommendations = session.query(Recommendation).filter(
-          Recommendation.field == user_profile.get("interest")
-      ).all()
-      return [RecommendationResponse.from_orm(r) for r in recommendations]
+  export async function generateRecommendations(userProfile: UserProfile): Promise<Recommendation[]> {
+    // Simple rule-based filtering logic (to be enhanced later)
+    const recommendations = await vectorStoreClient.search({
+      query: userProfile.interest,
+      collection: 'recommendations'
+    });
+    
+    return recommendations.map(item => ({
+      id: item.id,
+      programName: item.metadata.programName,
+      institution: item.metadata.institution,
+      matchScore: calculateMatchScore(userProfile, item.metadata),
+      // other fields
+    }));
+  }
 
-3. Route Layer (e.g., routes.py in each module)
-Define Endpoints with FastAPI:
-Create a router for each module using FastAPI’s APIRouter.
-Use Pydantic models to validate request bodies and responses.
-Apply dependency injections for authentication (e.g., JWT-based).
+  function calculateMatchScore(profile: UserProfile, program: any): number {
+    // Implement scoring logic
+    return 85; // Example score
+  }
+  ```
 
-Example Implementation:
-```python
-# app/api/recommendations/routes.py
-from fastapi import APIRouter, Depends, HTTPException
-from app.services.recommendation_service import generate_recommendations
-from app.api.recommendations.schemas import RecommendationRequest, RecommendationResponse
-from app.core.security import get_current_user
+### 3. API Route Layer (e.g., `app/api/recommendations/route.ts`)
+- **Define Endpoints with Next.js:**
+  - Create API routes using the Next.js App Router conventions.
+  - Use TypeScript interfaces for request and response typing.
+  - Implement middleware for authentication and error handling.
+- **Example Implementation:**
+  ```typescript
+  // app/api/recommendations/route.ts
+  import { NextRequest, NextResponse } from 'next/server';
+  import { generateRecommendations } from './service';
+  import { getCurrentUser } from '../auth/service';
+  import { RecommendationRequest } from './types';
 
-router = APIRouter()
+  export async function POST(req: NextRequest) {
+    try {
+      const currentUser = await getCurrentUser(req);
+      
+      if (!currentUser) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+      
+      const data: RecommendationRequest = await req.json();
+      const recommendations = await generateRecommendations({
+        ...currentUser.profile,
+        ...data
+      });
+      
+      return NextResponse.json(recommendations);
+    } catch (error) {
+      console.error('Error generating recommendations:', error);
+      return NextResponse.json(
+        { error: 'Failed to generate recommendations' },
+        { status: 500 }
+      );
+    }
+  }
+  ```
 
-@router.post("/", response_model=list[RecommendationResponse])
-async def get_recommendations(
-    request: RecommendationRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    try:
-        recommendations = await generate_recommendations(current_user)
-        return recommendations
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-```
-
-4. Prompt & Tool Integration
+### 4. Prompt & Tool Integration
 
 **Prompt Templates:**
-Define reusable prompt templates (e.g., analyze_data) in `app/api/prompts/`.
+Define reusable prompt templates in `app/api/prompts/`.
 Accept parameters, validate them, and return a formatted message template.
 
 **Tool Implementations:**
-Register tools (e.g., `run_query`) with proper input validation using Pydantic.
-Ensure that only permitted operations (e.g., SELECT queries) are executed.
+Register tools with proper input validation using TypeScript interfaces or Zod schemas.
+Ensure that only permitted operations are executed.
 Log errors and return structured error responses.
 
-5. Logging & Error Handling
+### 5. Logging & Error Handling
 
 **Structured Logging:**
-Use Python’s `logging` module (or a custom logger in `app/core/logger.py`) to log key events and errors.
+Use a custom logger or a third-party logging library to log key events and errors.
 Log each API call with timestamp and context.
 
 **Error Responses:**
-Return HTTP errors using FastAPI’s `HTTPException` with consistent status codes and error messages.
+Return consistent HTTP error responses with proper status codes and error messages.
 Sanitize error messages to avoid leaking sensitive details.
 
-6. Transport & Deployment
+### 6. Transport & Deployment
 
 **Transport Setup:**
-Initially deploy using Uvicorn (e.g., `uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
-Ensure the app is deployable on Heroku using a `Procfile`.
+Deploy the monorepo to Vercel, which optimizes Next.js applications.
+Configure appropriate environment variables in the Vercel dashboard.
 
 **Environment Variables:**
-Manage secrets (database URL, API keys) through environment variables loaded in `app/core/config.py`.
+Manage secrets (API keys, JWT secret) through environment variables accessible in API routes.
 
 ## Frontend Integration Guidelines
 
 ### API Client
-Create a type-safe API client in the frontend (Next.js) using React Query.
-Use a common folder (e.g., `frontend/src/api/`) to define API hooks that mirror backend endpoints.
+Create a type-safe API client in the frontend using React Query.
+Use a common folder (e.g., `app/api-client/`) to define API hooks that mirror API routes.
 
-Example (`posts.api.ts`):
+Example:
 ```typescript
+// app/api-client/recommendations.ts
 import { useQuery, useMutation } from "react-query";
 import axios from "axios";
+import { Recommendation, RecommendationRequest } from "@/app/api/recommendations/types";
 
-export async function getRecommendations() {
-  const response = await axios.post("/api/recommendations/");
+export async function getRecommendations(data: RecommendationRequest) {
+  const response = await axios.post<Recommendation[]>("/api/recommendations", data);
   return response.data;
 }
 
-export function useRecommendations() {
-  return useQuery("recommendations", getRecommendations);
+export function useRecommendations(data: RecommendationRequest) {
+  return useQuery(["recommendations", data], () => getRecommendations(data));
 }
 ```
 
 #### Error Handling & Caching
 Handle API errors gracefully and display appropriate messages.
-Leverage React Query’s caching and refetching mechanisms to optimize UI responsiveness.
+Leverage React Query's caching and refetching mechanisms to optimize UI responsiveness.
 
 ## Package & Monorepo Management
 
 ### Package Manager
-Use pipenv or Poetry as the primary package manager for the Python backend.
-Install dependencies with `pipenv install [package]` or `poetry add [package]`.
+Use npm or yarn as the package manager for the monorepo.
+Install dependencies with `npm install [package]` or `yarn add [package]`.
 
 ### Monorepo Setup
-The project uses TurboRepo to manage the monorepo (backend and frontend).
-Run the entire project with `turbo dev` from the root folder.
+The project is structured as a Next.js monorepo with both frontend and API routes.
+All code lives in the same repository, with shared types and utilities.
 
 ## Development Guidelines
 
 ### Running Scripts
 
-#### Script Execution
-Use Uvicorn to run FastAPI scripts (e.g., `uvicorn app.main:app --reload`).
-For production, configure the `Procfile` for Heroku deployment.
+#### Local Development
+Run the development server with `npm run dev` or `yarn dev`.
+This will start both the frontend and API routes for local development.
 
 ### Type Safety
 
 #### Data Validation
-Use Pydantic models for request and response validation.
-Share types between frontend and backend where possible.
+Use TypeScript interfaces or Zod schemas for request and response validation.
+Share types between frontend components and API routes.
 
 ### Error Handling
 
@@ -195,120 +223,178 @@ Implement error handlers that return structured error objects.
 Use proper HTTP status codes for success and failure responses.
 
 #### Logging
-Use the custom logger (from `app/core/logger.py`) for error and info logging.
+Use a consistent logging approach across all API routes.
 
 ### Authentication & Authorization
 
 #### JWT Authentication
-Use dependency injection (e.g., FastAPI’s Depends) to enforce authentication.
-Validate user permissions at the route level using custom middleware.
+Implement middleware to validate JWT tokens in API routes.
+Store user context in session or use stateless JWT tokens.
 
 ### API Design Principles
 
 #### RESTful Conventions
-Use consistent naming patterns and resource-based endpoints.
-Validate all incoming requests with Pydantic.
+Use consistent naming patterns and resource-based API routes.
+Validate all incoming requests with TypeScript or Zod.
 Delegate business logic to the service layer.
 
-### Database Operations
+### Vector Store Operations
 
-#### ORM Best Practices
-Use SQLAlchemy for all database operations.
-Handle migrations with Alembic.
-Write efficient queries and use transactions when needed.
+#### Best Practices
+Implement wrapper functions for vector store operations.
+Structure data with appropriate metadata for effective retrieval.
+Use caching strategies to improve performance.
 
 ### Developer Workflow
 
 #### Creating a New Module
 
 ##### Module Setup
-Create a new folder under `backend/app/api/modules/[module]`.
-Define routes in `[module].routes.py`, implement business logic in `[module].service.py`, and create Pydantic schemas in `[module].schemas.py`.
-
-##### Registering Routes
-Import and include the module’s router in `backend/app/main.py` so that endpoints are accessible.
+Create a new folder under `app/api/[module]/`.
+Define the API route in `route.ts`, implement business logic in `service.ts`, and create TypeScript interfaces in `types.ts`.
 
 ##### Frontend Integration
-Optionally, create a corresponding API client file in `frontend/src/api/[module].api.ts` using React Query hooks.
+Create a corresponding API client file in `app/api-client/[module].ts` using React Query hooks.
 
 ### Testing & Code Quality
 
 #### Unit & Integration Tests
-Use pytest for testing backend modules. Create test files (e.g., `[module].test.py`) in `backend/app/tests/`.
+Use Jest for testing API routes and services. Create test files in a `__tests__` directory.
 
 #### Code Style
-Use object destructuring for functions with multiple parameters.
-Maintain strict type safety and follow PEP 8 conventions.
+Use consistent naming conventions and formatting.
+Maintain strict type safety with TypeScript.
 
 #### Error Handling
-Consistently handle and log errors using the central logger.
+Consistently handle and log errors across all API routes.
 
 ### Example API Workflow
 
-Below is a complete example for a hypothetical “posts” module:
+Below is a complete example for a "posts" module:
 
-1. Database Schema (e.g., packages/db/schema.py)
-```python
-# Define a sample SQLAlchemy model for posts
-from sqlalchemy import Column, Integer, String, Text
-from app.core.db import Base
-
-class Post(Base):
-    __tablename__ = "posts"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    content = Column(Text, nullable=False)
-    user_id = Column(Integer, nullable=False)
-```
-
-2. Service Layer (app/api/posts/posts.service.py)
-```python
-from app.core.db import session
-from app.models.post import Post
-from app.api.posts.schemas import PostResponse, PostCreate
-
-async def get_posts() -> list[PostResponse]:
-    posts = session.query(Post).all()
-    return [PostResponse.from_orm(post) for post in posts]
-
-async def create_post(data: PostCreate) -> PostResponse:
-    new_post = Post(**data.dict())
-    session.add(new_post)
-    session.commit()
-    session.refresh(new_post)
-    return PostResponse.from_orm(new_post)
-```
-
-3. Route Layer (app/api/posts/posts.routes.py)
-```python
-from fastapi import APIRouter, Depends, HTTPException
-from app.api.posts.schemas import PostResponse, PostCreate
-from app.services.posts.posts_service import get_posts, create_post
-from app.core.security import get_current_user
-
-router = APIRouter(prefix="/posts", tags=["posts"])
-
-@router.get("/", response_model=list[PostResponse])
-async def list_posts(current_user: dict = Depends(get_current_user)):
-    return await get_posts()
-
-@router.post("/", response_model=PostResponse)
-async def add_post(data: PostCreate, current_user: dict = Depends(get_current_user)):
-    try:
-        post = await create_post(data)
-        return post
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-```
-
-4. Frontend API Client (frontend/src/api/posts.api.ts)
+1. TypeScript Interfaces (app/api/posts/types.ts)
 ```typescript
-import axios from "axios";
-import { useQuery, useMutation } from "react-query";
+export interface Post {
+  id: string;
+  title: string;
+  content: string;
+  userId: string;
+  createdAt: string;
+}
 
-// Fetch posts using a type-safe API call
+export interface CreatePostRequest {
+  title: string;
+  content: string;
+}
+
+export interface PostResponse {
+  post: Post;
+}
+```
+
+2. Service Layer (app/api/posts/service.ts)
+```typescript
+import { vectorStoreClient } from '../vector_stores/services/client';
+import { Post, CreatePostRequest } from './types';
+import { v4 as uuidv4 } from 'uuid';
+
+export async function getPosts(): Promise<Post[]> {
+  const results = await vectorStoreClient.search({
+    collection: 'posts',
+    query: '*'
+  });
+  
+  return results.map(item => ({
+    id: item.id,
+    title: item.metadata.title,
+    content: item.metadata.content,
+    userId: item.metadata.userId,
+    createdAt: item.metadata.createdAt
+  }));
+}
+
+export async function createPost(data: CreatePostRequest, userId: string): Promise<Post> {
+  const newPost: Post = {
+    id: uuidv4(),
+    title: data.title,
+    content: data.content,
+    userId,
+    createdAt: new Date().toISOString()
+  };
+  
+  await vectorStoreClient.upsert({
+    collection: 'posts',
+    id: newPost.id,
+    metadata: newPost,
+    content: `${newPost.title} ${newPost.content}`
+  });
+  
+  return newPost;
+}
+```
+
+3. API Route Layer (app/api/posts/route.ts)
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { getPosts, createPost } from './service';
+import { getCurrentUser } from '../auth/service';
+import { CreatePostRequest } from './types';
+
+export async function GET(req: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser(req);
+    
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+    
+    const posts = await getPosts();
+    return NextResponse.json(posts);
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch posts' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser(req);
+    
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+    
+    const data: CreatePostRequest = await req.json();
+    const post = await createPost(data, currentUser.id);
+    
+    return NextResponse.json({ post }, { status: 201 });
+  } catch (error) {
+    console.error('Error creating post:', error);
+    return NextResponse.json(
+      { error: 'Failed to create post' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+4. Frontend API Client (app/api-client/posts.ts)
+```typescript
+import { useQuery, useMutation, useQueryClient } from "react-query";
+import axios from "axios";
+import { Post, CreatePostRequest, PostResponse } from "@/app/api/posts/types";
+
 export async function getPosts() {
-  const response = await axios.get("/api/posts");
+  const response = await axios.get<Post[]>("/api/posts");
   return response.data;
 }
 
@@ -316,38 +402,22 @@ export function usePosts() {
   return useQuery("posts", getPosts);
 }
 
-// Create a new post using mutation
-export async function createPost(params: { title: string; content: string; userId: number; }) {
-  const response = await axios.post("/api/posts", params);
+export async function createPost(data: CreatePostRequest) {
+  const response = await axios.post<PostResponse>("/api/posts", data);
   return response.data;
 }
 
 export function useCreatePost() {
-  return useMutation(createPost);
+  const queryClient = useQueryClient();
+  
+  return useMutation(createPost, {
+    onSuccess: () => {
+      queryClient.invalidateQueries("posts");
+    }
+  });
 }
 ```
 
-## Package Management & Development
+## Future Migration Path
 
-### Package Manager
-Use pipenv or Poetry for the Python backend.
-Install dependencies with `pipenv install [package]` or `poetry add [package]`.
-
-### Monorepo Management
-The project uses TurboRepo to manage the backend and frontend.
-Run the entire project using `turbo dev` from the root.
-
-### Running Scripts
-
-#### Local Development
-Run the backend with Uvicorn: `uvicorn app.main:app --reload`.
-Use `bun run [script]` for any custom scripts if needed.
-
-#### Deployment
-Containerize the backend with Docker.
-Use a Procfile for Heroku deployment.
-
-
-
-
-
+While the current architecture uses Next.js API routes with OpenAI Vector Store, there is a planned migration path to FastAPI microservices with PostgreSQL for scaling beyond the PoC phase. The current architecture is designed with this future migration in mind, maintaining clean separation of concerns and strong typing to facilitate the transition.

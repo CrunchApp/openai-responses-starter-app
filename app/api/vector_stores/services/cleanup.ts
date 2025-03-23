@@ -7,7 +7,12 @@ const openai = new OpenAI();
  * @param vectorStoreId The ID of the vector store to clean up
  * @returns A result object indicating success or failure
  */
-export async function cleanupVectorStore(vectorStoreId: string): Promise<{ success: boolean; message: string; error?: any }> {
+export async function cleanupVectorStore(vectorStoreId: string): Promise<{ 
+  success: boolean; 
+  message: string; 
+  clearedStoreId?: string;
+  error?: any 
+}> {
   try {
     // First, get all files associated with the vector store
     const listResponse = await openai.vectorStores.files.list(vectorStoreId);
@@ -35,6 +40,7 @@ export async function cleanupVectorStore(vectorStoreId: string): Promise<{ succe
     return {
       success: true,
       message: `Vector store ${vectorStoreId} and ${files.length} files successfully cleaned up`,
+      clearedStoreId: vectorStoreId, // Add the cleared store ID so client can update toolsStore
     };
   } catch (error) {
     console.error("Error in cleanup process:", error);

@@ -24,8 +24,8 @@ function ProfileContent() {
         name: "User Profile Vector Store",
       });
       
-      // Redirect to recommendations page
-      router.push("/recommendations");
+      // Redirect to dashboard page
+      router.push("/dashboard");
     }
   }, [isProfileComplete, vectorStoreId, setVectorStore, router, isEditMode]);
 

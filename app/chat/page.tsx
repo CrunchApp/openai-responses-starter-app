@@ -1,15 +1,25 @@
 "use client";
 import Assistant from "@/components/assistant";
 import ToolsPanel from "@/components/tools-panel";
-import { Menu, X } from "lucide-react";
+import { Menu, X, User } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function Main() {
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
-
+  
   return (
     <div className="flex justify-center h-screen">
-      <div className="w-full md:w-[70%]">
+      <div className="w-full md:w-[70%] relative">
+        {/* Profile Button */}
+        <div className="absolute top-4 left-4 z-10">
+          <Link href="/dashboard">
+            <button className="flex items-center justify-center p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full transition-colors duration-200">
+              <User size={20} />
+            </button>
+          </Link>
+        </div>
+        
         <Assistant />
       </div>
       <div className=" hidden md:block w-[30%]">

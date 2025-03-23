@@ -275,6 +275,13 @@ export default function RecommendationsPage() {
         
         if (!cleanupResponse.ok) {
           console.error('Failed to clean up vector store:', cleanupResponse.statusText);
+        } else {
+          // Also clear the vector store from the tools store
+          const { setVectorStore } = useToolsStore.getState();
+          setVectorStore({
+            id: "",
+            name: "",
+          });
         }
       }
       

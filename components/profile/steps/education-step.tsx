@@ -60,15 +60,6 @@ export default function EducationStep({
     handleEducationChange(index, "degreeLevel", value);
   };
 
-  const degreeLevels = [
-    { value: "high_school", label: "High School Diploma" },
-    { value: "associates", label: "Associate's Degree" },
-    { value: "bachelors", label: "Bachelor's Degree" },
-    { value: "masters", label: "Master's Degree" },
-    { value: "doctorate", label: "Doctor's Degree" },
-    { value: "other", label: "Other" },
-  ];
-
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold mb-4">Education History</h2>
@@ -102,11 +93,13 @@ export default function EducationStep({
                   <SelectValue placeholder="Select a degree level" />
                 </SelectTrigger>
                 <SelectContent>
-                  {degreeLevels.map((level) => (
-                    <SelectItem key={level.value} value={level.value}>
-                      {level.label}
-                    </SelectItem>
-                  ))}
+                <SelectItem value="High School">High School</SelectItem>
+                  <SelectItem value="Associate's">Associate's Degree</SelectItem>
+                  <SelectItem value="Bachelor's">Bachelor's Degree</SelectItem>
+                  <SelectItem value="Master's">Master's Degree</SelectItem>
+                  <SelectItem value="Doctorate">Doctorate/PhD</SelectItem>
+                  <SelectItem value="Certificate">Certificate/Diploma</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>

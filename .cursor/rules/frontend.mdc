@@ -44,7 +44,7 @@ Ensure that feature-specific components like recommendation cards, chatbot windo
 ### Backend (FastAPI)
 
 Structure the backend as modular microservices or logical modules within a monorepo:
-- **Authentication**: Endpoints for email/password and social login (Google, LinkedIn) with JWT issuance.
+- **Authentication**: Endpoints for email/password and social login (Google, LinkedIn) with Supabase issuance.
 - **Profile Management**: API for creating and updating user profiles, including social data import.
 - **Recommendation Engine**: A rule‐based module to filter and rank education/career programs with a future AI hook.
 - **Chatbot Service**: An endpoint that forwards queries to third-party AI APIs and returns natural-language responses.

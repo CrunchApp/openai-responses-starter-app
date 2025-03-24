@@ -1,9 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronRight, FileText, User, BookOpen, Briefcase, Settings, Award, Edit, ArrowLeft } from "lucide-react";
+import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import useProfileStore from "@/stores/useProfileStore";
 import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import { motion } from "framer-motion";
 import {
@@ -131,9 +130,9 @@ export default function ProfileDashboard() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => router.push("/profile?edit=true")}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit Profile
-                      </Button>
+            <Edit className="w-4 h-4 mr-2" />
+            Edit Profile
+        </Button>
       </div>
 
       <motion.div

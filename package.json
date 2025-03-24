@@ -28,6 +28,8 @@
     "@reach/visually-hidden": "^0.18.0",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.49.1",
     "@types/jsonwebtoken": "^9.0.9",
     "@xyflow/react": "^12.3.0",
     "class-variance-authority": "^0.7.1",

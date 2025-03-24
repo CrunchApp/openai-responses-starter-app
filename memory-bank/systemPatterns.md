@@ -5,7 +5,7 @@ Vista is organized as a full-stack application:
 
 - **Frontend**: Next.js with TypeScript, deployed on Vercel
 - **Backend**: Next.js API Routes (same monorepo), deployed on Vercel
-- **Database**: OpenAI Vector Store infrastructure
+- **Database**: Supabase and OpenAI Vector Store infrastructure
 
 ## Starter App Integration Strategy
 The openai-responses-starter-app serves as the foundation for our implementation:
@@ -30,7 +30,7 @@ The openai-responses-starter-app serves as the foundation for our implementation
   - Reduced infrastructure complexity for the PoC phase
   - Future migration path to FastAPI microservices for scaling
 
-- **Database Solution**: OpenAI Vector Store was chosen over SQLAlchemy with PostgreSQL because:
+- **Database Solution**: Supabase and OpenAI Vector Store were chosen over SQLAlchemy with PostgreSQL because:
   - Native integration with OpenAI models
   - Simplified vector search capabilities for recommendations
   - Reduced infrastructure requirements for the PoC
@@ -83,7 +83,7 @@ The openai-responses-starter-app serves as the foundation for our implementation
   - Current user query
 
 ### 7. Authentication & Authorization
-- Use JWT for authentication between client and server
+- Use Supabase for authentication between client and server
 - Implement proper OAuth flows for Google and LinkedIn logins
 - Store hashed passwords for email/password authentication
 - Maintain clear role-based permissions

@@ -4,7 +4,7 @@
 - **Phase**: Profile Management Implementation
 - **Status**: Building user profile features on the openai-responses-starter-app
 - **Current Architecture**: Next.js frontend with Next.js API routes for backend functionality (monorepo)
-- **Database Solution**: OpenAI Vector Store infrastructure for data storage
+- **Database Solution**: Supabase and the OpenAI Vector Store infrastructure for data storage
 - **Implementation Approach**: Enhancing the Next.js starter app with profile management features
 
 ## Architectural Plan
@@ -17,7 +17,7 @@
 - Current structure is based on the openai-responses-starter-app with the following additions:
   - Enhanced profile management features
   - Document extraction functionality
-  - Vector store integration for data storage
+  - Supabase and Vector store integration for data storage
   - Extended API routes for recommendations
 - Future/target structure (post-PoC) would be a microservice architecture with:
   - Next.js frontend (deployed on Vercel)
@@ -29,7 +29,7 @@
   - Simplified deployment with single Vercel instance
   - Faster development with shared TypeScript types
   - Reduced infrastructure complexity
-- **Database**: Decided to use OpenAI Vector Store instead of PostgreSQL
+- **Database**: Decided to use Supabase and OpenAI Vector Store instead of PostgreSQL
   - Native integration with OpenAI features
   - Simplified vector search capabilities for recommendations
   - Reduced infrastructure requirements
@@ -69,7 +69,7 @@
 - Implemented file upload and document processing with progress tracking
 - Decision to use the openai-responses-starter-app as the foundation for the entire application
 - Implementation of memory-bank system for project context
-- Decided to use JWT-based authentication with social OAuth integration
+- Decided to use Supabase-based authentication with social OAuth integration
 - Designed comprehensive data model with entities for users, profiles, education history, work experience, career goals, education preferences, programs, institutions, recommendations, and feedback
 
 ## Recent Implementation Progress

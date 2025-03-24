@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ArrowRight, Sparkles, Brain, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import useProfileStore from "@/stores/useProfileStore";
 
 export default function WelcomeStep({
   profileData,
@@ -46,6 +47,11 @@ export default function WelcomeStep({
       // Store vectorStoreId in localStorage for persistence
       // This allows the ID to be accessed across components
       localStorage.setItem('userVectorStoreId', data.id);
+
+      // Update the profile store with the new vector store ID
+      useProfileStore.setState({
+        vectorStoreId: data.id
+      });
       
       return data.id;
     } catch (error) {

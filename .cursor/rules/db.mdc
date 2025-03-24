@@ -1,5 +1,5 @@
 ---
-description: Database rules for working with OpenAI Vector Stores and creating backend apis
+description: Database rules for working with Supabase and creating backend apis
 globs: 
 alwaysApply: false
 ---

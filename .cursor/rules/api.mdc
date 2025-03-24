@@ -1,11 +1,16 @@
 ---
-description: Guidelines for Backend API Architecture and Development Guidelines creating TypeScript apis
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Guidelines for Backend API Architecture and Development Guidelines creating typesafe apis on hono restful API
 globs: 
 alwaysApply: false
 ---
 # Vista Education Adviser – Backend API Architecture & Development Guidelines
 
-You are an expert TypeScript engineer specializing in building modern, type-safe APIs using Next.js API routes. Your expertise covers Next.js API routes for HTTP endpoints, OpenAI Vector Store for data persistence, and TypeScript interfaces for type safety and validation. This document outlines the backend API architecture and provides development guidelines for the Vista Education Adviser PoC.
+You are an expert TypeScript engineer specializing in building modern, type-safe APIs using Next.js API routes. Your expertise covers Next.js API routes for HTTP endpoints, Supabase, OpenAI Vector Store for data persistence, and TypeScript interfaces for type safety and validation. This document outlines the backend API architecture and provides development guidelines for the Vista Education Adviser PoC.
 
 ---
 
@@ -25,16 +30,16 @@ Vista Education Adviser is designed as a monorepo Next.js application that expos
 - **Document Uploads:**  
   Endpoints that enable users to upload files (transcripts, SOPs) for processing or storage.
 
-These services interact with the OpenAI Vector Store for data persistence. TypeScript interfaces ensure runtime type safety and data validation. Logging and error handling are implemented uniformly to maintain consistency and aid troubleshooting.
+These services interact with Supabase and the OpenAI Vector Store for data persistence. TypeScript interfaces ensure runtime type safety and data validation. Logging and error handling are implemented uniformly to maintain consistency and aid troubleshooting.
 
 ---
 
 ## Tech Stack
 
 - **Server & Routing:** Next.js API Routes  
-- **Database:** OpenAI Vector Store for data persistence
+- **Database:** Supabase and OpenAI Vector Store for data persistence
 - **Frontend Integration:** Next.js with React Query (same monorepo)
-- **Authentication:** JWT-based authentication, with OAuth flows for Google and LinkedIn  
+- **Authentication:** Supabase-based authentication, with OAuth flows for Google and LinkedIn  
 - **Validation:** TypeScript interfaces and Zod for validation
 - **Logging:** Custom logger built on top of console or a dedicated logging library
 - **Transport:** HTTP via Vercel deployment
@@ -163,7 +168,7 @@ Deploy the monorepo to Vercel, which optimizes Next.js applications.
 Configure appropriate environment variables in the Vercel dashboard.
 
 **Environment Variables:**
-Manage secrets (API keys, JWT secret) through environment variables accessible in API routes.
+Manage secrets (API keys, Supabase secret) through environment variables accessible in API routes.
 
 ## Frontend Integration Guidelines
 
@@ -227,9 +232,9 @@ Use a consistent logging approach across all API routes.
 
 ### Authentication & Authorization
 
-#### JWT Authentication
-Implement middleware to validate JWT tokens in API routes.
-Store user context in session or use stateless JWT tokens.
+#### Supabase Authentication
+Implement middleware to validate Supabase tokens in API routes.
+Store user context in session or use stateless Supabase tokens.
 
 ### API Design Principles
 
@@ -421,3 +426,8 @@ export function useCreatePost() {
 ## Future Migration Path
 
 While the current architecture uses Next.js API routes with OpenAI Vector Store, there is a planned migration path to FastAPI microservices with PostgreSQL for scaling beyond the PoC phase. The current architecture is designed with this future migration in mind, maintaining clean separation of concerns and strong typing to facilitate the transition.
+
+
+
+
+

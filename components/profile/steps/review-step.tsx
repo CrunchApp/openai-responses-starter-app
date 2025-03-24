@@ -107,6 +107,27 @@ export default function ReviewStep({
         vectorStoreId
       });
       
+      // If in edit mode, delete the existing profile JSON file first
+      if (isEditMode) {
+        // Get the stored file ID for the profile JSON
+        const profileFileId = localStorage.getItem('userProfileFileId');
+        
+        if (profileFileId) {
+          console.log("Deleting existing profile file with ID:", profileFileId);
+          
+          // Delete the file using the delete_file API route
+          const deleteResponse = await fetch(`/api/vector_stores/delete_file?file_id=${profileFileId}`, {
+            method: "DELETE"
+          });
+          
+          if (!deleteResponse.ok) {
+            console.warn("Failed to delete existing profile file. Will create a new one anyway.");
+          } else {
+            console.log("Successfully deleted existing profile file");
+          }
+        }
+      }
+      
       // Create a JSON file with all profile data
       const profileJson = JSON.stringify(profileData, null, 2);
       const profileBlob = new Blob([profileJson], { type: "application/json" });
@@ -132,6 +153,9 @@ export default function ReviewStep({
       
       const uploadData = await uploadResponse.json();
       const fileId = uploadData.id;
+      
+      // Store the file ID in localStorage for future edits
+      localStorage.setItem('userProfileFileId', fileId);
       
       // Add the file to the vector store
       const addFileResponse = await fetch("/api/vector_stores/add_file", {

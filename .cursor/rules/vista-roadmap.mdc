@@ -3,7 +3,8 @@ description: Understanding the project and its overview
 globs: 
 alwaysApply: true
 ---
-# You're the CTO of Vista. You're going to create Vista Education Adviser based on the model  openai-responses-starter-app repository, a clone of which you've been given to begin with. Create Vista according to the provided Roadmap.
+
+You're the CTO of Vista. You're going to create Vista Education Adviser based on the model  openai-responses-starter-app repository, a clone of which you've been given to begin with. Create Vista according to the provided Roadmap.
 
 # Vista Education Adviser PoC – Roadmap
 
@@ -49,7 +50,7 @@ The Vista Education Adviser Proof of Concept (PoC) will target core features wit
 
 - **Data Flow & Services:**
   - **Authentication & User Management:**  
-    User data is stored securely in OpenAI Vector Store. The authentication service issues JWT tokens for API calls.
+    User data is stored securely in OpenAI Vector Store. The authentication service issues Supabase tokens for API calls.
   - **Profile Management:**  
     User profiles (personal details, education, career goals) are maintained by a dedicated API route, optionally enriched via LinkedIn import.
   - **Recommendation Engine:**  
@@ -100,8 +101,8 @@ The PoC is structured as a Next.js monorepo with API routes for backend function
 
 - **API Design:**
   - Services are organized as Next.js API routes in a monorepo structure.
-  - TypeScript interfaces ensure type safety across frontend and API code.
-  - The application uses middleware for logging, JWT authentication, and error handling.
+  - TypeScript interfaces ensure type safety acroSupabasefrontend and API code.
+  - The application uses middleware for logging, Supabase authentication, and error handling.
 
 ---
 
@@ -177,8 +178,8 @@ vista-education-adviser/          # Root of the project repository
    - **Frontend:**  
      - User visits the landing page, then chooses to sign up/login (email/password or social).
      - Authentication forms (from `components/auth/`) send requests to `/api/auth/` endpoints.
-   - **Backend:**  
-     - Authentication API routes validate credentials, create user records in Vector Store, and return a JWT.
+   - **Backend:**  Supabase
+     - Authentication API routes validate credentials, create user records in Vector Store, and return a Supabase.
      - OAuth flows (handled in `/api/auth/`) import social data (e.g., LinkedIn).
 
 2. **Profile Completion & Data Storage:**
@@ -205,8 +206,8 @@ vista-education-adviser/          # Root of the project repository
    - **Backend:**  
      - Upload API route (`/api/uploads/route.ts`) handles file reception and storage in Vector Store.
 
-6. **Data Security & Compliance:**
-   - All API routes are secured with JWT tokens and proper input validation.
+6. **Data Security & Compliance:**Supabase
+   - All API routes are secured with Supabase tokens and proper input validation.
    - Sensitive data is encrypted and handled according to GDPR requirements.
 
 ## 4. Future Migration Path
@@ -218,3 +219,5 @@ While the PoC uses Next.js API routes with OpenAI Vector Store for simplicity an
 - **Deployment Evolution:** Maintain frontend on Vercel, while moving backend services to Heroku or similar
 
 This migration path allows us to start simple for the PoC while ensuring the architecture can evolve to support larger scale and more complex requirements in the future.
+
+

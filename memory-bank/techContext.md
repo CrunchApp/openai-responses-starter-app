@@ -13,8 +13,8 @@
 
 ### Backend
 - **Framework**: Next.js API Routes (monorepo structure) 
-- **Database**: OpenAI Vector Store infrastructure
-- **Authentication**: JWT + social OAuth (Google, LinkedIn)
+- **Database**: Supabase and OpenAI Vector Store infrastructure
+- **Authentication**: Supabase + social OAuth (Google, LinkedIn)
 - **API Documentation**: Swagger/OpenAPI
 - **Deployment**: Vercel (unified with frontend)
 
@@ -33,8 +33,8 @@ The project is being built upon the openai-responses-starter-app. This involves:
 
 ## Technology Selection Rationale
 
-### Database Selection: OpenAI Vector Store vs. PostgreSQL
-- **Current Decision**: Using OpenAI Vector Store infrastructure
+### Database Selection: Supabase and OpenAI Vector Store vs. PostgreSQL
+- **Current Decision**: Using Supabase and OpenAI Vector Store infrastructure
 - **Rationale**:
   - Simplified development for the PoC phase
   - Native integration with OpenAI models for recommendation and chatbot features
@@ -54,11 +54,11 @@ The project is being built upon the openai-responses-starter-app. This involves:
   - Migrate to FastAPI microservices when scaling beyond PoC
 
 ### Authentication Strategy
-- **Decision**: JWT-based authentication with social OAuth
+- **Decision**: Supabase-based authentication with social OAuth
 - **Rationale**:
   - Stateless authentication well-suited for both current and future architecture
   - Social OAuth providers (Google, LinkedIn) offer simplified onboarding
-  - JWT supports secure data exchange between frontend and backend
+  - Supabase supports secure data exchange between frontend and backend
 
 ## Deployment Strategy
 - **Current (PoC) Deployment**: Unified deployment on Vercel

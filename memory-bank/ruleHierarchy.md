@@ -73,7 +73,7 @@ To ensure consistent understanding across all documentation:
 - **External Services**: Third-party services (OpenAI, LinkedIn, Google, etc.)
 
 ### Authentication Mechanisms
-- **JWT Authentication**: Token-based authentication for API access
+- **Supabase Authentication**: Token-based authentication for API access
 - **Social OAuth**: Authentication via Google and LinkedIn
 - **Email Authentication**: Traditional email/password authentication
 

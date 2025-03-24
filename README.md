@@ -33,9 +33,9 @@ Vista Education Adviser addresses challenges in the traditional education guidan
 
 ### Backend (Planned)
 - **Framework**: FastAPI (Python)
-- **Database**: PostgreSQL
-- **ORM**: SQLAlchemy
-- **Authentication**: JWT + social OAuth
+- **Database**: Supabase
+- **ORM**: Supabase 
+- **Authentication**: Supabase
 - **Deployment**: Heroku
 
 ## Getting Started

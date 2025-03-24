@@ -12,7 +12,7 @@ export default function Home() {
       </p>
       <div className="flex gap-4">
         <Button asChild>
-          <Link href="/profile">Start Your Journey</Link>
+          <Link href="/profile-wizard">Start Your Journey</Link>
         </Button>
         <Button variant="outline" asChild>
           <Link href="/auth/login">Log In</Link>

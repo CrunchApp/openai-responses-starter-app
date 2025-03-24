@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { ProfileData } from "@/components/profile/profile-wizard";
+import { UserProfile } from "@/app/types/profile-schema";
 
 // Initial profile data default state
-const initialProfileData: ProfileData = {
+const initialProfileData: UserProfile = {
   firstName: "",
   lastName: "",
   email: "",
@@ -32,7 +32,7 @@ const initialProfileData: ProfileData = {
 
 interface ProfileState {
   // Profile data and completion status
-  profileData: ProfileData | null;
+  profileData: UserProfile | null;
   isProfileComplete: boolean;
   currentStep: number;
   completedSteps: number[];
@@ -42,8 +42,8 @@ interface ProfileState {
   setHydrated: (state: boolean) => void;
   
   // Methods to update state
-  setProfileData: (data: ProfileData | null) => void;
-  updateProfileData: (data: Partial<ProfileData>) => void;
+  setProfileData: (data: UserProfile | null) => void;
+  updateProfileData: (data: Partial<UserProfile>) => void;
   setProfileComplete: (isComplete: boolean) => void;
   setCurrentStep: (step: number) => void;
   addCompletedStep: (step: number) => void;

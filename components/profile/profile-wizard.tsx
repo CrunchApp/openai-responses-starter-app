@@ -18,69 +18,18 @@ import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import HydrationLoading from "@/components/ui/hydration-loading";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import useToolsStore from "@/stores/useToolsStore";
+import { UserProfile, ProfileSchema } from "@/app/types/profile-schema";
 
-// Define the degree level type
+// Define the degree level type for backward compatibility
 type DegreeLevel = "" | "High School" | "Associate's" | "Bachelor's" | "Master's" | "Doctorate" | "Certificate" | "Other";
 
-// Define profile data structure
-export interface ProfileData {
-  // Personal information
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  preferredName: string;
-  
-  // LinkedIn profile information
-  linkedInProfile?: string;
-  
-  // Education
-  education: Array<{
-    degreeLevel: DegreeLevel;
-    institution: string;
-    fieldOfStudy: string;
-    graduationYear: string;
-    gpa?: string;
-  }>;
-  
-  // Career goals
-  careerGoals: {
-    shortTerm: string;
-    longTerm: string;
-    desiredIndustry: string[];
-    desiredRoles: string[];
-  };
-  
-  // Skills
-  skills: string[];
-  
-  // Preferences
-  preferences: {
-    preferredLocations: string[];
-    studyMode: string; // "Full-time" | "Part-time" | "Online" | "Hybrid"
-    startDate: string;
-    budgetRange: {
-      min: number;
-      max: number;
-    };
-  };
-  
-  // Documents
-  documents: {
-    resume?: string; // file ID
-    transcripts?: string; // file ID
-    statementOfPurpose?: string; // file ID
-    otherDocuments?: string[]; // array of file IDs
-  };
-  
-  // Vector store ID for this user's profile
-  vectorStoreId?: string;
-}
+// Re-export the UserProfile type for components to use
+export type { UserProfile };
 
 // Define interfaces for step props
 export interface BaseStepProps {
-  profileData: ProfileData;
-  setProfileData: Dispatch<SetStateAction<ProfileData>>;
+  profileData: UserProfile;
+  setProfileData: Dispatch<SetStateAction<UserProfile>>;
 }
 
 export interface WelcomeStepProps extends BaseStepProps {
@@ -142,7 +91,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
   const [isResetting, setIsResetting] = useState(false);
   
   // Initialize local state with default values - will be updated after hydration
-  const [profileData, setProfileData] = useState<ProfileData>({
+  const [profileData, setProfileData] = useState<UserProfile>({
     firstName: "",
     lastName: "",
     email: "",
@@ -194,7 +143,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
   }, [hydrated, storedCurrentStep, storedCompletedSteps, storedProfileData]);
 
   // Custom wrapper for setProfileData that tracks local changes
-  const handleProfileDataChange = (newProfileData: ProfileData | ((prev: ProfileData) => ProfileData)) => {
+  const handleProfileDataChange = (newProfileData: UserProfile | ((prev: UserProfile) => UserProfile)) => {
     setProfileData((prev) => {
       const updated = typeof newProfileData === 'function' ? newProfileData(prev) : newProfileData;
       

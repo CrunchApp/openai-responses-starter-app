@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { RecommendationProgram, UserProfile } from "@/app/recommendations/types";
+import { RecommendationProgram } from "@/app/recommendations/types";
+import { UserProfile } from "@/app/types/profile-schema";
 
 interface RecommendationsState {
   // Recommendations data

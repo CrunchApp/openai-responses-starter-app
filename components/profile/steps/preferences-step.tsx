@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { ProfileData } from "../profile-wizard";
+import { UserProfile } from "@/app/types/profile-schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,8 @@ import { Slider } from "@/components/ui/slider";
 import { X, Plus } from "lucide-react";
 
 interface PreferencesStepProps {
-  profileData: ProfileData;
-  setProfileData: React.Dispatch<React.SetStateAction<ProfileData>>;
+  profileData: UserProfile;
+  setProfileData: React.Dispatch<React.SetStateAction<UserProfile>>;
 }
 
 export default function PreferencesStep({

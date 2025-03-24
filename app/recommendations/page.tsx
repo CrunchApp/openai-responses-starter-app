@@ -167,43 +167,6 @@ export default function RecommendationsPage() {
           }));
           
           setRecommendations(recommendationsWithFavorites);
-          
-          // If we don't have a user profile in the store, create one from the recommendation
-          if (!userProfile && cachedUserProfile) {
-            setUserProfile(cachedUserProfile);
-          } else if (!userProfile && result.recommendations[0]) {
-            // Create a minimal profile from the first recommendation
-            const firstRec = result.recommendations[0];
-            setUserProfile({
-              firstName: "User", // Generic placeholder
-              lastName: "",
-              email: "",
-              goal: firstRec.degreeType,
-              desiredField: firstRec.fieldOfStudy,
-              education: [{
-                degreeLevel: "Bachelor's",
-                institution: "Previous Institution",
-                fieldOfStudy: firstRec.fieldOfStudy,
-                graduationYear: "2023"
-              }],
-              careerGoals: {
-                shortTerm: "Advance in " + firstRec.fieldOfStudy,
-                longTerm: "Become a leader in " + firstRec.fieldOfStudy,
-                desiredIndustry: [firstRec.fieldOfStudy],
-                desiredRoles: ["Professional in " + firstRec.fieldOfStudy]
-              },
-              skills: [],
-              preferences: {
-                preferredLocations: [firstRec.location.split(',')[firstRec.location.split(',').length - 1].trim()],
-                studyMode: "Full-time",
-                startDate: firstRec.startDate,
-                budgetRange: {
-                  min: Math.max(10000, firstRec.costPerYear - 10000),
-                  max: firstRec.costPerYear + 10000
-                }
-              }
-            });
-          }
         } else {
           // If no recommendations, set an error message
           setError("No recommendations found that match your profile");

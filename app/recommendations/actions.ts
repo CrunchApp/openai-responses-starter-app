@@ -1,6 +1,6 @@
 'use server';
 
-import { RecommendationProgram } from './types';
+import { RecommendationProgram, UserProfile } from './types';
 
 // API URL from environment variables with fallback
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -8,7 +8,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 /**
  * Server action to generate recommendations based on the user's profile
  */
-export async function generateRecommendations(vectorStoreId: string, cachedUserProfile?: any): Promise<{
+export async function generateRecommendations(
+  vectorStoreId: string, 
+  cachedUserProfile?: UserProfile
+): Promise<{
   recommendations: RecommendationProgram[];
   error?: string;
 }> {
@@ -49,7 +52,7 @@ export async function generateRecommendations(vectorStoreId: string, cachedUserP
             if (fileData.content) {
               // Parse the JSON content
               try {
-                userProfile = JSON.parse(fileData.content);
+                userProfile = JSON.parse(fileData.content) as UserProfile;
                 break;
               } catch (error) {
                 console.error('Error parsing user profile JSON:', error);

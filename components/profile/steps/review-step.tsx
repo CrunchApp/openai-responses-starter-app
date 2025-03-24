@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { ProfileData } from "../profile-wizard";
+import { UserProfile } from "@/app/types/profile-schema";
 import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -16,8 +16,8 @@ import useProfileStore from "@/stores/useProfileStore";
 import useRecommendationsStore from "@/stores/useRecommendationsStore";
 
 interface ReviewStepProps {
-  profileData: ProfileData;
-  setProfileData: React.Dispatch<React.SetStateAction<ProfileData>>;
+  profileData: UserProfile;
+  setProfileData: React.Dispatch<React.SetStateAction<UserProfile>>;
   onComplete: () => void;
   isEditMode?: boolean;
 }

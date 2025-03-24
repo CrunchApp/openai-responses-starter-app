@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { ProfileDataSchema } from '@/app/types/profile-schema';
+import { ProfileSchema } from '@/app/types/profile-schema';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     // Validate the extracted profile against our schema
     const preprocessedProfile = preprocessProfileData(extractedProfile);
-    const validationResult = ProfileDataSchema.safeParse(preprocessedProfile);
+    const validationResult = ProfileSchema.safeParse(preprocessedProfile);
     
     if (!validationResult.success) {
       console.error('Validation error:', validationResult.error);

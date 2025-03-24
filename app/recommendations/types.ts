@@ -1,6 +1,10 @@
 /**
  * Types for the recommendation engine and UI
  */
+import { UserProfile } from "@/app/types/profile-schema";
+
+// Re-export for convenience
+export type { UserProfile };
 
 /**
  * Represents a single educational program recommendation
@@ -32,64 +36,4 @@ export interface RecommendationProgram {
     amount: string;
     eligibility: string;
   }[];
-}
-
-/**
- * Unified user profile information used throughout the application
- * This encompasses the data structure used in profile creation and recommendation generation
- */
-export interface UserProfile {
-  // Personal information
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  preferredName?: string;
-  linkedInProfile?: string | null;
-  
-  // For UI display purposes
-  goal?: string;
-  desiredField?: string;
-  
-  // Educational background
-  education: Array<{
-    degreeLevel: string;
-    institution: string;
-    fieldOfStudy: string;
-    graduationYear: string;
-    gpa?: string | null;
-  }>;
-  
-  // Career aspirations
-  careerGoals: {
-    shortTerm: string;
-    longTerm: string;
-    desiredIndustry: string[];
-    desiredRoles: string[];
-  };
-  
-  // Skills and competencies
-  skills: string[];
-  
-  // Program preferences
-  preferences: {
-    preferredLocations: string[];
-    studyMode: string;
-    startDate: string;
-    budgetRange: {
-      min: number;
-      max: number;
-    };
-  };
-  
-  // Documents uploaded by the user
-  documents?: {
-    resume?: string | null;
-    transcripts?: string | null;
-    statementOfPurpose?: string | null;
-    otherDocuments?: string[] | null;
-  };
-  
-  // For integration with the vector store
-  vectorStoreId?: string;
 } 

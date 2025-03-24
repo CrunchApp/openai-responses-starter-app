@@ -15,7 +15,7 @@ const EducationSchema = z.object({
   institution: z.string(),
   fieldOfStudy: z.string(),
   graduationYear: z.string(),
-  gpa: z.string().nullable(),
+  gpa: z.string().nullable().optional(),
 });
 
 // Define career goals schema
@@ -39,23 +39,27 @@ const PreferencesSchema = z.object({
 
 // Define documents schema
 const DocumentsSchema = z.object({
-  resume: z.string().nullable(),
-  transcripts: z.string().nullable(),
-  statementOfPurpose: z.string().nullable(),
-  otherDocuments: z.array(z.string()).nullable(),
-});
+  resume: z.string().nullable().optional(),
+  transcripts: z.string().nullable().optional(),
+  statementOfPurpose: z.string().nullable().optional(),
+  otherDocuments: z.array(z.string()).nullable().optional(),
+}).optional();
 
-// Define complete profile data schema
-export const ProfileDataSchema = z.object({
+// Define complete unified profile schema
+export const ProfileSchema = z.object({
   // Personal information
   firstName: z.string(),
   lastName: z.string(),
   email: z.string(),
-  phone: z.string(),
-  preferredName: z.string(),
+  phone: z.string().optional().default(""),
+  preferredName: z.string().optional().default(""),
   
   // LinkedIn profile
-  linkedInProfile: z.string().optional(),
+  linkedInProfile: z.string().optional().nullable().default(""),
+  
+  // For UI display purposes
+  goal: z.string().optional(),
+  desiredField: z.string().optional(),
   
   // Education, career, and skills
   education: z.array(EducationSchema),
@@ -64,11 +68,11 @@ export const ProfileDataSchema = z.object({
   
   // Preferences and documents
   preferences: PreferencesSchema,
-  documents: DocumentsSchema,
+  documents: DocumentsSchema.optional().default({}),
   
   // Vector store ID
   vectorStoreId: z.string().optional(),
 });
 
-// Export type
-export type ProfileData = z.infer<typeof ProfileDataSchema>; 
+// Export a single unified type to be used throughout the application
+export type UserProfile = z.infer<typeof ProfileSchema>; 

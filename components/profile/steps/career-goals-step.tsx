@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { ProfileData } from "../profile-wizard";
+import { UserProfile } from "@/app/types/profile-schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,8 +8,8 @@ import { X, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface CareerGoalsStepProps {
-  profileData: ProfileData;
-  setProfileData: React.Dispatch<React.SetStateAction<ProfileData>>;
+  profileData: UserProfile;
+  setProfileData: React.Dispatch<React.SetStateAction<UserProfile>>;
 }
 
 export default function CareerGoalsStep({

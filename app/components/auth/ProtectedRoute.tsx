@@ -11,6 +11,7 @@ interface ProtectedRouteProps {
 // Define public routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/',
+  '/profile-wizard',  // Allow onboarding flow
   '/profile', 
   '/recommendations', 
   '/chat',
@@ -29,11 +30,19 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     // Only redirect once the auth is initialized (not in loading state)
     if (!loading) {
       // Check if current path is a public route
-      const isPublicRoute = PUBLIC_ROUTES.some(route => pathname?.startsWith(route))
+      const isPublicRoute = PUBLIC_ROUTES.some(route => 
+        pathname === route || pathname?.startsWith(`${route}/`)
+      )
       
-      // If not a public route and no user, redirect to login
+      // Let the middleware handle protected routes for server-side redirects
+      // Only handle client-side redirects for routes that need special handling
       if (!isPublicRoute && !user) {
         router.push('/auth/login')
+      }
+      
+      // If user is logged in and trying to access login/signup pages, redirect to dashboard
+      if (user && (pathname?.startsWith('/auth/login') || pathname?.startsWith('/auth/signup'))) {
+        router.push('/dashboard')
       }
     }
   }, [user, loading, router, pathname])
@@ -50,7 +59,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Allow access to the route if:
   // 1. It's a public route, or
   // 2. User is authenticated
-  const hasAccess = PUBLIC_ROUTES.some(route => pathname?.startsWith(route)) || !!user
+  const hasAccess = PUBLIC_ROUTES.some(route => 
+    pathname === route || pathname?.startsWith(`${route}/`)
+  ) || !!user
   
   return hasAccess ? <>{children}</> : null
 } 

@@ -99,7 +99,7 @@ export default function ProfileDashboard() {
             You haven't created a profile yet. Create one to receive personalized education recommendations.
           </p>
           <Button 
-            onClick={() => router.push('/profile')}
+            onClick={() => router.push('/profile-wizard')}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             Create Profile
@@ -113,9 +113,9 @@ export default function ProfileDashboard() {
     <div className="space-y-6 max-w-4xl mx-auto p-6">
       <div className="flex justify-between items-center mb-4">
         <div>
-          <Link href="/chat" className="flex items-center text-blue-600 hover:text-blue-800 mb-4">
+          <Link href="/dashboard" className="flex items-center text-blue-600 hover:text-blue-800 mb-4">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            <span className="text-sm">Back to Chat</span>
+            <span className="text-sm">Back to Dashboard</span>
           </Link>
           <motion.h1
             initial={{ opacity: 0, y: 10 }}
@@ -129,7 +129,7 @@ export default function ProfileDashboard() {
             View and manage your education profile information
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => router.push("/profile?edit=true")}>
+        <Button variant="outline" size="sm" onClick={() => router.push("/profile-wizard?edit=true")}>
             <Edit className="w-4 h-4 mr-2" />
             Edit Profile
         </Button>

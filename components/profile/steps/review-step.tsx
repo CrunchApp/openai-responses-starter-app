@@ -14,11 +14,12 @@ import {
 } from "@/components/ui/accordion";
 import useProfileStore from "@/stores/useProfileStore";
 import useRecommendationsStore from "@/stores/useRecommendationsStore";
+import SignupModal from "@/app/auth/SignupModal";
 
 interface ReviewStepProps {
   profileData: UserProfile;
   setProfileData: React.Dispatch<React.SetStateAction<UserProfile>>;
-  onComplete: () => void;
+  onComplete: (userId?: string) => Promise<void> | void;
   isEditMode?: boolean;
 }
 
@@ -30,6 +31,7 @@ export default function ReviewStep({
 }: ReviewStepProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedSection, setExpandedSection] = useState("personal");
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const router = useRouter();
   
   // Use our stores
@@ -53,173 +55,35 @@ export default function ReviewStep({
 
   const handleCompleteProfile = async () => {
     try {
-      setIsSubmitting(true);
-      
-      // Get the vector store ID from localStorage (created during welcome step)
-      const vectorStoreId = localStorage.getItem('userVectorStoreId');
-      
-      if (!vectorStoreId) {
-        throw new Error("Vector store not found. Please restart the profile setup.");
-      }
-      
-      // Store the profile data directly in localStorage for faster access
-      localStorage.setItem('userProfileData', JSON.stringify(profileData));
-      
-      // Save to our recommendation store for use in recommendation page
-      setUserProfile({
-        firstName: profileData.firstName,
-        lastName: profileData.lastName,
-        email: profileData.email,
-        phone: profileData.phone,
-        preferredName: profileData.preferredName,
-        linkedInProfile: profileData.linkedInProfile,
-        goal: profileData.education?.[0]?.degreeLevel || "Master's",
-        desiredField: profileData.education?.[0]?.fieldOfStudy,
-        education: profileData.education.map(edu => ({
-          degreeLevel: edu.degreeLevel,
-          institution: edu.institution,
-          fieldOfStudy: edu.fieldOfStudy,
-          graduationYear: edu.graduationYear,
-          gpa: edu.gpa || null
-        })),
-        careerGoals: {
-          shortTerm: profileData.careerGoals.shortTerm,
-          longTerm: profileData.careerGoals.longTerm,
-          desiredIndustry: profileData.careerGoals.desiredIndustry,
-          desiredRoles: profileData.careerGoals.desiredRoles
-        },
-        skills: profileData.skills,
-        preferences: {
-          preferredLocations: profileData.preferences.preferredLocations,
-          studyMode: profileData.preferences.studyMode,
-          startDate: profileData.preferences.startDate,
-          budgetRange: {
-            min: profileData.preferences.budgetRange.min,
-            max: profileData.preferences.budgetRange.max
-          }
-        },
-        documents: {
-          resume: profileData.documents.resume || null,
-          transcripts: profileData.documents.transcripts || null,
-          statementOfPurpose: profileData.documents.statementOfPurpose || null,
-          otherDocuments: profileData.documents.otherDocuments || null
-        },
-        vectorStoreId
-      });
-      
-      // If in edit mode, delete the existing profile JSON file first
+      // If in edit mode, directly call onComplete without showing the signup modal
       if (isEditMode) {
-        // Get the stored file ID for the profile JSON
-        const profileFileId = localStorage.getItem('userProfileFileId');
-        
-        if (profileFileId) {
-          console.log("Deleting existing profile file with ID:", profileFileId);
-          
-          // Delete the file using the delete_file API route
-          const deleteResponse = await fetch(`/api/vector_stores/delete_file?file_id=${profileFileId}`, {
-            method: "DELETE"
-          });
-          
-          if (!deleteResponse.ok) {
-            console.warn("Failed to delete existing profile file. Will create a new one anyway.");
-          } else {
-            console.log("Successfully deleted existing profile file");
-          }
-        }
-      }
-      
-      // Create a JSON file with all profile data
-      const profileJson = JSON.stringify(profileData, null, 2);
-      const profileBlob = new Blob([profileJson], { type: "application/json" });
-      const base64Content = await blobToBase64(profileBlob);
-      
-      // Upload profile data as a JSON file
-      const fileObject = {
-        name: "user_profile.json",
-        content: base64Content,
-      };
-      
-      const uploadResponse = await fetch("/api/vector_stores/upload_file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileObject,
-        }),
-      });
-      
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload profile data");
-      }
-      
-      const uploadData = await uploadResponse.json();
-      const fileId = uploadData.id;
-      
-      // Store the file ID in localStorage for future edits
-      localStorage.setItem('userProfileFileId', fileId);
-      
-      // Add the file to the vector store
-      const addFileResponse = await fetch("/api/vector_stores/add_file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileId,
-          vectorStoreId,
-        }),
-      });
-      
-      if (!addFileResponse.ok) {
-        throw new Error("Failed to add file to vector store");
-      }
-      
-      // Make sure the profile data has the vector store ID
-      if (!profileData.vectorStoreId) {
-        setProfileData(prev => ({
-          ...prev,
-          vectorStoreId
-        }));
-      }
-      
-      // Update our stores
-      setVectorStoreId(vectorStoreId);
-      setProfileComplete(true);
-      
-      // Store the vector store in global state for the AI assistant to use
-      setVectorStore({
-        id: vectorStoreId,
-        name: `${profileData.firstName} ${profileData.lastName}'s Profile`,
-      });
-      
-      // Enable file search to use the vector store
-      setFileSearchEnabled(true);
-      
-      // If in edit mode, redirect directly to recommendations page
-      if (isEditMode) {
-        router.push("/dashboard");
+        await onComplete();
       } else {
-        // Complete the profile setup with animation
-        onComplete();
+        // Only show the signup modal for first-time profile creation
+        setIsSignupModalOpen(true);
       }
     } catch (error) {
-      console.error("Error completing profile:", error);
+      console.error("Error in handleCompleteProfile:", error);
+      alert("There was an error completing your profile. Please try again.");
+    }
+  };
+
+  // Function to handle signup completion (both successful signup and skip)
+  const handleSignupComplete = async (userId?: string) => {
+    try {
+      setIsSubmitting(true);
+      
+      // Close the modal
+      setIsSignupModalOpen(false);
+      
+      // Call the onComplete handler with the userId (if provided)
+      await onComplete(userId);
+    } catch (error) {
+      console.error("Error completing profile after signup:", error);
       alert("There was an error completing your profile. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  };
-  
-  // Helper function to convert Blob to Base64
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:application/json;base64,")
-        const base64Content = base64String.split(',')[1];
-        resolve(base64Content);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
   };
 
   // Calculate profile completion percentage
@@ -717,10 +581,14 @@ export default function ReviewStep({
               <Award className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-2">Ready to Complete Your Profile</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                {isEditMode ? "Ready to Update Your Profile" : "Ready to Complete Your Profile"}
+              </h3>
               <p className="text-white/80 text-sm mb-4">
-                Your information will be used to create personalized educational recommendations.
-                Click the button below to finalize your profile and access your AI Education Adviser.
+                {isEditMode 
+                  ? "Your updated information will be used to refine your educational recommendations."
+                  : "Your information will be used to create personalized educational recommendations. Click the button below to finalize your profile and access your AI Education Adviser."
+                }
               </p>
               
               <div className="flex justify-end mt-4">
@@ -739,7 +607,7 @@ export default function ReviewStep({
                     </>
                   ) : (
                     <>
-                      Complete Profile
+                      {isEditMode ? "Update Profile" : "Complete Profile"}
                       <ChevronRight className="h-5 w-5" />
                     </>
                   )}
@@ -749,6 +617,14 @@ export default function ReviewStep({
           </div>
         </div>
       </motion.div>
+
+      {/* Signup Modal */}
+      <SignupModal 
+        isOpen={isSignupModalOpen}
+        onClose={() => setIsSignupModalOpen(false)}
+        onComplete={handleSignupComplete}
+        isLoading={isSubmitting}
+      />
     </div>
   );
 } 

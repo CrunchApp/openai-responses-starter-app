@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const redirectTo = searchParams.get('redirectTo') || '/'
     
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     
     // Generate Google OAuth URL
     const { data, error } = await supabase.auth.signInWithOAuth({

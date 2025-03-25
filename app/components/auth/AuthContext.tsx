@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { createBrowserClient } from '@supabase/ssr'
+import { useRouter } from 'next/navigation'
 import { Database } from '@/lib/database.types'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -22,7 +23,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Create a single supabase instance to use throughout the component
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -38,6 +46,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error fetching profile:', error)
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found for user, creating a default profile')
+          
+          // Get user metadata
+          const { data: userData } = await supabase.auth.getUser()
+          const userMeta = userData?.user?.user_metadata
+
+          // Create a basic profile for the user
+          const { data: newProfile, error: insertError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: userId,
+              first_name: userMeta?.first_name || '',
+              last_name: userMeta?.last_name || '',
+              email: userData?.user?.email || '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select('*')
+            .single()
+            
+          if (insertError) {
+            console.error('Error creating profile:', insertError)
+            return null
+          }
+          
+          return newProfile
+        }
         return null
       }
 
@@ -50,29 +86,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check for user session on mount
   useEffect(() => {
+    let isMounted = true;
+    
     async function getInitialSession() {
       try {
-        setLoading(true)
-        
         // Get current session
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error) {
-          throw error
+          console.error('Session error:', error)
+          if (isMounted) {
+            setError('Failed to load user session')
+            setLoading(false)
+          }
+          return
         }
         
         if (session?.user) {
-          setUser(session.user)
+          if (isMounted) setUser(session.user)
           
           // Fetch user profile
           const profileData = await fetchProfile(session.user.id)
-          setProfile(profileData)
+          if (isMounted) setProfile(profileData)
         }
       } catch (error) {
         console.error('Error getting initial session:', error)
-        setError('Failed to load user session')
+        if (isMounted) setError('Failed to load user session')
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
@@ -83,18 +124,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log(`Auth state changed: ${event}`)
       
       if (session?.user) {
-        setUser(session.user)
+        if (isMounted) setUser(session.user)
+        
         const profileData = await fetchProfile(session.user.id)
-        setProfile(profileData)
+        if (isMounted) setProfile(profileData)
       } else {
-        setUser(null)
-        setProfile(null)
+        if (isMounted) {
+          setUser(null)
+          setProfile(null)
+        }
       }
       
-      setLoading(false)
+      if (isMounted) setLoading(false)
     })
 
     return () => {
+      isMounted = false;
       // Clean up subscription
       authListener.subscription.unsubscribe()
     }
@@ -152,6 +197,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
       
+      // Redirect to dashboard after successful login
+      if (data?.user) {
+        router.push('/dashboard')
+      }
+      
       return data
     } catch (error) {
       console.error('Error signing in:', error)
@@ -181,6 +231,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       setUser(null)
       setProfile(null)
+      
+      // Redirect to homepage after logout
+      router.push('/')
     } catch (error) {
       console.error('Error signing out:', error)
       if (error instanceof Error) {

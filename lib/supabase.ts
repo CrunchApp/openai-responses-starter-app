@@ -7,7 +7,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 // Create a single supabase client for client-side usage
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-// Function to create a server-side supabase client for API routes
+// Legacy function for backwards compatibility, use only in client components
 export function createServerSupabaseClient() {
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {

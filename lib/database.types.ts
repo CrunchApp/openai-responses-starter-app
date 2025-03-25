@@ -17,7 +17,15 @@ export interface Database {
           email: string | null
           phone: string | null
           preferred_name: string | null
-          linkedin_url: string | null
+          linkedin_profile: string | null
+          goal: string | null
+          desired_field: string | null
+          education: Json[] | null
+          career_goals: Json | null
+          skills: string[] | null
+          preferences: Json | null
+          documents: Json | null
+          vector_store_id: string | null
           created_at: string
           updated_at: string | null
         }
@@ -28,7 +36,15 @@ export interface Database {
           email?: string | null
           phone?: string | null
           preferred_name?: string | null
-          linkedin_url?: string | null
+          linkedin_profile?: string | null
+          goal?: string | null
+          desired_field?: string | null
+          education?: Json[] | null
+          career_goals?: Json | null
+          skills?: string[] | null
+          preferences?: Json | null
+          documents?: Json | null
+          vector_store_id?: string | null
           created_at?: string
           updated_at?: string | null
         }
@@ -39,7 +55,15 @@ export interface Database {
           email?: string | null
           phone?: string | null
           preferred_name?: string | null
-          linkedin_url?: string | null
+          linkedin_profile?: string | null
+          goal?: string | null
+          desired_field?: string | null
+          education?: Json[] | null
+          career_goals?: Json | null
+          skills?: string[] | null
+          preferences?: Json | null
+          documents?: Json | null
+          vector_store_id?: string | null
           created_at?: string
           updated_at?: string | null
         }

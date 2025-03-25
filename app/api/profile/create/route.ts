@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         email: profileData.email,
         phone: profileData.phone || null,
         preferred_name: profileData.preferredName || null,
-        linkedin_profile: profileData.linkedInProfile || null,
+        linkedin_profile: profileData.linkedInProfile || null, // Note: changed from linkedin_url
         goal: profileData.goal || null,
         desired_field: profileData.desiredField || null,
         

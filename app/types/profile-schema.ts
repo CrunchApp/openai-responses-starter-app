@@ -75,4 +75,6 @@ export const ProfileSchema = z.object({
 });
 
 // Export a single unified type to be used throughout the application
-export type UserProfile = z.infer<typeof ProfileSchema>; 
+export type UserProfile = z.infer<typeof ProfileSchema> & {
+  userId?: string;
+};

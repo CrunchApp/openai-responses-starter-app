@@ -259,7 +259,7 @@ export default function RecommendationsPage() {
       setProfileComplete(false);
       
       // Redirect to profile page
-      router.push('/profile');
+      router.push('/profile-wizard');
     } catch (error) {
       console.error('Error resetting profile:', error);
     } finally {

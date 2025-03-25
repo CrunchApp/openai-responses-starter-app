@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     
     // Get the user's session
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         last_name: profileData.lastName,
         phone: profileData.phone,
         preferred_name: profileData.preferredName,
-        linkedin_url: profileData.linkedinUrl,
+        linkedin_profile: profileData.linkedInProfile,
         updated_at: new Date().toISOString()
       })
       .eq('id', session.user.id)

@@ -20,6 +20,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import useToolsStore from "@/stores/useToolsStore";
 import { UserProfile, ProfileSchema } from "@/app/types/profile-schema";
 
+// Helper function to convert a Blob to a base64 string
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      // Remove the data URL prefix (e.g., "data:application/json;base64,")
+      const base64Content = base64.split(',')[1];
+      resolve(base64Content);
+    };
+    reader.onerror = () => reject(new Error('Failed to convert blob to base64'));
+    reader.readAsDataURL(blob);
+  });
+};
+
 // Define the degree level type for backward compatibility
 type DegreeLevel = "" | "High School" | "Associate's" | "Bachelor's" | "Master's" | "Doctorate" | "Certificate" | "Other";
 
@@ -253,29 +268,204 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     }
   };
 
-  const handleComplete = () => {
-    // Show completion message
-    setShowCompletionMessage(true);
-    
-    // Get vector store ID from localStorage
-    const vectorStoreId = localStorage.getItem('userVectorStoreId');
-    if (vectorStoreId) {
-      setVectorStoreId(vectorStoreId);
+  // New function to handle profile saving and completion
+  const saveAndCompleteProfile = async (isEditMode: boolean, userId?: string) => {
+    try {
+      // Get the vector store ID from localStorage (created during welcome step)
+      const vectorStoreId = localStorage.getItem('userVectorStoreId');
       
-      // Update the profile data with the vector store ID
+      if (!vectorStoreId) {
+        throw new Error("Vector store not found. Please restart the profile setup.");
+      }
+      
+      // Store the profile data directly in localStorage for faster access
+      localStorage.setItem('userProfileData', JSON.stringify(profileData));
+      
+      // If a userId is provided, save the profile to Supabase
+      if (userId) {
+        try {
+          const response = await fetch('/api/profile/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId,
+              profileData: {
+                ...profileData,
+                vectorStoreId
+              }
+            }),
+          });
+          
+          if (!response.ok) {
+            console.error('Error saving profile to Supabase:', await response.text());
+            // Continue with the local storage approach anyway
+          } else {
+            console.log('Profile saved to Supabase successfully');
+          }
+        } catch (error) {
+          console.error('Error saving profile to Supabase:', error);
+          // Continue with the local storage approach anyway
+        }
+      }
+      
+      // Save to our recommendation store for use in recommendation page
+      const { setUserProfile } = useRecommendationsStore.getState();
+      setUserProfile({
+        firstName: profileData.firstName,
+        lastName: profileData.lastName,
+        email: profileData.email,
+        phone: profileData.phone,
+        preferredName: profileData.preferredName,
+        linkedInProfile: profileData.linkedInProfile,
+        goal: profileData.education?.[0]?.degreeLevel || "Master's",
+        desiredField: profileData.education?.[0]?.fieldOfStudy,
+        education: profileData.education.map(edu => ({
+          degreeLevel: edu.degreeLevel,
+          institution: edu.institution,
+          fieldOfStudy: edu.fieldOfStudy,
+          graduationYear: edu.graduationYear,
+          gpa: edu.gpa || null
+        })),
+        careerGoals: {
+          shortTerm: profileData.careerGoals.shortTerm,
+          longTerm: profileData.careerGoals.longTerm,
+          desiredIndustry: profileData.careerGoals.desiredIndustry,
+          desiredRoles: profileData.careerGoals.desiredRoles
+        },
+        skills: profileData.skills,
+        preferences: {
+          preferredLocations: profileData.preferences.preferredLocations,
+          studyMode: profileData.preferences.studyMode,
+          startDate: profileData.preferences.startDate,
+          budgetRange: {
+            min: profileData.preferences.budgetRange.min,
+            max: profileData.preferences.budgetRange.max
+          }
+        },
+        documents: {
+          resume: profileData.documents.resume || null,
+          transcripts: profileData.documents.transcripts || null,
+          statementOfPurpose: profileData.documents.statementOfPurpose || null,
+          otherDocuments: profileData.documents.otherDocuments || null
+        },
+        vectorStoreId,
+        userId
+      });
+      
+      // If in edit mode, delete the existing profile JSON file first
+      if (isEditMode) {
+        // Get the stored file ID for the profile JSON
+        const profileFileId = localStorage.getItem('userProfileFileId');
+        
+        if (profileFileId) {
+          console.log("Deleting existing profile file with ID:", profileFileId);
+          
+          // Delete the file using the delete_file API route
+          const deleteResponse = await fetch(`/api/vector_stores/delete_file?file_id=${profileFileId}`, {
+            method: "DELETE"
+          });
+          
+          if (!deleteResponse.ok) {
+            console.warn("Failed to delete existing profile file. Will create a new one anyway.");
+          } else {
+            console.log("Successfully deleted existing profile file");
+          }
+        }
+      }
+      
+      // Create a JSON file with all profile data
+      const profileJson = JSON.stringify(profileData, null, 2);
+      const profileBlob = new Blob([profileJson], { type: "application/json" });
+      const base64Content = await blobToBase64(profileBlob);
+      
+      // Upload profile data as a JSON file
+      const fileObject = {
+        name: "user_profile.json",
+        content: base64Content,
+      };
+      
+      const uploadResponse = await fetch("/api/vector_stores/upload_file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileObject,
+        }),
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload profile data");
+      }
+      
+      const uploadData = await uploadResponse.json();
+      const fileId = uploadData.id;
+      
+      // Store the file ID in localStorage for future edits
+      localStorage.setItem('userProfileFileId', fileId);
+      
+      // Add the file to the vector store
+      const addFileResponse = await fetch("/api/vector_stores/add_file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId,
+          vectorStoreId,
+        }),
+      });
+      
+      if (!addFileResponse.ok) {
+        throw new Error("Failed to add file to vector store");
+      }
+      
+      // Update our stores
+      setVectorStoreId(vectorStoreId);
+      setProfileComplete(true);
+      
+      // Store the vector store in global state for the AI assistant to use
+      const { setVectorStore, setFileSearchEnabled } = useToolsStore.getState();
+      setVectorStore({
+        id: vectorStoreId,
+        name: `${profileData.firstName} ${profileData.lastName}'s Profile`,
+      });
+      
+      // Enable file search to use the vector store
+      setFileSearchEnabled(true);
+      
+      // Make sure the profile data has the vector store ID
       handleProfileDataChange(prev => ({
         ...prev,
         vectorStoreId
       }));
+      
+      return vectorStoreId;
+    } catch (error) {
+      console.error("Error completing profile:", error);
+      throw error;
     }
-    
-    // Mark profile as complete
-    setProfileComplete(true);
+  };
+
+  const handleComplete = async (userId?: string) => {
+    try {
+      // Save and complete the profile
+      await saveAndCompleteProfile(isEditMode, userId);
+      
+      // Show completion message for non-edit mode
+      if (!isEditMode) {
+        setShowCompletionMessage(true);
     
     // Redirect to dashboard after a delay
     setTimeout(() => {
       router.push("/dashboard");
     }, 2000);
+      } else {
+        // In edit mode, redirect immediately
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Error in handleComplete:", error);
+      alert("There was an error completing your profile. Please try again.");
+    }
   };
 
   // Add a reset function

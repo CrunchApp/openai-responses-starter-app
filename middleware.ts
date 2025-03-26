@@ -10,6 +10,18 @@ const PUBLIC_ROUTES = [
   '/chat', // Public chat
 ]
 
+// Define public API routes needed for onboarding
+const PUBLIC_API_ROUTES = [
+  '/api/vector_stores/create_store',
+  '/api/vector_stores/upload_file',
+  '/api/vector_stores/add_file',
+  '/api/vector_stores/delete_file',
+  '/api/vector_stores/cleanup',
+  '/api/profile/create',
+  '/api/profile/extract-from-documents',
+  '/api/auth/linkedin-profile'
+]
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -51,15 +63,30 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith(`${route}/`)
   )
 
-  if (
-    !user &&
-    !isPublicRoute &&
-    !request.nextUrl.pathname.startsWith('/auth/login') &&
-    !request.nextUrl.pathname.startsWith('/auth') &&
-    !request.nextUrl.pathname.startsWith('/_next') &&
-    !request.nextUrl.pathname.startsWith('/api/auth/callback')
-  ) {
-    // no user, redirect to login page
+  // Check if the current path is a public API route
+  const isPublicApiRoute = PUBLIC_API_ROUTES.some(route => 
+    request.nextUrl.pathname === route || 
+    request.nextUrl.pathname.startsWith(`${route}/`)
+  )
+
+  // Check if this is any API route
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
+
+  if (!user && !isPublicRoute && !isPublicApiRoute && 
+      !request.nextUrl.pathname.startsWith('/auth/login') &&
+      !request.nextUrl.pathname.startsWith('/auth') &&
+      !request.nextUrl.pathname.startsWith('/_next') &&
+      !request.nextUrl.pathname.startsWith('/api/auth/callback')) {
+    
+    // Handle API routes differently - return JSON error instead of redirecting
+    if (isApiRoute) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Authentication required.' },
+        { status: 401 }
+      )
+    }
+    
+    // For non-API routes, redirect to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)

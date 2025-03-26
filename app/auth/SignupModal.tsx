@@ -1,6 +1,6 @@
 // components/auth/SignupModal.tsx
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,15 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/app/components/auth/AuthContext";
+import { UserProfile } from "@/app/types/profile-schema";
 
 interface SignupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: (userId?: string) => Promise<void>;
   isLoading: boolean;
+  profileData: UserProfile;
 }
 
-export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: SignupModalProps) {
+export default function SignupModal({ isOpen, onClose, onComplete, isLoading, profileData }: SignupModalProps) {
   const { signUp, error: authError } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -25,6 +27,15 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: 
   const [confirmPassword, setConfirmPassword] = useState("");
   const [signupError, setSignupError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pre-populate form with profile data when the modal opens
+  useEffect(() => {
+    if (isOpen && profileData) {
+      setFirstName(profileData.firstName || "");
+      setLastName(profileData.lastName || "");
+      setEmail(profileData.email || "");
+    }
+  }, [isOpen, profileData]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +82,7 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: 
         
         <div className="py-4">
           <p className="text-sm text-zinc-500 mb-4">
-            Create an account to save your profile and access personalized recommendations anytime.
+            We've pre-filled your information. Just choose a password to create your account and save your profile.
           </p>
           
           {signupError && (
@@ -89,6 +100,8 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: 
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 required
+                readOnly
+                className="bg-gray-50"
               />
             </div>
             
@@ -99,6 +112,8 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: 
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
+                readOnly
+                className="bg-gray-50"
               />
             </div>
             
@@ -110,6 +125,8 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                readOnly
+                className="bg-gray-50"
               />
             </div>
             
@@ -121,6 +138,7 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading }: 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoFocus
               />
             </div>
             

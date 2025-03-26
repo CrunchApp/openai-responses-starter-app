@@ -624,6 +624,7 @@ export default function ReviewStep({
         onClose={() => setIsSignupModalOpen(false)}
         onComplete={handleSignupComplete}
         isLoading={isSubmitting}
+        profileData={profileData}
       />
     </div>
   );

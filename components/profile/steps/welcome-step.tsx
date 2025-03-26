@@ -32,8 +32,16 @@ export default function WelcomeStep({
         body: JSON.stringify({ name: `${name}_VectorStore` }),
       });
       
+      // Check for non-JSON responses that might indicate a redirection or HTML error page
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(`API returned non-JSON response (${response.status}: ${response.statusText}). This may indicate an authentication issue.`);
+      }
+      
       if (!response.ok) {
-        throw new Error(`Failed to create vector store: ${response.statusText}`);
+        const errorData = await response.json().catch(() => null);
+        const errorMessage = errorData?.error || `Failed to create vector store: ${response.statusText}`;
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();

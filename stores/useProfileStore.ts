@@ -54,11 +54,14 @@ interface ProfileState {
   
   // Reset state
   resetProfile: () => void;
+  
+  // New Clear Action
+  clearStore: () => void;
 }
 
 const useProfileStore = create<ProfileState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       profileData: null,
       isProfileComplete: false,
       currentStep: 0,
@@ -98,6 +101,17 @@ const useProfileStore = create<ProfileState>()(
         vectorStoreId: null,
         hydrated: true
       }),
+      
+      // New Clear Action
+      clearStore: () => {
+        set({
+          profileData: null,
+          currentStep: 0,
+          completedSteps: [0],
+          isProfileComplete: false,
+          vectorStoreId: null,
+        });
+      },
     }),
     {
       name: "vista-profile-storage",

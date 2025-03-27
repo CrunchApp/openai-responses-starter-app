@@ -66,8 +66,7 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading, pr
 
   const handleSkip = async () => {
     try {
-      setIsSubmitting(true);
-      await onComplete(); // No user ID means skipped
+      await onComplete();
     } catch (error) {
       console.error("Error skipping signup:", error);
     }

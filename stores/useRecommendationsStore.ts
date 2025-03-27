@@ -36,6 +36,9 @@ interface RecommendationsState {
   // Reset state
   clearRecommendations: () => void;
   resetState: () => void;
+  
+  // New Clear Action
+  clearStore: () => void;
 }
 
 // Default initial state for the store
@@ -122,7 +125,17 @@ const useRecommendationsStore = create<RecommendationsState>()(
         lastGeneratedAt: null
       }),
       
-      resetState: () => set(initialState),
+      resetState: () => set({ userProfile: null, recommendations: [], isLoading: false, error: null }),
+      
+      // New Clear Action
+      clearStore: () => {
+        set({
+          userProfile: null,
+          recommendations: [],
+          isLoading: false,
+          error: null,
+        });
+      },
     }),
     {
       name: "vista-recommendations-storage",

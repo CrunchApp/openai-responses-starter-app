@@ -5,36 +5,33 @@ export async function GET() {
   try {
     const supabase = await createClient()
     
-    // Get the current session
-    const { data: { session }, error } = await supabase.auth.getSession()
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
-    
-    if (!session) {
+    // Use getUser() to securely get the authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError) {
+      // Log the error but return a standard unauthenticated response
+      console.error('Session user fetch error:', userError.message)
       return NextResponse.json({ user: null }, { status: 200 })
     }
     
-    // Get the user profile data
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single()
-    
-    if (profileError) {
-      console.error('Error fetching profile:', profileError)
+    if (!user) {
+      return NextResponse.json({ user: null }, { status: 200 })
     }
     
+    // Return only the authenticated user object (or necessary parts)
+    // Avoid returning sensitive details if not needed client-side
     return NextResponse.json({ 
-      user: session.user,
-      profile: profile || null
+      user: {
+        id: user.id,
+        email: user.email,
+        // Add other non-sensitive fields if required by the client
+      } 
     })
+    
   } catch (error) {
-    console.error('Session error:', error)
+    console.error('Session route error:', error)
     return NextResponse.json(
-      { error: 'An unexpected error occurred' },
+      { error: 'An unexpected error occurred while checking session' },
       { status: 500 }
     )
   }

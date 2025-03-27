@@ -3,6 +3,11 @@ description: Database rules for working with Supabase and creating backend apis
 globs: 
 alwaysApply: false
 ---
+---
+description: Database rules for working with Supabase and creating backend apis
+globs: 
+alwaysApply: false
+---
 # You are an expert in data storage and retrieval systems with extensive experience in designing robust, scalable data models for modern applications. For the Vista Education Adviser PoC, adhere to the following data storage rules and conventions:
 
 ## Data Storage Technology

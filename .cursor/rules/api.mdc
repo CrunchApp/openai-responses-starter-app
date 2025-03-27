@@ -8,6 +8,7 @@ description: Guidelines for Backend API Architecture and Development Guidelines 
 globs: 
 alwaysApply: false
 ---
+
 # Vista Education Adviser – Backend API Architecture & Development Guidelines
 
 You are an expert TypeScript engineer specializing in building modern, type-safe APIs using Next.js API routes. Your expertise covers Next.js API routes for HTTP endpoints, Supabase, OpenAI Vector Store for data persistence, and TypeScript interfaces for type safety and validation. This document outlines the backend API architecture and provides development guidelines for the Vista Education Adviser PoC.

@@ -59,16 +59,21 @@ interface ProfileState {
   clearStore: () => void;
 }
 
+// Define the initial state structure for clarity
+const profileInitialState = {
+  profileData: null,
+  isProfileComplete: false,
+  currentStep: 0,
+  completedSteps: [0],
+  vectorStoreId: null,
+  hydrated: false,
+};
+
 const useProfileStore = create<ProfileState>()(
   persist(
     (set, get) => ({
-      profileData: null,
-      isProfileComplete: false,
-      currentStep: 0,
-      completedSteps: [0],
-      vectorStoreId: null,
-      hydrated: false,
-      
+      ...profileInitialState, // Initialize with the default state
+
       setHydrated: (state) => set({ hydrated: state }),
       
       setProfileData: (data) => set({ profileData: data }),
@@ -93,24 +98,21 @@ const useProfileStore = create<ProfileState>()(
       
       setVectorStoreId: (id) => set({ vectorStoreId: id }),
       
-      resetProfile: () => set({
-        profileData: null,
-        isProfileComplete: false,
-        currentStep: 0,
-        completedSteps: [0],
-        vectorStoreId: null,
-        hydrated: true
-      }),
+      resetProfile: () => set((state) => ({ // Keep resetProfile for potential specific use cases? Or remove if clearStore covers it.
+        ...profileInitialState, // Use initial state
+        hydrated: state.hydrated // Preserve hydration
+      })),
       
-      // New Clear Action
+      // Updated Clear Action
       clearStore: () => {
-        set({
-          profileData: null,
-          currentStep: 0,
-          completedSteps: [0],
-          isProfileComplete: false,
-          vectorStoreId: null,
-        });
+        set((state) => ({
+            ...profileInitialState, // Reset everything to initial defaults
+            hydrated: state.hydrated, // Preserve only hydration status
+        }));
+        // Explicitly remove potentially lingering localStorage items managed outside the store's persistence
+        localStorage.removeItem('userVectorStoreId');
+        localStorage.removeItem('userProfileFileId');
+        localStorage.removeItem('userProfileData'); // Remove guest profile data too
       },
     }),
     {
@@ -121,6 +123,9 @@ const useProfileStore = create<ProfileState>()(
           state.setHydrated(true);
         }
       },
+      // Partialize might be needed if sensitive data is ever added,
+      // but for now, clearing explicitly on logout is the primary fix.
+      // partialize: (state) => ({ ... }),
     }
   )
 );

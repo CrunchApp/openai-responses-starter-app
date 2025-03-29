@@ -463,6 +463,7 @@ export default function RecommendationsPage() {
                 )}
               </motion.div>
               
+              {(!isAuthenticated) && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
@@ -496,6 +497,7 @@ export default function RecommendationsPage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              )}
             </div>
             
             {/* Guest limit warning */}

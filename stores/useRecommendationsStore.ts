@@ -266,17 +266,16 @@ const useRecommendationsStore = create<RecommendationsState>()(
         recommendations: [],
         isLoading: false,
         error: null,
-        // Don't reset auth state
+        // Don't reset auth state or generation counts here
         isAuthenticated: state.isAuthenticated,
         userId: state.userId,
+        generationCount: state.generationCount,
+        hasReachedGuestLimit: state.hasReachedGuestLimit,
       })),
       
       clearStore: () => set((state) => ({
-        ...initialState,
-        // Preserve auth state and hydration state
-        isAuthenticated: state.isAuthenticated,
-        userId: state.userId,
-        hydrated: state.hydrated,
+        ...initialState, // Reset everything to initial defaults
+        hydrated: state.hydrated, // Preserve only hydration status
       })),
     }),
     {
@@ -289,15 +288,21 @@ const useRecommendationsStore = create<RecommendationsState>()(
       },
       // Only persist non-sensitive data
       partialize: (state) => ({
-        recommendations: state.recommendations,
-        favoritesIds: state.favoritesIds,
-        userProfile: state.userProfile,
+        // Only persist guest-relevant data or data needed for rehydration logic
+        // Recommendations and favorites should ideally be re-fetched for logged-in users
+        // Persisting guest profile makes sense, but should be cleared on login/logout explicitly
+        recommendations: state.isAuthenticated ? [] : state.recommendations, // Don't persist recommendations for logged-in users
+        favoritesIds: state.isAuthenticated ? [] : state.favoritesIds, // Don't persist favorites for logged-in users
+        userProfile: state.isAuthenticated ? null : state.userProfile, // Persist profile only for guests
         generationCount: state.generationCount,
         hasReachedGuestLimit: state.hasReachedGuestLimit,
         lastGeneratedAt: state.lastGeneratedAt,
+        // We need to persist auth state to know *if* we should clear on rehydrate
+        isAuthenticated: state.isAuthenticated,
+        userId: state.userId,
         // Don't persist loading states
-        isLoading: false,
-        error: null,
+        // isLoading: false, // Already excluded by default if not listed
+        // error: null, // Already excluded by default if not listed
       }),
     }
   )

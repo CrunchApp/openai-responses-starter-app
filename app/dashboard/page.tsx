@@ -65,7 +65,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500">
-                Update your personal information, education history, and preferences to get better recommendations.
+                Update your personal information, and preferences to get better recommendations.
               </p>
             </CardContent>
             <CardFooter>

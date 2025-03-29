@@ -659,10 +659,6 @@ export default function ProfileDashboard() {
     <div className="space-y-6 max-w-4xl mx-auto p-6">
       <div className="flex justify-between items-center mb-4">
         <div>
-          <Link href="/dashboard" className="flex items-center text-blue-600 hover:text-blue-800 mb-4">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            <span className="text-sm">Back to Dashboard</span>
-          </Link>
           <motion.h1
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

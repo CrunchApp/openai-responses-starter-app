@@ -62,6 +62,7 @@ import { RecommendationProgram } from "@/app/recommendations/types";
 import HydrationLoading from "@/components/ui/hydration-loading";
 import GuestLimitMonitor from "@/components/GuestLimitMonitor";
 import { useAuth } from "@/app/components/auth/AuthContext";
+import { PageWrapper } from "@/components/layouts/PageWrapper";
 
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
@@ -174,12 +175,6 @@ export default function RecommendationsPage() {
             
             setProfileComplete(true);
           }
-        } else if (!isProfileComplete && !vectorStoreId) {
-          // For guest users or users without a profile, redirect to profile wizard
-          console.log("No profile found, redirecting to wizard");
-          setIsInitializing(false);
-          router.push('/profile-wizard');
-          return;
         }
         
         // Enable file search if vector store exists
@@ -428,7 +423,7 @@ export default function RecommendationsPage() {
 
   // Add our guest limit monitor component
   return (
-    <>
+    <PageWrapper allowGuest>
       <GuestLimitMonitor />
       <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
         {isLoading ? (
@@ -985,6 +980,6 @@ export default function RecommendationsPage() {
           </div>
         )}
       </div>
-    </>
+    </PageWrapper>
   );
 } 

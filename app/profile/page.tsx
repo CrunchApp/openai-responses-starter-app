@@ -1,11 +1,14 @@
 "use client";
 import React from "react";
 import ProfileDashboard from "@/components/profile/ProfileDashboard";
+import { PageWrapper } from "@/components/layouts/PageWrapper";
 
-export default function DashboardPage() {
+export default function ProfilePage() {
   return (
-    <div className="container mx-auto py-8">
-      <ProfileDashboard />
-    </div>
+    <PageWrapper requireAuth>
+      <div className="container mx-auto py-8">
+        <ProfileDashboard />
+      </div>
+    </PageWrapper>
   );
 } 

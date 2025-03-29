@@ -33,7 +33,9 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { userProfile } = await request.json();
+    // Simplified request validation - only require userProfile
+    const requestData = await request.json();
+    const { userProfile } = requestData;
     
     if (!userProfile) {
       return NextResponse.json(
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Check for API timeouts - set a global timeout for the entire process
-    const MAX_EXECUTION_TIME = 150000; // 150 seconds - increased to allow for API processing
+    const MAX_EXECUTION_TIME = 2400000; // 240 seconds - increased to allow for API processing
     let isTimedOut = false;
     
     const timeoutId = setTimeout(() => {
@@ -122,9 +124,6 @@ async function generateEducationPathways(userProfile: UserProfile): Promise<any>
     const prompt = `
 You are an expert career and education pathway planner with deep knowledge of global educational systems, career trajectories, and non-traditional pathways. Your task is to analyze a user's profile and generate creative, tailored education pathway suggestions.
 
-USER PROFILE:
-${JSON.stringify(userProfile, null, 2)}
-
 SPECIFIC DETAILS TO CONSIDER:
 1. Educational Background:
    - Current education level: ${userProfile.education.map((edu) => `${edu.degreeLevel} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.graduationYear})`).join(', ')}
@@ -194,7 +193,7 @@ Think carefully about each suggestion and ensure they truly fit the user's uniqu
   
     // Use a powerful model with strong reasoning capabilities
     const completion = await openai.chat.completions.create({
-      model: "o1", // Using latest GPT-4o for best reasoning 
+      model: "gpt-4o-mini", 
       messages: [
         { role: "system", content: "You are an expert career and education pathway planner with decades of experience." },
         { role: "user", content: prompt }
@@ -238,7 +237,7 @@ async function researchSpecificPrograms(pathways: any, userProfile: UserProfile)
     console.log(`Processing ${limitedPathwaysArray.length} education pathways...`);
 
     // Set a timeout to prevent the function from running too long
-    const timeoutMs = 120000; // 120 seconds - increased to allow for API processing
+    const timeoutMs = 240000; // 240 seconds - increased to allow for API processing
     let hasTimedOut = false;
     
     // Create a timeout promise

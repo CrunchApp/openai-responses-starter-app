@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./components/auth/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import AuthSynchronizer from "@/components/AuthSynchronizer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
+          <AuthSynchronizer />
           <ProtectedRoute>
             {children}
           </ProtectedRoute>

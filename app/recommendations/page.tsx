@@ -18,7 +18,9 @@ import {
   User,
   AlertCircle,
   Trash2,
-  Loader2
+  Loader2,
+  Lock,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import useToolsStore from "@/stores/useToolsStore";
@@ -56,12 +58,16 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { generateRecommendations } from "./actions";
+import { RecommendationProgram } from "@/app/recommendations/types";
 import HydrationLoading from "@/components/ui/hydration-loading";
+import GuestLimitMonitor from "@/components/GuestLimitMonitor";
+import { useAuth } from "@/app/components/auth/AuthContext";
 
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
-  const { isProfileComplete, vectorStoreId } = useProfileStore();
+  const { isProfileComplete, vectorStoreId, setProfileComplete, setVectorStoreId } = useProfileStore();
   const router = useRouter();
+  const { user, profile, loading: authLoading } = useAuth();
   
   // Get state from our recommendations store
   const { 
@@ -70,6 +76,10 @@ export default function RecommendationsPage() {
     isLoading, 
     error: errorMessage, 
     favoritesIds,
+    isAuthenticated,
+    userId,
+    hasReachedGuestLimit,
+    generationCount,
     setRecommendations,
     setUserProfile,
     setLoading,
@@ -80,18 +90,20 @@ export default function RecommendationsPage() {
     
   // Local UI state
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
-  const [, setSelectedTab] = useState("recommendations");
-  const [, setFeedbackProgram] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState("recommendations");
+  const [feedbackProgram, setFeedbackProgram] = useState<string | null>(null);
+  
+  // For initialization and loading state
+  const [isInitializing, setIsInitializing] = useState(true);
   
   // Refs to track initialization status
   const initializedRef = useRef(false);
   const fetchingRef = useRef(false);
+  const profileCheckedRef = useRef(false);
 
   // Destructure the reset functions from the stores
   const { 
     resetProfile, 
-    setProfileComplete, 
-    setVectorStoreId 
   } = useProfileStore();
   
   const { 
@@ -102,36 +114,119 @@ export default function RecommendationsPage() {
   const [isResetting, setIsResetting] = useState(false);
 
   // Memoize the fetchRecommendations function to use in useEffect
-  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [vectorStore, favoritesIds, setRecommendations, setUserProfile, setLoading, setError, userProfile]);
+  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [vectorStore, favoritesIds, setRecommendations, setUserProfile, setLoading, setError, userProfile, isAuthenticated]);
 
-  // Redirect to profile page if profile is not complete
+  // Wait for hydration and auth state before proceeding
   useEffect(() => {
-    if (!isProfileComplete && !vectorStoreId) {
-      router.push("/profile");
+    if (!hydrated || authLoading) {
+      console.log("Waiting for hydration or auth loading...");
+      return; // Wait for store to hydrate and auth to load
     }
-  }, [isProfileComplete, vectorStoreId, router]);
-
-  // Ensure file search is enabled and fetch recommendations once after hydration
-  useEffect(() => {
-    // Only run the initialization once after hydration
-    if (hydrated && !initializedRef.current) {
-      initializedRef.current = true;
+    
+    // Get auth state from context and sync with store if needed
+    const authFromContext = Boolean(user);
+    const authUserId = user?.id || null;
+    
+    console.log("Auth state:", { 
+      contextAuth: authFromContext, 
+      storeAuth: isAuthenticated,
+      contextUserId: authUserId,
+      storeUserId: userId,
+      authLoading 
+    });
+    
+    // Check if we need to fetch the user's profile from the database
+    const checkProfile = async () => {
+      if (profileCheckedRef.current) return;
+      profileCheckedRef.current = true;
       
-      // Enable file search if needed
-      if (vectorStore && vectorStore.id && !fileSearchEnabled) {
-        setFileSearchEnabled(true);
-      }
+      console.log("Checking profile...");
       
-      // Fetch recommendations if needed
-      if (vectorStore?.id && !recommendations.length && !isLoading && !fetchingRef.current) {
-        fetchingRef.current = true;
-        fetchRecommendationsCallback();
+      try {
+        // IMPORTANT: Check authentication state from the AuthContext
+        if (user) {
+          console.log("User is authenticated via AuthContext");
+          // For authenticated users, check if their profile exists in the database
+          const response = await fetch(`/api/profile/${user.id}`);
+          
+          if (response.status === 404) {
+            // Profile doesn't exist, redirect to profile wizard
+            console.log("Profile not found, redirecting to wizard");
+            setIsInitializing(false);
+            router.push('/profile-wizard');
+            return;
+          }
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch user profile');
+          }
+          
+          const data = await response.json();
+          
+          if (data.profile) {
+            console.log("Profile found:", data.profile);
+            // Update state with the profile data
+            setUserProfile(data.profile);
+            
+            if (data.profile.vectorStoreId) {
+              setVectorStoreId(data.profile.vectorStoreId);
+            }
+            
+            setProfileComplete(true);
+          }
+        } else if (!isProfileComplete && !vectorStoreId) {
+          // For guest users or users without a profile, redirect to profile wizard
+          console.log("No profile found, redirecting to wizard");
+          setIsInitializing(false);
+          router.push('/profile-wizard');
+          return;
+        }
+        
+        // Enable file search if vector store exists
+        if (vectorStore && vectorStore.id && !fileSearchEnabled) {
+          setFileSearchEnabled(true);
+        }
+        
+        // Initialization complete
+        console.log("Initialization complete");
+        setIsInitializing(false);
+      } catch (error) {
+        console.error('Error checking profile:', error);
+        setError('Failed to load profile data');
+        setIsInitializing(false);
       }
-    }
-  }, [hydrated, vectorStore, fileSearchEnabled, recommendations.length, isLoading, fetchRecommendationsCallback, setFileSearchEnabled]);
+    };
+    
+    checkProfile();
+  }, [hydrated, authLoading, user, isProfileComplete, vectorStoreId, router, setUserProfile, setProfileComplete, setVectorStoreId, setFileSearchEnabled, vectorStore, fileSearchEnabled, setError, isAuthenticated, userId]);
   
-  // Fetch recommendations from the API
+  // Fetch recommendations from the API - NOT auto-triggered
   async function fetchRecommendations() {
+    if (!hydrated) {
+      console.log("Store not hydrated yet, cannot fetch recommendations");
+      setError("Please wait for application to initialize");
+      return;
+    }
+    
+    if (authLoading) {
+      console.log("Auth still loading, cannot fetch recommendations");
+      setError("Please wait for authentication to complete");
+      return;
+    }
+    
+    // Get the authentication state from context, not just the store
+    const authFromContext = Boolean(user);
+    // Use the more reliable auth context state
+    const isGuest = !authFromContext;
+    const authUserId = user?.id || userId;
+
+    console.log("Fetching recommendations with auth state:", { 
+      authFromContext,
+      storeAuth: isAuthenticated,
+      userId: authUserId,
+      isGuest
+    });
+    
     if (vectorStore && vectorStore.id) {
       try {
         setLoading(true);
@@ -150,35 +245,54 @@ export default function RecommendationsPage() {
         
         // Use profile data from store or from localStorage
         const profileToUse = userProfile || cachedUserProfile;
-        
-        // Call our server action to generate recommendations
+
+        // Call our server action to generate recommendations with consistent guest/auth flag
         const result = await generateRecommendations(
           vectorStore.id, 
-          profileToUse
+          profileToUse,
+          isGuest // Pass isGuest flag directly from auth context
         );
         
-        if (result.error) {
-          setError(result.error);
-        } else if (result.recommendations && result.recommendations.length > 0) {
-          // Set favorites based on stored favorites
-          const recommendationsWithFavorites = result.recommendations.map(rec => ({
-            ...rec,
-            isFavorite: favoritesIds.includes(rec.id)
-          }));
-          
-          setRecommendations(recommendationsWithFavorites);
-        } else {
-          // If no recommendations, set an error message
-          setError("No recommendations found that match your profile");
-        }
+        processRecommendationResults(result);
       } catch (error) {
         console.error('Error fetching recommendations:', error);
         setError(error instanceof Error ? error.message : 'An unexpected error occurred');
-      } finally {
         setLoading(false);
         fetchingRef.current = false;
       }
     }
+  }
+  
+  // Helper function to process recommendation results
+  function processRecommendationResults(result: any) {
+    if (result.error) {
+      setError(result.error);
+    } else if (result.recommendations && result.recommendations.length > 0) {
+      // Set favorites based on stored favorites
+      const recommendationsWithFavorites = result.recommendations.map((rec: RecommendationProgram) => ({
+        ...rec,
+        isFavorite: favoritesIds.includes(rec.id)
+      }));
+      
+      setRecommendations(recommendationsWithFavorites);
+      
+      // Handle database save errors for authenticated users
+      if (result.dbSaveError) {
+        console.warn("Recommendations generated but not saved properly to database:", result.dbSaveError);
+        
+        if (result.partialSave) {
+          setError(`Some recommendations could not be saved to your account (${result.savedCount}/${result.recommendations.length} saved). The error was: ${result.dbSaveError}`);
+        } else {
+          setError(`Recommendations generated but couldn't be saved to your account: ${result.dbSaveError}`);
+        }
+      }
+    } else {
+      // If no recommendations, set an error message
+      setError("No recommendations found that match your profile");
+    }
+    
+    setLoading(false);
+    fetchingRef.current = false;
   }
 
   const handleGoToAssistant = () => {
@@ -189,7 +303,40 @@ export default function RecommendationsPage() {
   };
 
   const handleToggleFavorite = (recommendationId: string) => {
-    toggleFavorite(recommendationId);
+    // Check for auth first - verify user is authenticated before proceeding
+    if (!isAuthenticated || !userId) {
+      // Either show an authentication modal or redirect to login
+      const wantsToSignUp = window.confirm(
+        'You need to sign in to save favorites. Would you like to create an account now?'
+      );
+      
+      if (wantsToSignUp) {
+        router.push('/auth/signup');
+        return;
+      }
+      return;
+    }
+    
+    // If guest has reached limit and tries to favorite, prompt for sign up  
+    if (!isAuthenticated && hasReachedGuestLimit) {
+      const wantsToSignUp = window.confirm(
+        'You need to sign up to save more than one set of recommendations. Would you like to create an account now?'
+      );
+      
+      if (wantsToSignUp) {
+        router.push('/auth/signup');
+        return;
+      }
+    }
+    
+    try {
+      // Only proceed with toggling if we're authenticated or still within guest limits
+      toggleFavorite(recommendationId);
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      // Display error message to user
+      alert('Failed to update favorite status. Please try again later.');
+    }
   };
 
   const handleFeedbackSubmit = (id: string, isPositive: boolean, reason?: string) => {
@@ -267,114 +414,211 @@ export default function RecommendationsPage() {
     }
   };
 
-  // If not hydrated yet, show loading indicator
-  if (!hydrated) {
+  // Add a banner that appears when profile is loaded until first recommendations are loaded
+  useEffect(() => {
+    if (!isInitializing && userProfile && !recommendations.length && !isLoading) {
+      console.log("Profile loaded but no recommendations yet - showing banner");
+    }
+  }, [isInitializing, userProfile, recommendations.length, isLoading]);
+
+  // If still initializing, show loading indicator
+  if (isInitializing || !hydrated || authLoading) {
     return <HydrationLoading />;
   }
 
+  // Add our guest limit monitor component
   return (
-    <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-          <p className="text-zinc-600">Generating personalized recommendations...</p>
-          <p className="text-zinc-500 text-sm mt-2">This may take a moment as we analyze your profile.</p>
-        </div>
-      ) : userProfile ? (
-        <>
-          <div className="mb-6 flex justify-between items-center">
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                Hi {userProfile.firstName}, welcome to your education dashboard
-              </h1>
-              <p className="text-zinc-600">
-                Exploring {userProfile.goal} programs in {userProfile.desiredField} based on your profile
-              </p>
-            </motion.div>
-            
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Start Over
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={handleReset} 
-                    className="bg-red-500 hover:bg-red-600"
-                    disabled={isResetting}
-                  >
-                    {isResetting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Deleting...
-                      </>
-                    ) : (
-                      "Reset Everything"
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+    <>
+      <GuestLimitMonitor />
+      <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+            <p className="text-zinc-600">Generating personalized recommendations...</p>
+            <p className="text-zinc-500 text-sm mt-2">This may take a moment as we analyze your profile.</p>
           </div>
-          
-          {errorMessage && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-md mb-6 flex items-start">
-              <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-amber-500" />
-              <div>
-                <p className="font-medium">Note</p>
-                <p className="text-sm">{errorMessage}</p>
-              </div>
+        ) : userProfile ? (
+          <>
+            <div className="mb-6 flex justify-between items-center">
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <h1 className="text-2xl md:text-3xl font-bold mb-2">
+                  Hi {userProfile.firstName}, welcome to your education dashboard
+                </h1>
+                <p className="text-zinc-600">
+                  Exploring {userProfile.goal} programs in {userProfile.desiredField} based on your profile
+                </p>
+                
+                {/* Account status indicator */}
+                {!isAuthenticated && (
+                  <div className="mt-2 text-amber-600 flex items-center text-sm">
+                    <Shield className="h-4 w-4 mr-1" />
+                    Guest mode - <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1" onClick={() => router.push('/signup')}>
+                      Sign up to save your recommendations
+                    </Button>
+                  </div>
+                )}
+              </motion.div>
+              
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Start Over
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleReset} 
+                      className="bg-red-500 hover:bg-red-600"
+                      disabled={isResetting}
+                    >
+                      {isResetting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        "Reset Everything"
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
-          )}
-          
-          <Tabs defaultValue="recommendations" className="w-full" onValueChange={setSelectedTab}>
-            <TabsList className="grid w-full grid-cols-3 mb-6">
-              <TabsTrigger value="recommendations" className="text-sm md:text-base">
-                <BookOpen className="w-4 h-4 mr-2 hidden md:inline" />
-                Recommendations
-              </TabsTrigger>
-              <TabsTrigger value="saved" className="text-sm md:text-base">
-                <Heart className="w-4 h-4 mr-2 hidden md:inline" />
-                Saved Programs
-              </TabsTrigger>
-              <TabsTrigger value="applications" className="text-sm md:text-base">
-                <FileText className="w-4 h-4 mr-2 hidden md:inline" />
-                Applications
-              </TabsTrigger>
-            </TabsList>
             
-            <TabsContent value="recommendations">
-              {recommendations.length > 0 ? (
-                <motion.div
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  className="space-y-6"
+            {/* Guest limit warning */}
+            {!isAuthenticated && generationCount > 0 && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-md mb-6 flex items-start">
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-amber-500" />
+                <div>
+                  <p className="font-medium">Guest mode limits</p>
+                  <p className="text-sm">
+                    You've used {generationCount} of 1 available recommendation generation{generationCount > 1 ? 's' : ''}.{' '}
+                    <Button variant="link" size="sm" className="p-0 h-auto text-sm" onClick={() => router.push('/signup')}>
+                      Sign up for unlimited recommendations
+                    </Button>
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* Add prominent Generate Recommendations button */}
+            {!recommendations.length && userProfile && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-5 rounded-md mb-6 flex flex-col items-center justify-center">
+                <h3 className="text-xl font-semibold mb-2">Ready to explore educational opportunities?</h3>
+                <p className="text-center mb-4">Click below to generate recommendations based on your profile</p>
+                <Button 
+                  size="lg"
+                  onClick={fetchRecommendations} 
+                  disabled={isLoading || (!isAuthenticated && hasReachedGuestLimit)}
+                  className="bg-blue-600 hover:bg-blue-700"
                 >
-                  <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <h2 className="text-xl font-semibold">Programs matched to your profile</h2>
-                      <p className="text-sm text-zinc-500">{recommendations.length} recommendations found</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => router.push("/profile?edit=true")}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit Profile
-                      </Button>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Generating Recommendations...
+                    </>
+                  ) : (
+                    <>
+                      <Scroll className="w-5 h-5 mr-2" />
+                      Generate Recommendations Now
+                    </>
+                  )}
+                </Button>
+                
+                {!isAuthenticated && hasReachedGuestLimit && (
+                  <div className="mt-4 text-amber-600">
+                    <p>You've reached the guest limit. <Button variant="link" className="p-0" onClick={() => router.push('/signup')}>Sign up</Button> for unlimited recommendations.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {errorMessage && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-md mb-6 flex items-start">
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-amber-500" />
+                <div>
+                  <p className="font-medium">Note</p>
+                  <p className="text-sm">{errorMessage}</p>
+                </div>
+              </div>
+            )}
+            
+            <Tabs defaultValue="recommendations" className="w-full" onValueChange={setSelectedTab}>
+              <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsTrigger value="recommendations" className="text-sm md:text-base">
+                  <BookOpen className="w-4 h-4 mr-2 hidden md:inline" />
+                  Recommendations
+                </TabsTrigger>
+                <TabsTrigger value="saved" className="text-sm md:text-base">
+                  <Heart className="w-4 h-4 mr-2 hidden md:inline" />
+                  Saved Programs
+                </TabsTrigger>
+                <TabsTrigger value="applications" className="text-sm md:text-base" disabled={!isAuthenticated}>
+                  <FileText className="w-4 h-4 mr-2 hidden md:inline" />
+                  Applications
+                  {!isAuthenticated && <Lock className="w-3 h-3 ml-1" />}
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="recommendations">
+                {recommendations.length > 0 ? (
+                  <motion.div
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="space-y-6"
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h2 className="text-xl font-semibold">Programs matched to your profile</h2>
+                        <p className="text-sm text-zinc-500">{recommendations.length} recommendations found</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => router.push("/profile?edit=true")}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit Profile
+                        </Button>
+                        
+                        {/* Only show generate new recommendations button for authenticated users 
+                            or guests who haven't reached their limit */}
+                        {(isAuthenticated || !hasReachedGuestLimit) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={fetchRecommendations}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Generating...
+                              </>
+                            ) : (
+                              <>
+                                <Scroll className="w-4 h-4 mr-2" />
+                                Generate New
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm">Sort By</Button>
@@ -428,19 +672,19 @@ export default function RecommendationsPage() {
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                             <div className="flex items-center">
                               <DollarSign className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">${program.costPerYear.toLocaleString()}/year</span>
+                              <span className="text-sm">${(program.costPerYear ?? 0).toLocaleString()}/year</span>
                             </div>
                             <div className="flex items-center">
                               <Clock className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">{program.duration} months</span>
+                              <span className="text-sm">{program.duration ?? 0} months</span>
                             </div>
                             <div className="flex items-center">
                               <Globe className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">{program.location}</span>
+                              <span className="text-sm">{program.location || 'N/A'}</span>
                             </div>
                             <div className="flex items-center">
                               <Calendar className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">{program.startDate}</span>
+                              <span className="text-sm">{program.startDate || 'N/A'}</span>
                             </div>
                           </div>
                           
@@ -474,30 +718,30 @@ export default function RecommendationsPage() {
                                       <div>
                                         <div className="flex justify-between text-xs mb-1">
                                           <span>Career Alignment</span>
-                                          <span>{program.matchRationale.careerAlignment}%</span>
+                                          <span>{program.matchRationale?.careerAlignment ?? 0}%</span>
                                         </div>
-                                        <Progress value={program.matchRationale.careerAlignment} className="h-2" />
+                                        <Progress value={program.matchRationale?.careerAlignment ?? 0} className="h-2" />
                                       </div>
                                       <div>
                                         <div className="flex justify-between text-xs mb-1">
                                           <span>Budget Fit</span>
-                                          <span>{program.matchRationale.budgetFit}%</span>
+                                          <span>{program.matchRationale?.budgetFit ?? 0}%</span>
                                         </div>
-                                        <Progress value={program.matchRationale.budgetFit} className="h-2" />
+                                        <Progress value={program.matchRationale?.budgetFit ?? 0} className="h-2" />
                                       </div>
                                       <div>
                                         <div className="flex justify-between text-xs mb-1">
                                           <span>Location Match</span>
-                                          <span>{program.matchRationale.locationMatch}%</span>
+                                          <span>{program.matchRationale?.locationMatch ?? 0}%</span>
                                         </div>
-                                        <Progress value={program.matchRationale.locationMatch} className="h-2" />
+                                        <Progress value={program.matchRationale?.locationMatch ?? 0} className="h-2" />
                                       </div>
                                       <div>
                                         <div className="flex justify-between text-xs mb-1">
                                           <span>Academic Fit</span>
-                                          <span>{program.matchRationale.academicFit}%</span>
+                                          <span>{program.matchRationale?.academicFit ?? 0}%</span>
                                         </div>
-                                        <Progress value={program.matchRationale.academicFit} className="h-2" />
+                                        <Progress value={program.matchRationale?.academicFit ?? 0} className="h-2" />
                                       </div>
                                     </div>
                                   </div>
@@ -616,28 +860,47 @@ export default function RecommendationsPage() {
                   ))}
                 </motion.div>
               ) : (
-                <div className="bg-white p-8 rounded-lg shadow-md text-center">
-                  <div className="mb-4 bg-amber-100 p-4 inline-block rounded-full">
-                    <Info className="h-8 w-8 text-amber-600" />
+                  <div className="text-center py-12">
+                    <h3 className="text-xl font-semibold mb-2">No recommendations yet</h3>
+                    <p className="text-zinc-600 mb-6">Generate recommendations based on your profile</p>
+                    <Button 
+                      onClick={fetchRecommendations} 
+                      disabled={isLoading || (!isAuthenticated && hasReachedGuestLimit)}
+                      size="lg"
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          Generating Recommendations...
+                        </>
+                      ) : (
+                        <>
+                          <Scroll className="w-5 h-5 mr-2" />
+                          Generate Recommendations
+                        </>
+                      )}
+                    </Button>
+                    
+                    {!isAuthenticated && hasReachedGuestLimit && (
+                      <div className="mt-4 text-amber-600">
+                        <p>You've reached the guest limit. <Button variant="link" className="p-0" onClick={() => router.push('/signup')}>Sign up</Button> for unlimited recommendations.</p>
+                      </div>
+                    )}
                   </div>
-                  <h3 className="text-xl font-bold mb-2">No recommendations found</h3>
-                  <p className="text-zinc-600 mb-6 max-w-md mx-auto">
-                    We couldn't find programs matching your current profile. Try adjusting your preferences to see more recommendations.
-                  </p>
-                  <Button onClick={() => router.push("/profile?edit=true")}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Update Your Profile
-                  </Button>
-                </div>
-              )}
-            </TabsContent>
-            
-            <TabsContent value="saved">
-              <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-semibold mb-4">Your Saved Programs</h2>
-                
-                {recommendations.filter(rec => rec.isFavorite).length > 0 ? (
-                  <div className="space-y-4">
+                )}
+              </TabsContent>
+              
+              <TabsContent value="saved">
+                {favoritesIds.length > 0 ? (
+                  <motion.div
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="space-y-6"
+                  >
+                    <h2 className="text-xl font-semibold mb-6">Your Saved Programs</h2>
+                    
                     {recommendations.filter(rec => rec.isFavorite).map(program => (
                       <Card key={program.id} className="flex flex-col md:flex-row overflow-hidden hover:shadow-md transition-all duration-300">
                         <div className="md:w-3/4 p-4">
@@ -646,11 +909,11 @@ export default function RecommendationsPage() {
                           <div className="flex gap-3 mt-2 text-sm text-zinc-700">
                             <span className="flex items-center">
                               <Clock className="h-3 w-3 mr-1" />
-                              {program.duration} months
+                              {program.duration ?? 0} months
                             </span>
                             <span className="flex items-center">
                               <DollarSign className="h-3 w-3 mr-1" />
-                              ${program.costPerYear.toLocaleString()}/year
+                              ${(program.costPerYear ?? 0).toLocaleString()}/year
                             </span>
                           </div>
                           <p className="text-xs mt-2 text-zinc-500">Saved on {new Date().toLocaleDateString()}</p>
@@ -669,62 +932,57 @@ export default function RecommendationsPage() {
                         </div>
                       </Card>
                     ))}
+                  </motion.div>
+                ) : (
+                  <div className="text-center py-12">
+                    <h3 className="text-xl font-semibold mb-2">No saved programs yet</h3>
+                    <p className="text-zinc-600 mb-6">
+                      {!isAuthenticated ? 
+                        "Create an account to save your favorite programs" : 
+                        "Save programs by clicking the heart icon"
+                      }
+                    </p>
+                    
+                    {!isAuthenticated && (
+                      <Button onClick={() => router.push('/signup')}>
+                        Create Account
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="applications">
+                {isAuthenticated ? (
+                  <div className="text-center py-12">
+                    <h3 className="text-xl font-semibold mb-2">No applications yet</h3>
+                    <p className="text-zinc-600 mb-6">Track your education program applications here</p>
+                    <Button variant="outline">
+                      Start an Application
+                    </Button>
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <Heart className="h-10 w-10 mx-auto text-zinc-300 mb-4" />
-                    <h3 className="text-lg font-medium text-zinc-700 mb-2">No saved programs yet</h3>
-                    <p className="text-zinc-500 mb-4">
-                      When you find programs you like, click the heart icon to save them for later.
-                    </p>
-                    <Button variant="outline" onClick={() => setSelectedTab("recommendations")}>
-                      Browse Recommendations
+                  <div className="text-center py-12">
+                    <h3 className="text-xl font-semibold mb-2">Sign in to track applications</h3>
+                    <p className="text-zinc-600 mb-6">Create an account to manage your program applications</p>
+                    <Button onClick={() => router.push('/signup')}>
+                      Create Account
                     </Button>
                   </div>
                 )}
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="applications">
-              <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-semibold mb-4">Your Applications</h2>
-                
-                <div className="text-center py-8">
-                  <Scroll className="h-10 w-10 mx-auto text-zinc-300 mb-4" />
-                  <h3 className="text-lg font-medium text-zinc-700 mb-2">No applications in progress</h3>
-                  <p className="text-zinc-500 mb-4">
-                    When you're ready to apply to programs, you can track your applications here.
-                  </p>
-                  <Button variant="outline" onClick={() => setSelectedTab("recommendations")}>
-                    Explore Programs
-                  </Button>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </>
-      ) : (
-        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-2xl mx-auto">
-          <div className="mb-4 bg-amber-100 p-4 inline-block rounded-full">
-            <User className="h-8 w-8 text-amber-600" />
+              </TabsContent>
+            </Tabs>
+          </>
+        ) : (
+          <div className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Profile not found</h3>
+            <p className="text-zinc-600 mb-6">Please complete your profile to get recommendations</p>
+            <Button onClick={() => router.push('/profile-wizard')}>
+              Complete Profile
+            </Button>
           </div>
-          <h3 className="text-xl font-bold mb-2">Profile not complete</h3>
-          <p className="text-zinc-600 mb-6">
-            To see personalized education recommendations, you need to complete your profile first.
-          </p>
-          <Button onClick={() => router.push("/profile")}>
-            Complete Your Profile
-          </Button>
-        </div>
-      )}
-      
-      <div className="mt-12 text-center">
-        <p className="text-sm text-zinc-500 mb-2">Need help exploring your options?</p>
-        <Button variant="outline" onClick={handleGoToAssistant}>
-          <MessageSquare className="w-4 h-4 mr-2" />
-          Chat with your AI Education Adviser
-        </Button>
+        )}
       </div>
-    </div>
+    </>
   );
 } 

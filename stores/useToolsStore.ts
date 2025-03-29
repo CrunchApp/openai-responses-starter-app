@@ -50,7 +50,7 @@ const useToolsStore = create<StoreState>()(
           region: "",
         },
       },
-      fileSearchEnabled: false,
+      fileSearchEnabled: true,
       previousFileSearchEnabled: false,
       setFileSearchEnabled: (enabled) => {
         set({ fileSearchEnabled: enabled });

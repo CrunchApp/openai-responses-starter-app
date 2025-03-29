@@ -37,7 +37,7 @@
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/ssr": "^0.6.1",
-    "@supabase/supabase-js": "^2.49.1",
+    "@supabase/supabase-js": "^2.49.3",
     "@types/jsonwebtoken": "^9.0.9",
     "@xyflow/react": "^12.3.0",
     "class-variance-authority": "^0.7.1",

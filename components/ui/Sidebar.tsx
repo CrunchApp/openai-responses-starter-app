@@ -15,7 +15,7 @@ import {
   MessageSquare,
   LogOut,
   ChevronRight,
-  Settings,
+  // Settings,
   LogIn,
   Menu,
   X
@@ -48,7 +48,7 @@ export function Sidebar() {
     { href: '/profile', label: 'Profile', icon: User },
     { href: '/recommendations', label: 'Recommendations', icon: BookOpen },
     { href: '/chat', label: 'AI Assistant', icon: MessageSquare },
-    { href: '/settings', label: 'Settings', icon: Settings },
+    // { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
   const isActive = (path: string) => {

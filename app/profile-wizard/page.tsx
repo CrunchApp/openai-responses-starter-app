@@ -28,10 +28,10 @@ function ProfileContent() {
 
     // Optional: Redirect guests who completed the profile (Path B) away if they land here again?
     // This depends on desired behavior. If they should always go to recommendations:
-    // if (!authLoading && !user && isProfileComplete && vectorStoreId && !isEditMode) {
-    //   console.log("ProfileContent: Guest profile complete, redirecting to recommendations.");
-    //   router.replace('/recommendations');
-    // }
+    if (!authLoading && !user && isProfileComplete && vectorStoreId && !isEditMode) {
+      console.log("ProfileContent: Guest profile complete, redirecting to recommendations.");
+      router.replace('/recommendations');
+    }
 
   }, [authLoading, user, router]); // Removed isEditMode, isProfileComplete, vectorStoreId from dependencies as they are not needed for the primary redirect logic
 

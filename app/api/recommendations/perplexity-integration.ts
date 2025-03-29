@@ -116,7 +116,7 @@ export async function callPerplexityApi(query: string): Promise<string> {
 
   // Configure the request to use the sonar-reasoning-pro model for research
   const options: PerplexityRequestOptions = {
-    model: "sonar-reasoning-pro", // Using the reasoning model for better analysis
+    model: "sonar", // Using the reasoning model for better analysis
     messages: [
       { 
         role: "system", 
@@ -128,9 +128,9 @@ export async function callPerplexityApi(query: string): Promise<string> {
       }
     ],
     temperature: 0.1, // Lower temperature for more factual responses
-    max_tokens: 10000,
+    max_tokens: 3000,
     web_search_options: {
-      search_context_size: "high" // Use high search context for more comprehensive results
+      search_context_size: "low" // Use high search context for more comprehensive results
     },
     top_p: 0.95,
     frequency_penalty: 0.5 // Reduce repetition
@@ -369,7 +369,7 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
 
     console.log('Calling OpenAI to parse program data');
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-2024-08-06",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are an expert at extracting structured data about education programs from search results." },
         { role: "user", content: prompt }

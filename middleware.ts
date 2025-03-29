@@ -19,7 +19,8 @@ const PUBLIC_API_ROUTES = [
   '/api/vector_stores/cleanup',
   '/api/profile/create',
   '/api/profile/extract-from-documents',
-  '/api/auth/linkedin-profile'
+  '/api/auth/linkedin-profile',
+  '/api/recommendations/generate'
 ]
 
 export async function middleware(request: NextRequest) {

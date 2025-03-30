@@ -7,6 +7,8 @@ interface DocumentUploadProps {
   allowedFileTypes?: string[];
   onSuccess: (fileId: string) => void;
   className?: string;
+  vectorStoreId: string; // Required prop
+  disabled?: boolean; // Add disabled prop
 }
 
 export default function DocumentUpload({
@@ -14,15 +16,11 @@ export default function DocumentUpload({
   allowedFileTypes = [],
   onSuccess,
   className = "",
+  vectorStoreId,
+  disabled = false, // Default to false
 }: DocumentUploadProps) {
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  // Get the user's vector store ID from localStorage
-  const getUserVectorStoreId = () => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('userVectorStoreId');
-  };
 
   const handleAddStore = (storeId: string) => {
     // When a file is successfully uploaded and added to the vector store
@@ -44,7 +42,12 @@ export default function DocumentUpload({
   // Custom trigger component for upload dialog
   const CustomTrigger = (
     <div 
-      className={`${className} cursor-pointer flex items-center justify-center hover:bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg transition-all`}
+      className={`${className} flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg transition-all ${
+        disabled 
+          ? 'opacity-50 cursor-not-allowed bg-gray-100' 
+          : 'cursor-pointer hover:bg-gray-50'
+      }`}
+      onClick={disabled ? (e) => e.preventDefault() : undefined} // Prevent clicks when disabled
     >
       {children}
     </div>
@@ -53,13 +56,14 @@ export default function DocumentUpload({
   return (
     <>
       <FileUpload
-        vectorStoreId={getUserVectorStoreId() || undefined}
+        vectorStoreId={vectorStoreId}
         onAddStore={handleAddStore}
         onUnlinkStore={() => {}}
         customTrigger={CustomTrigger}
         dialogOpen={isDialogOpen}
         setDialogOpen={setIsDialogOpen}
         acceptedFileTypes={allowedFileTypes}
+        disabled={disabled} // Pass disabled state to FileUpload
       />
       
       {error && (

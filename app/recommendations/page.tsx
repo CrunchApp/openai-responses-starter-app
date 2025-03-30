@@ -369,8 +369,8 @@ export default function RecommendationsPage() {
     try {
       setIsResetting(true);
       
-      // Get the vector store ID
-      const vectorStoreId = localStorage.getItem('userVectorStoreId');
+      // Get the vector store ID from ProfileStore
+      const { vectorStoreId } = useProfileStore.getState();
       
       // First clean up the vector store and uploaded files
       if (vectorStoreId) {
@@ -389,10 +389,6 @@ export default function RecommendationsPage() {
           });
         }
       }
-      
-      // Clear localStorage
-      localStorage.removeItem('userVectorStoreId');
-      localStorage.removeItem('userProfileData');
       
       // Reset all the stores
       resetProfile();

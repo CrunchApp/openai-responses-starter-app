@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, Dispatch, SetStateAction, ComponentType, useRef } from "react";
+import React, { useState, useEffect, Dispatch, SetStateAction, ComponentType, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import PersonalInfoStep from "./steps/personal-info-step";
@@ -62,6 +62,7 @@ export interface LinkedInImportStepProps extends BaseStepProps {
 
 export interface ReviewStepProps extends BaseStepProps {
   onComplete: () => void;
+  isEditMode?: boolean;
 }
 
 // Define the step structure with proper typing
@@ -76,9 +77,37 @@ interface ProfileWizardProps {
   isEditMode?: boolean;
 }
 
+// Define the initial profile data
+const initialProfileData: UserProfile = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  preferredName: "",
+  linkedInProfile: "",
+  education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
+  careerGoals: {
+    shortTerm: "",
+    longTerm: "",
+    desiredIndustry: [],
+    desiredRoles: [],
+  },
+  skills: [],
+  preferences: {
+    preferredLocations: [],
+    studyMode: "Full-time",
+    startDate: "",
+    budgetRange: {
+      min: 0,
+      max: 100000,
+    },
+  },
+  documents: {},
+};
+
 export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, vectorStoreId: authVectorStoreId, refreshSession } = useAuth();
   
   // Get state from our centralized store
   const { 
@@ -89,6 +118,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     completedSteps: storedCompletedSteps,
     addCompletedStep,
     setProfileComplete,
+    vectorStoreId: profileStoreVectorStoreId,
     setVectorStoreId,
     clearStore: clearProfileWizardStore,
     hydrated
@@ -101,105 +131,84 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     resetState: resetRecommendations
   } = useRecommendationsStore();
   
-  // Refs to track initialization status
-  const initializedRef = useRef(false);
-  const localChangesRef = useRef(false);
-  
   // Local state for animation and UI
   const [animationDirection, setAnimationDirection] = useState("forward");
   const [showCompletionMessage, setShowCompletionMessage] = useState(false);
-  
-  // Add loading state for reset operation
   const [isResetting, setIsResetting] = useState(false);
-  
-  // Initialize local state with default values - will be updated after hydration
-  const [profileData, setProfileData] = useState<UserProfile>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    preferredName: "",
-    linkedInProfile: "",
-    education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
-    careerGoals: {
-      shortTerm: "",
-      longTerm: "",
-      desiredIndustry: [],
-      desiredRoles: [],
-    },
-    skills: [],
-    preferences: {
-      preferredLocations: [],
-      studyMode: "Full-time",
-      startDate: "",
-      budgetRange: {
-        min: 0,
-        max: 100000,
-      },
-    },
-    documents: {},
-  });
-  
-  const [currentStep, setCurrentStep] = useState<number>(0);
-  const [canNavigateToStep, setCanNavigateToStep] = useState<number[]>([0]);
   const [isCompleting, setIsCompleting] = useState(false);
-
-  // Single effect to handle hydration and initialization
+  
+  // For profile data, we still maintain a local copy for editing performance
+  // but we initialize it from the store when hydrated
+  const [profileData, setProfileData] = useState<UserProfile>(initialProfileData);
+  
+  // Effect to update profile data after hydration - improved to avoid loops
   useEffect(() => {
-    // Only run this effect after hydration and only once
-    if (hydrated && !initializedRef.current) {
-      initializedRef.current = true;
-      
-      // Initialize local state from persisted store state
-      if (storedCurrentStep !== undefined && storedCurrentStep !== null) {
-        setCurrentStep(storedCurrentStep);
-      }
-      
-      if (storedCompletedSteps && storedCompletedSteps.length > 0) {
-        setCanNavigateToStep(storedCompletedSteps);
-      }
-      
-      if (storedProfileData) {
-        setProfileData(storedProfileData);
+    // Only run this effect for initial hydration or when store data changes significantly
+    if (hydrated && storedProfileData) {
+      try {
+        // Skip if we're already in the process of completing or resetting
+        if (isCompleting || isResetting) return;
+
+        // Compare with deep equality
+        const currentStr = JSON.stringify(profileData);
+        const storedStr = JSON.stringify(storedProfileData);
+        
+        // Only update local state if there's a meaningful difference
+        if (currentStr !== storedStr) {
+          // Check if this is first hydration or just initialProfileData
+          const isInitialData = currentStr === JSON.stringify(initialProfileData);
+          
+          if (isInitialData || Object.keys(profileData).length === 0) {
+            console.log("Hydrating profile data from store");
+            setProfileData(storedProfileData);
+          }
+        }
+      } catch (error) {
+        console.error("Error in hydration effect:", error);
       }
     }
-  }, [hydrated, storedCurrentStep, storedCompletedSteps, storedProfileData]);
+  }, [hydrated, storedProfileData, isCompleting, isResetting]);
 
-  // Custom wrapper for setProfileData that tracks local changes
+  // Removed the problematic useEffect that was causing the infinite update loop
+  // and replacing with a more controlled approach
+  const prevProfileDataRef = useRef<UserProfile | null>(null);
+  
+  // Manual sync function to explicitly update store
+  const syncProfileToStore = useCallback(() => {
+    // Skip sync if we're in completion or reset mode
+    if (isCompleting || isResetting) return;
+    
+    try {
+      // Simple deep equality check
+      const currentProfileDataStr = JSON.stringify(profileData);
+      const storedProfileDataStr = JSON.stringify(storedProfileData);
+      
+      if (currentProfileDataStr !== storedProfileDataStr) {
+        // Update ref before updating store to prevent loop
+        prevProfileDataRef.current = { ...profileData };
+        
+        // Use a microtask to defer the update
+        Promise.resolve().then(() => {
+          setStoredProfileData(profileData);
+        });
+      }
+    } catch (error) {
+      console.error("Error syncing profile data:", error);
+    }
+  }, [profileData, storedProfileData, setStoredProfileData, isCompleting, isResetting]);
+
+  // Updated profile data change handler that doesn't trigger an update loop
   const handleProfileDataChange = (newProfileData: UserProfile | ((prev: UserProfile) => UserProfile)) => {
     setProfileData((prev) => {
       const updated = typeof newProfileData === 'function' ? newProfileData(prev) : newProfileData;
-      
-      // Mark as locally changed if component is already initialized
-      if (initializedRef.current) {
-        localChangesRef.current = true;
-      }
-      
       return updated;
     });
-  };
-
-  // Custom wrapper for setCurrentStep that tracks local changes
-  const handleCurrentStepChange = (newStep: number) => {
-    setCurrentStep(newStep);
     
-    // Mark as locally changed if component is already initialized
-    if (initializedRef.current) {
-      localChangesRef.current = true;
-    }
+    // Store the latest value in ref - we'll use this to avoid unnecessary store updates
+    prevProfileDataRef.current = typeof newProfileData === 'function' 
+      ? newProfileData(prevProfileDataRef.current || profileData)
+      : newProfileData;
   };
-
-  // Separate effect to update the store when local state changes
-  useEffect(() => {
-    // Only sync back to store if component is initialized and there are local changes
-    if (hydrated && initializedRef.current && localChangesRef.current) {
-      setStoredProfileData(profileData);
-      setStoredCurrentStep(currentStep);
-      
-      // Reset the local changes flag
-      localChangesRef.current = false;
-    }
-  }, [profileData, currentStep, hydrated, setStoredProfileData, setStoredCurrentStep]);
 
   const steps: Step[] = [
     {
@@ -240,78 +249,84 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
   ];
 
   const handleNext = () => {
-    if (currentStep < steps.length - 1) {
+    if (storedCurrentStep < steps.length - 1) {
       setAnimationDirection("forward");
       
       // Add current step to completed steps if not already included
-      if (!canNavigateToStep.includes(currentStep)) {
-        setCanNavigateToStep([...canNavigateToStep, currentStep]);
-        addCompletedStep(currentStep);
+      if (!storedCompletedSteps.includes(storedCurrentStep)) {
+        addCompletedStep(storedCurrentStep);
       }
       
       // Add next step to completed steps if not already included
-      if (!canNavigateToStep.includes(currentStep + 1)) {
-        setCanNavigateToStep([...canNavigateToStep, currentStep + 1]);
-        addCompletedStep(currentStep + 1);
+      if (!storedCompletedSteps.includes(storedCurrentStep + 1)) {
+        addCompletedStep(storedCurrentStep + 1);
       }
       
-      // Use the custom setter to track local changes
-      handleCurrentStepChange(currentStep + 1);
+      // Explicitly sync profile data to store before changing steps
+      syncProfileToStore();
+      
+      // Update step in store directly
+      setStoredCurrentStep(storedCurrentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    if (currentStep > 0) {
+    if (storedCurrentStep > 0) {
       setAnimationDirection("backward");
-      // Use the custom setter to track local changes
-      handleCurrentStepChange(currentStep - 1);
+      
+      // Explicitly sync profile data to store before changing steps
+      syncProfileToStore();
+      
+      // Update step in store directly
+      setStoredCurrentStep(storedCurrentStep - 1);
     }
   };
 
   const handleStepClick = (stepIndex: number) => {
-    if (canNavigateToStep.includes(stepIndex)) {
-      setAnimationDirection(stepIndex > currentStep ? "forward" : "backward");
-      // Use the custom setter to track local changes
-      handleCurrentStepChange(stepIndex);
+    if (storedCompletedSteps.includes(stepIndex)) {
+      setAnimationDirection(stepIndex > storedCurrentStep ? "forward" : "backward");
+      
+      // Explicitly sync profile data to store before changing steps
+      syncProfileToStore();
+      
+      // Update step in store directly
+      setStoredCurrentStep(stepIndex);
     }
   };
 
   // Modified function to handle profile saving and completion based on userId
   const saveAndCompleteProfile = async (isEdit: boolean, userId?: string) => {
     setIsCompleting(true);
-    let finalVectorStoreId: string | null = localStorage.getItem('userVectorStoreId'); // Explicitly type as string | null
-
+    
     try {
-      // 1. Ensure Vector Store Exists (Create if missing - might happen on reset/error)
+      // Make sure we have the latest profile data in the store before saving
+      syncProfileToStore();
+      
+      // Log vector store IDs for debugging
+      console.log("Vector Store IDs:", {
+        profileStoreVectorStoreId,
+        authVectorStoreId,
+        isAuth: !!userId
+      });
+      
+      // FIXED: Always prefer profileStoreVectorStoreId if it exists, regardless of auth status
+      // This fixes the issue where vectorStoreId is lost during signup
+      let finalVectorStoreId: string | null = profileStoreVectorStoreId || (userId ? authVectorStoreId : null);
+
+      // Ensure there's a vector store ID available
       if (!finalVectorStoreId) {
-         console.log("No Vector Store ID found, creating one...");
-         const vsResponse = await fetch("/api/vector_stores/create_store", {
-           method: "POST",
-           headers: { "Content-Type": "application/json" },
-           body: JSON.stringify({ name: `${profileData.firstName} ${profileData.lastName}'s Profile Store` }),
-         });
-         if (!vsResponse.ok) throw new Error("Failed to create vector store");
-         const vsData = await vsResponse.json();
-         if (!vsData.id || typeof vsData.id !== 'string') { // Add check for valid ID
-            throw new Error("Created vector store but received an invalid ID.");
-         }
-         finalVectorStoreId = vsData.id;
-         console.log("Created new Vector Store ID:", finalVectorStoreId);
+        throw new Error("No vector store ID found. Please complete the welcome step first.");
       }
+
+      console.log("Using vector store ID:", finalVectorStoreId);
 
       // Ensure finalVectorStoreId is a string before proceeding
-      if (!finalVectorStoreId) {
-        throw new Error("Vector Store ID is missing after check/creation.");
-      }
-      const guaranteedVectorStoreId = finalVectorStoreId; // Use this guaranteed string version
-
-      // Set localStorage item *here* using the guaranteed string ID
-      localStorage.setItem('userVectorStoreId', guaranteedVectorStoreId);
+      const guaranteedVectorStoreId = finalVectorStoreId;
 
       // Update profileData with the vectorStoreID before saving
-      const profileToSave: UserProfile = { // Ensure type matches UserProfile
+      const profileToSave: UserProfile = {
         ...profileData,
-        vectorStoreId: guaranteedVectorStoreId // Assign the guaranteed string
+        vectorStoreId: guaranteedVectorStoreId
       };
 
       // 2. Save Profile JSON to Vector Store (Common to both paths)
@@ -339,11 +354,10 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       
       // Add file to vector store
       const addFileResponse = await fetch("/api/vector_stores/add_file", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: newFileId, vectorStoreId: guaranteedVectorStoreId }), // Use guaranteed ID
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: newFileId, vectorStoreId: guaranteedVectorStoreId }),
       });
       if (!addFileResponse.ok) throw new Error("Failed to add profile file to vector store");
       console.log("Profile JSON saved to Vector Store, File ID:", newFileId);
-
 
       // --- Path-Specific Logic ---
       if (userId) {
@@ -353,51 +367,45 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
         const saveDbResponse = await fetch('/api/profile/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, profileData: profileToSave }), // profileToSave now matches UserProfile type
+          body: JSON.stringify({ userId, profileData: profileToSave }),
         });
         if (!saveDbResponse.ok) {
           console.error('Error saving profile to Supabase:', await saveDbResponse.text());
           throw new Error("Failed to save profile to database.");
         }
         console.log('Profile saved to Supabase successfully');
+        
+        // 4a. Refresh session to get updated profile (including vector store ID) from database
+        await refreshSession();
 
-        // 4a. Clear Local State/Storage for Wizard & Guest
+        // 5a. Clear local guest state/storage
         clearProfileWizardStore();
         clearRecommendationsStore();
         localStorage.removeItem('userProfileData');
-        localStorage.removeItem('profile-storage'); // Ensure this matches the persist key
-        localStorage.removeItem('userVectorStoreId');
         localStorage.removeItem('userProfileFileId');
         console.log("Cleared local stores and storage for registered user.");
-
-        // 5a. Update Tool Store (though maybe dashboard does this?)
-      const { setVectorStore, setFileSearchEnabled } = useToolsStore.getState();
-        setVectorStore({ id: guaranteedVectorStoreId, name: `${profileToSave.firstName} ${profileToSave.lastName}'s Profile` }); // Use guaranteed ID
-      setFileSearchEnabled(true);
-      
       } else {
         // --- PATH B (Guest User) ---
         console.log("Path B: Saving profile locally for guest.");
+        
         // 3b. Save profile to Recommendations Store (for guest recommendations)
-        setRecommendationsUserProfile(profileToSave); // profileToSave now matches UserProfile type
+        setRecommendationsUserProfile(profileToSave);
 
         // 4b. Save profile to Local Storage (for guest persistence)
         localStorage.setItem('userProfileData', JSON.stringify(profileToSave));
 
-        // 5b. Update Zustand wizard store (profile is complete, store VS ID)
-        setVectorStoreId(guaranteedVectorStoreId); // Use guaranteed ID
+        // 5b. Update Zustand wizard store (profile is complete)
         setProfileComplete(true);
-        setStoredProfileData(profileToSave); // profileToSave now matches UserProfile type
+        setStoredProfileData(profileToSave);
 
-         // 6b. Update Tool Store for guest session
-         const { setVectorStore: guestSetVectorStore, setFileSearchEnabled: guestSetFileSearchEnabled } = useToolsStore.getState();
-         guestSetVectorStore({ id: guaranteedVectorStoreId, name: `Guest Profile Store` }); // Use guaranteed ID
-         guestSetFileSearchEnabled(true);
-         console.log("Profile saved locally for guest.");
+        // 6b. Update Tool Store for guest session
+        const { setVectorStore, setFileSearchEnabled } = useToolsStore.getState();
+        setVectorStore({ id: guaranteedVectorStoreId, name: `Guest Profile Store` });
+        setFileSearchEnabled(true);
+        console.log("Profile saved locally for guest.");
       }
 
-      return guaranteedVectorStoreId; // Return the guaranteed string ID
-
+      return guaranteedVectorStoreId;
     } catch (error) {
       console.error("Error completing profile:", error);
       // Rethrow the original error after logging
@@ -436,74 +444,40 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     try {
       setIsResetting(true);
       
-      // Get the vector store ID
-      const vectorStoreId = localStorage.getItem('userVectorStoreId');
+      // Get the vector store ID from the right source
+      const vectorStoreId = user ? authVectorStoreId : profileStoreVectorStoreId;
       
       // First clean up the vector store and uploaded files
       if (vectorStoreId) {
         try { // Wrap cleanup in try/catch to ensure rest of reset runs
-        const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
-          method: 'DELETE'
-        });
-        
-        if (!cleanupResponse.ok) {
-          console.error('Failed to clean up vector store:', cleanupResponse.statusText);
-            // Optionally alert the user or log more details
-        } else {
+          const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
+            method: 'DELETE'
+          });
+          
+          if (!cleanupResponse.ok) {
+            console.error('Failed to clean up vector store:', cleanupResponse.statusText);
+          } else {
             console.log("Vector store cleanup successful for:", vectorStoreId);
-          // Also clear the vector store from the tools store
+            // Also clear the vector store from the tools store
             const { setVectorStore, setFileSearchEnabled } = useToolsStore.getState();
             setVectorStore({ id: "", name: "" });
             setFileSearchEnabled(false); // Also disable file search
           }
         } catch (cleanupError) {
            console.error("Error during vector store cleanup:", cleanupError);
-           // Decide if this error should prevent the rest of the reset
         }
       }
 
       // Clear localStorage items related to the profile/wizard
-      localStorage.removeItem('userVectorStoreId');
       localStorage.removeItem('userProfileFileId');
       localStorage.removeItem('userProfileData'); // Guest profile data
-      localStorage.removeItem('vista-profile-storage'); // Zustand profile store persistence key
-      localStorage.removeItem('vista-recommendations-storage'); // Zustand recommendations store persistence key
 
       // Reset Zustand stores using their respective actions
       clearProfileWizardStore(); // Use the specific clear action
       clearRecommendationsStore(); // Use the specific clear action
 
-      // Reset local component state (redundant if stores are cleared correctly, but safe)
-      setProfileData({
-        firstName: "",
-        lastName: "",
-        email: "",
-        phone: "",
-        preferredName: "",
-        linkedInProfile: "",
-        education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
-        careerGoals: {
-          shortTerm: "",
-          longTerm: "",
-          desiredIndustry: [],
-          desiredRoles: [],
-        },
-        skills: [],
-        preferences: {
-          preferredLocations: [],
-          studyMode: "Full-time",
-          startDate: "",
-          budgetRange: {
-            min: 0,
-            max: 100000,
-          },
-        },
-        documents: {},
-      });
-      setCurrentStep(0);
-      setCanNavigateToStep([0]);
-      initializedRef.current = false; // Reset initialization flag
-      localChangesRef.current = false; // Reset local changes flag
+      // Reset local component state
+      setProfileData(initialProfileData);
 
       // Redirect to the start of the profile wizard (or home page)
       console.log("Profile reset complete, redirecting...");
@@ -527,20 +501,20 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
   // Render the current step with proper typing
   const renderCurrentStep = () => {
-    const CurrentStepComponent = steps[currentStep].component;
+    // Use store's currentStep value directly
+    const CurrentStepComponent = steps[storedCurrentStep].component;
     const props: any = {
       profileData,
-      // Use the custom setter to track local changes
       setProfileData: handleProfileDataChange,
     };
 
-    if (currentStep === 0) {
+    if (storedCurrentStep === 0) {
       // For welcome step
       props.onComplete = handleNext;
-    } else if (currentStep === 1) {
+    } else if (storedCurrentStep === 1) {
       // For import options step
       props.onComplete = handleNext;
-    } else if (currentStep === steps.length - 1) {
+    } else if (storedCurrentStep === steps.length - 1) {
       // For review step
       props.onComplete = handleComplete;
       props.isEditMode = isEditMode;
@@ -639,32 +613,32 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
                   <TooltipTrigger asChild>
                     <div 
                       className={`flex flex-col items-center ${
-                        canNavigateToStep.includes(idx) 
+                        storedCompletedSteps.includes(idx) 
                           ? "cursor-pointer hover:opacity-80 transition-opacity" 
                           : "cursor-not-allowed opacity-70"
                       }`}
                       onClick={() => handleStepClick(idx)}
                     >
                       <motion.div 
-                        whileHover={canNavigateToStep.includes(idx) ? { scale: 1.1 } : {}}
+                        whileHover={storedCompletedSteps.includes(idx) ? { scale: 1.1 } : {}}
                         className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                          idx < currentStep 
+                          idx < storedCurrentStep 
                             ? "bg-green-500 text-white ring-2 ring-offset-2 ring-green-200"
-                            : idx === currentStep
+                            : idx === storedCurrentStep
                               ? "bg-blue-600 text-white ring-2 ring-offset-2 ring-blue-200"
-                              : canNavigateToStep.includes(idx)
+                              : storedCompletedSteps.includes(idx)
                                 ? "bg-gray-200 text-gray-700 ring-2 ring-offset-2 ring-gray-100"
                                 : "bg-gray-200 text-gray-500"
                         }`}
                       >
-                        {idx < currentStep ? (
+                        {idx < storedCurrentStep ? (
                           <CheckCircle2 className="h-5 w-5" />
                         ) : (
                           <span>{idx + 1}</span>
                         )}
                       </motion.div>
                       <span className={`text-xs mt-2 hidden md:block ${
-                        idx === currentStep ? "font-medium text-blue-700" : ""
+                        idx === storedCurrentStep ? "font-medium text-blue-700" : ""
                       }`}>
                         {step.name}
                       </span>
@@ -672,7 +646,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
                     <p>{step.description}</p>
-                    {!canNavigateToStep.includes(idx) && idx > 0 && (
+                    {!storedCompletedSteps.includes(idx) && idx > 0 && (
                       <p className="text-xs text-amber-600 mt-1 flex items-center">
                         <Info className="h-3 w-3 mr-1" /> Complete previous steps first
                       </p>
@@ -686,9 +660,13 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
             <div className="absolute top-1/2 left-4 right-4 h-2 bg-gray-200 -translate-y-1/2 rounded-full" />
             <motion.div 
               className="absolute top-1/2 left-4 h-2 bg-blue-600 -translate-y-1/2 rounded-full"
-              style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+              style={{ 
+                width: `${(storedCurrentStep / (steps.length - 1)) * 100}%` 
+              }}
               initial={{ width: 0 }}
-              animate={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+              animate={{ 
+                width: `${Math.max(0, Math.min(100, (storedCurrentStep / (steps.length - 1)) * 100))}%` 
+              }}
               transition={{ duration: 0.5 }}
             />
           </div>
@@ -709,12 +687,12 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
           </AnimatePresence>
 
           {/* Navigation buttons - Hide during completion */}
-          {!isCompleting && currentStep !== 0 && currentStep !== 1 && currentStep !== steps.length - 1 && (
+          {!isCompleting && storedCurrentStep !== 0 && storedCurrentStep !== 1 && storedCurrentStep !== steps.length - 1 && (
             <div className="flex justify-between mt-8 pt-4 border-t">
               <Button
                 variant="outline"
                 onClick={handlePrevious}
-                disabled={currentStep === 0}
+                disabled={storedCurrentStep === 0}
               >
                 Previous
               </Button>

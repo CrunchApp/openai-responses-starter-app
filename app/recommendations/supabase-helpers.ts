@@ -12,6 +12,10 @@ export async function saveRecommendation(
   vectorStoreId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    if (!vectorStoreId) {
+      throw new Error('Vector store ID is required');
+    }
+
     const supabase = await createClient();
     
     // Prepare the recommendation data with fields in the expected format
@@ -34,6 +38,8 @@ export async function saveRecommendation(
       scholarships: recommendation.scholarships || [],
     };
     
+    console.log(`Saving recommendation for user ${userId} with vector store ID: ${vectorStoreId}`);
+    
     // Call Supabase function to store the recommendation
     const { data, error } = await supabase.rpc(
       'store_recommendation',
@@ -45,6 +51,7 @@ export async function saveRecommendation(
     );
     
     if (error) {
+      console.error('Error from store_recommendation RPC:', error);
       throw new Error(`Failed to save recommendation: ${error.message}`);
     }
     
@@ -197,7 +204,11 @@ export async function saveRecommendationsBatch(
   vectorStoreId: string
 ): Promise<{ success: boolean; error?: string; savedCount?: number }> {
   try {
-    console.log(`Saving ${recommendations.length} recommendations to Supabase for user ${userId}`);
+    if (!vectorStoreId) {
+      throw new Error('Vector store ID is required for saving recommendations');
+    }
+    
+    console.log(`Saving ${recommendations.length} recommendations to Supabase for user ${userId} with vector store ID: ${vectorStoreId}`);
     
     const supabase = await createClient();
     
@@ -228,7 +239,7 @@ export async function saveRecommendationsBatch(
         scholarships: rec.scholarships || [],
       };
       
-      console.log(`Saving recommendation ${rec.id} for program "${rec.name}"`);
+      console.log(`Saving recommendation ${rec.id} for program "${rec.name}" with vector store ID: ${vectorStoreId}`);
       
       // Call Supabase function to store recommendation
       const { data, error } = await supabase.rpc(

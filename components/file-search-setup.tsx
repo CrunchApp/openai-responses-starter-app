@@ -1,6 +1,8 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import useToolsStore from "@/stores/useToolsStore";
+import useProfileStore from "@/stores/useProfileStore";
+import { useAuth } from "@/app/components/auth/AuthContext";
 import FileUpload from "@/components/file-upload";
 import { Input } from "./ui/input";
 import { CircleX } from "lucide-react";
@@ -10,7 +12,38 @@ import { TooltipProvider } from "./ui/tooltip";
 
 export default function FileSearchSetup() {
   const { vectorStore, setVectorStore } = useToolsStore();
+  const { vectorStoreId: profileVectorStoreId } = useProfileStore();
+  const { vectorStoreId: authVectorStoreId } = useAuth();
   const [newStoreId, setNewStoreId] = useState<string>("");
+  
+  // Determine the current vectorStoreId from the most authoritative source
+  const currentVectorStoreId = authVectorStoreId || profileVectorStoreId || vectorStore?.id || "";
+  
+  // Sync the tools store with the most current vectorStoreId
+  useEffect(() => {
+    if (currentVectorStoreId && (!vectorStore || vectorStore.id !== currentVectorStoreId)) {
+      // Only update if needed to avoid unnecessary re-renders
+      fetchAndUpdateVectorStore(currentVectorStoreId);
+    }
+  }, [currentVectorStoreId]);
+  
+  // Function to fetch vector store details and update the tools store
+  const fetchAndUpdateVectorStore = async (storeId: string) => {
+    if (storeId.trim()) {
+      try {
+        const newStore = await fetch(
+          `/api/vector_stores/retrieve_store?vector_store_id=${storeId}`
+        ).then((res) => res.json());
+        
+        if (newStore.id) {
+          console.log("Retrieved store:", newStore);
+          setVectorStore(newStore);
+        }
+      } catch (error) {
+        console.error("Error fetching vector store:", error);
+      }
+    }
+  };
 
   const unlinkStore = async () => {
     setVectorStore({
@@ -19,16 +52,29 @@ export default function FileSearchSetup() {
     });
   };
 
+  // Update to differentiate between linking existing store and creating new one
   const handleAddStore = async (storeId: string) => {
     if (storeId.trim()) {
-      const newStore = await fetch(
-        `/api/vector_stores/retrieve_store?vector_store_id=${storeId}`
-      ).then((res) => res.json());
-      if (newStore.id) {
-        console.log("Retrieved store:", newStore);
-        setVectorStore(newStore);
-      } else {
-        alert("Vector store not found");
+      try {
+        const newStore = await fetch(
+          `/api/vector_stores/retrieve_store?vector_store_id=${storeId}`
+        ).then((res) => res.json());
+        
+        if (newStore.id) {
+          console.log("Retrieved store:", newStore);
+          setVectorStore(newStore);
+          
+          // Update profile store if needed
+          const profileStore = useProfileStore.getState();
+          if (!authVectorStoreId && profileStore.setVectorStoreId) {
+            profileStore.setVectorStoreId(newStore.id);
+          }
+        } else {
+          alert("Vector store not found");
+        }
+      } catch (error) {
+        console.error("Error linking to existing vector store:", error);
+        alert("Error linking to vector store");
       }
     }
   };
@@ -43,11 +89,11 @@ export default function FileSearchSetup() {
           <div className="text-sm font-medium w-24 text-nowrap">
             Vector store
           </div>
-          {vectorStore?.id ? (
+          {currentVectorStoreId ? (
             <div className="flex items-center justify-between flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="text-zinc-400  text-xs font-mono flex-1 text-ellipsis truncate">
-                  {vectorStore.id}
+                  {currentVectorStoreId}
                 </div>
                 <TooltipProvider>
                   <Tooltip>
@@ -91,7 +137,7 @@ export default function FileSearchSetup() {
       </div>
       <div className="flex mt-4">
         <FileUpload
-          vectorStoreId={vectorStore?.id ?? ""}
+          vectorStoreId={currentVectorStoreId}
           onAddStore={(id) => handleAddStore(id)}
           onUnlinkStore={() => unlinkStore()}
         />

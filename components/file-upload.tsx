@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useState, FormEvent, useEffect } from "react";
+import React, { useCallback, useState, FormEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +19,14 @@ import {
 } from "./ui/tooltip";
 
 interface FileUploadProps {
-  vectorStoreId?: string;
+  vectorStoreId: string; // Make required
   onAddStore?: (id: string) => void;
   onUnlinkStore?: () => void;
   customTrigger?: React.ReactNode;
   dialogOpen?: boolean;
   setDialogOpen?: (open: boolean) => void;
   acceptedFileTypes?: string[];
+  disabled?: boolean; // Add disabled prop
 }
 
 export default function FileUpload({
@@ -35,30 +36,20 @@ export default function FileUpload({
   customTrigger,
   dialogOpen,
   setDialogOpen: externalSetDialogOpen,
-  acceptedFileTypes = []
+  acceptedFileTypes = [],
+  disabled = false // Default to false
 }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [userVectorStoreId, setUserVectorStoreId] = useState<string | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
   const [internalDialogOpen, setInternalDialogOpen] = useState<boolean>(false);
   const [storeError, setStoreError] = useState<string | null>(null);
   
   // Use external dialog state if provided, otherwise use internal state
   const isDialogOpen = dialogOpen !== undefined ? dialogOpen : internalDialogOpen;
-  const setIsDialogOpen = externalSetDialogOpen || setInternalDialogOpen;
-
-  // Load the user's vector store ID from localStorage on component mount
-  useEffect(() => {
-    const storedVectorStoreId = localStorage.getItem('userVectorStoreId');
-    if (storedVectorStoreId) {
-      setUserVectorStoreId(storedVectorStoreId);
-      
-      // If no vector store ID was provided through props, update using the stored one
-      if (!vectorStoreId && typeof onAddStore === 'function') {
-        onAddStore(storedVectorStoreId);
-      }
-    }
-  }, [vectorStoreId, onAddStore]);
+  // Prevent opening dialog if disabled
+  const setIsDialogOpen = disabled 
+    ? () => {} // No-op when disabled 
+    : (externalSetDialogOpen || setInternalDialogOpen);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -69,7 +60,8 @@ export default function FileUpload({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: acceptedFileTypes.length ? Object.fromEntries(acceptedFileTypes.map(type => [type, []])) : undefined,
-    maxFiles: 1
+    maxFiles: 1,
+    disabled: disabled // Disable dropzone when component is disabled
   });
 
   const removeFile = () => {
@@ -87,16 +79,13 @@ export default function FileUpload({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (disabled) return; // Prevent submit if disabled
     if (!file) {
       alert("Please select a file to upload.");
       return;
     }
     
-    // Determine which vector store ID to use
-    // Priority: 1. Prop vectorStoreId 2. localStorage userVectorStoreId
-    const activeVectorStoreId = vectorStoreId || userVectorStoreId;
-    
-    if (!activeVectorStoreId) {
+    if (!vectorStoreId) {
       setStoreError("No vector store found. Please complete your profile setup first.");
       return;
     }
@@ -130,9 +119,9 @@ export default function FileUpload({
       }
       console.log("Uploaded file:", uploadData);
 
-      // Use the active vector store ID for the uploaded file
+      // Notify parent that the store ID is being used
       if (typeof onAddStore === 'function') {
-        onAddStore(activeVectorStoreId);
+        onAddStore(vectorStoreId);
       }
 
       // 2. Add file to vector store
@@ -141,7 +130,7 @@ export default function FileUpload({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileId,
-          vectorStoreId: activeVectorStoreId,
+          vectorStoreId,
         }),
       });
       if (!addFileResponse.ok) {
@@ -160,10 +149,14 @@ export default function FileUpload({
   };
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <DialogTrigger asChild>
+    <Dialog open={!disabled && isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <DialogTrigger asChild disabled={disabled}>
         {customTrigger || (
-          <div className="bg-white rounded-full flex items-center justify-center py-1 px-3 border border-zinc-200 gap-1 font-medium text-sm cursor-pointer hover:bg-zinc-50 transition-all">
+          <div className={`bg-white rounded-full flex items-center justify-center py-1 px-3 border border-zinc-200 gap-1 font-medium text-sm transition-all ${
+            disabled 
+              ? 'opacity-50 cursor-not-allowed' 
+              : 'cursor-pointer hover:bg-zinc-50'
+          }`}>
             <Plus size={16} />
             Upload
           </div>
@@ -175,9 +168,13 @@ export default function FileUpload({
             <DialogTitle>Add files to your vector store</DialogTitle>
           </DialogHeader>
           <div className="my-6">
-            {!vectorStoreId && !userVectorStoreId ? (
+            {!vectorStoreId || disabled ? (
               <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-md text-sm">
-                <p>No vector store found. Please complete your profile setup first.</p>
+                <p>
+                  {disabled 
+                    ? "File upload is currently disabled." 
+                    : "No vector store found. Please complete your profile setup first."}
+                </p>
               </div>
             ) : (
               <div className="flex items-center justify-between flex-1 min-w-0">
@@ -186,7 +183,7 @@ export default function FileUpload({
                     Vector store
                   </div>
                   <div className="text-zinc-400 text-xs font-mono flex-1 text-ellipsis truncate">
-                    {vectorStoreId || userVectorStoreId}
+                    {vectorStoreId}
                   </div>
                   <TooltipProvider>
                     <Tooltip>
@@ -218,7 +215,11 @@ export default function FileUpload({
           )}
           
           <div className="flex justify-center items-center mb-4 h-[200px]">
-            {file ? (
+            {disabled ? (
+              <div className="text-center text-zinc-500">
+                File upload is currently disabled.
+              </div>
+            ) : file ? (
               <div className="flex flex-col items-start">
                 <div className="text-zinc-400">Loaded file</div>
                 <div className="flex items-center mt-2">
@@ -248,14 +249,22 @@ export default function FileUpload({
                   <div className="flex flex-col items-center text-center z-10 cursor-pointer">
                     <FilePlus2 className="mb-4 size-8 text-zinc-700" />
                     <div className="text-zinc-700">Upload a file</div>
+                    <div className="text-xs text-zinc-400 mt-1">
+                      or drag and drop
+                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
+
           <DialogFooter>
-            <Button type="submit" disabled={uploading || (!vectorStoreId && !userVectorStoreId)}>
-              {uploading ? "Uploading..." : "Add"}
+            <Button
+              disabled={!file || uploading || !vectorStoreId || disabled}
+              className="w-full"
+              type="submit"
+            >
+              {uploading ? "Uploading..." : "Upload"}
             </Button>
           </DialogFooter>
         </form>

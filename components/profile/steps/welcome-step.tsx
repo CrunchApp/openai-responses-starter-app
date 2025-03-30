@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { ArrowRight, Sparkles, Brain, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import useProfileStore from "@/stores/useProfileStore";
+import useToolsStore from "@/stores/useToolsStore";
 
 export default function WelcomeStep({
   profileData,
@@ -17,6 +18,10 @@ export default function WelcomeStep({
   const [nameError, setNameError] = useState<string | null>(null);
   const [isCreatingStore, setIsCreatingStore] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
+  
+  // Get state setters from stores
+  const setVectorStoreId = useProfileStore(state => state.setVectorStoreId);
+  const setToolsVectorStore = useToolsStore(state => state.setVectorStore);
 
   const createVectorStore = async (name: string) => {
     try {
@@ -52,13 +57,13 @@ export default function WelcomeStep({
         vectorStoreId: data.id
       }));
       
-      // Store vectorStoreId in localStorage for persistence
-      // This allows the ID to be accessed across components
-      localStorage.setItem('userVectorStoreId', data.id);
-
-      // Update the profile store with the new vector store ID
-      useProfileStore.setState({
-        vectorStoreId: data.id
+      // Store vectorStoreId in ProfileStore (single source of truth for guests)
+      setVectorStoreId(data.id);
+      
+      // Also update tools store for immediate use
+      setToolsVectorStore({
+        id: data.id,
+        name: `${name}_VectorStore`
       });
       
       return data.id;

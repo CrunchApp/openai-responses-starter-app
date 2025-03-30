@@ -49,6 +49,7 @@ export default function ProfileDashboard() {
     gpa: undefined
   });
   const [isAddEducationModalOpen, setIsAddEducationModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth(); // Get user and auth loading state
   
@@ -288,6 +289,62 @@ export default function ProfileDashboard() {
   };
   
   const completionPercentage = calculateCompletion();
+
+  // Handle profile deletion
+  const handleDeleteProfile = async () => {
+    try {
+      setIsLoading(true);
+      console.log("Starting profile deletion from UI");
+      
+      // Call the API to delete the profile
+      const response = await fetch('/api/profile/delete', {
+        method: 'DELETE',
+      });
+      
+      console.log("Delete API response status:", response.status);
+      const result = await response.json();
+      console.log("Delete API response:", result);
+      
+      if (result.error) {
+        console.error("Error from delete API:", result.error);
+        setError(result.error);
+        setIsDeleteDialogOpen(false);
+      } else {
+        console.log("Profile deletion result:", result);
+        
+        // Check if auth user was deleted or just profile data
+        if (result.authUserDeleted === false) {
+          console.log("Warning: Only profile data was deleted, auth user remains");
+          // We'll still sign out and redirect the user, but we can optionally show a warning
+          
+          // Consider showing a toast notification here if your UI supports it
+          // toast.warning("Profile data deleted, but your account remains. Contact support for complete account deletion.");
+        } else {
+          console.log("Profile and auth user deleted successfully");
+        }
+        
+        // Sign out the user after successful deletion (even if only partial)
+        try {
+          const supabase = createClient();
+          await supabase.auth.signOut();
+          console.log("User signed out successfully");
+          
+          // Redirect to login page
+          router.push('/login');
+        } catch (signOutError) {
+          console.error("Error during sign out:", signOutError);
+          // Even if sign out fails, still redirect to login
+          router.push('/login');
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting profile:", error);
+      setError("Failed to delete profile. Please try again later.");
+      setIsDeleteDialogOpen(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Show loading state
   if (authLoading || (isLoading && user)) { // Show loading if auth is loading OR if auth is done, user exists, but profile is still loading
@@ -1168,6 +1225,43 @@ export default function ProfileDashboard() {
           </AccordionItem>
         </motion.div>
       </Accordion>
+
+      {/* Delete Profile Button and Dialog */}
+      <div className="mt-8 border-t pt-6">
+        <Button 
+          variant="destructive" 
+          onClick={() => setIsDeleteDialogOpen(true)}
+          className="w-full"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Delete Profile
+        </Button>
+      </div>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete Profile</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-700">
+              Are you sure you want to delete your profile? This action cannot be undone.
+            </p>
+            <p className="text-gray-700 mt-2">
+              All your profile data, recommendations, and uploaded documents will be permanently removed.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProfile} disabled={isLoading}>
+              {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Profile
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

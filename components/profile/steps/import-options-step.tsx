@@ -14,9 +14,14 @@ import {
   AlertCircle, 
   CheckCircle2, 
   X, 
-  BookOpen 
+  BookOpen,
+  CheckCircle,
+  GraduationCap,
+  ScrollText,
+  Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import useProfileStore from "@/stores/useProfileStore";
 
 export default function ImportOptionsStep({
   profileData,
@@ -50,6 +55,9 @@ export default function ImportOptionsStep({
   });
   
   const { loginWithPopup, getAccessTokenSilently } = useAuth0();
+
+  // Get vectorStoreId AND hydration state from store
+  const { vectorStoreId: storeVectorStoreId, hydrated } = useProfileStore();
 
   // Add a useEffect for streaming animations
   useEffect(() => {
@@ -233,11 +241,13 @@ export default function ImportOptionsStep({
         setExtractionStage(0);
         setExtractionProgress(extractionStages[0]);
         
-        // Get vector store ID from localStorage
-        const vectorStoreId = localStorage.getItem('userVectorStoreId');
+        // Check hydration and get vector store ID from the store
+        if (!hydrated) {
+          throw new Error("Application is still loading. Please wait a moment and try again.");
+        }
         
-        if (!vectorStoreId) {
-          throw new Error("Vector store not found. Please try again.");
+        if (!storeVectorStoreId) {
+          throw new Error("Vector store not found. Please complete the welcome step first.");
         }
         
         // Collect document IDs
@@ -270,7 +280,7 @@ export default function ImportOptionsStep({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            vectorStoreId,
+            vectorStoreId: storeVectorStoreId,
             documentIds,
           }),
         });
@@ -374,6 +384,9 @@ export default function ImportOptionsStep({
   const linkedInImported = importStatus === "success";
   const hasImportedData = linkedInImported || uploadedCount > 0;
 
+  // Determine if document upload should be enabled
+  const isDocumentUploadEnabled = hydrated && !!storeVectorStoreId;
+
   // Add this extraction animation JSX at the appropriate point in your return statement (inside document upload content)
   const renderExtractionAnimation = () => {
     if (!extractingInfo) return null;
@@ -474,6 +487,16 @@ export default function ImportOptionsStep({
       </motion.div>
     );
   };
+
+  // Show loading indicator until store is hydrated
+  if (!hydrated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[200px]">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
+        <p className="text-zinc-600">Loading profile options...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -582,190 +605,124 @@ export default function ImportOptionsStep({
           </Card>
         </TabsContent>
 
-        <TabsContent value="documents" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Resume Upload */}
-            <Card className="p-4 border bg-white shadow-sm transition-all duration-300 hover:shadow-md">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-blue-100 rounded-full">
-                  <FileText size={20} className="text-blue-600" />
-                </div>
-                <h3 className="font-medium">Resume/CV</h3>
+        <TabsContent value="documents" className="p-0 border-none">
+          <div className="text-sm text-zinc-700 mb-4">
+            Upload your educational documents to help us better understand your background and goals.
+            {!isDocumentUploadEnabled && (
+              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-md">
+                <p className="flex items-center mb-1">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  <span className="font-medium">Document upload not available</span>
+                </p>
+                <p className="text-xs pl-6">
+                  Vector store ID is missing. Please complete the welcome step first to initialize your profile storage.
+                </p>
               </div>
-
-              {uploadedFiles.resume ? (
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex items-center gap-2 text-green-700">
-                    <CheckCircle2 size={16} className="text-green-600" />
-                    <span className="text-sm">Uploaded</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-green-200 text-green-700 hover:bg-green-50 h-8"
-                    onClick={() => {
-                      setProfileData((prevData) => ({
-                        ...prevData,
-                        documents: {
-                          ...prevData.documents,
-                          resume: undefined,
-                        },
-                      }));
-                      setUploadedFiles((prev) => ({ ...prev, resume: false }));
-                    }}
-                  >
-                    <X size={14} className="mr-1" /> Remove
-                  </Button>
-                </div>
-              ) : (
-                <DocumentUpload
-                  allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
-                  onSuccess={(fileId) => handleFileUploaded(fileId, "resume")}
-                  className="h-20"
-                >
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <Upload size={16} className="mb-1 text-blue-500" />
-                    <span className="text-xs text-center text-gray-500">Upload Resume</span>
-                  </div>
-                </DocumentUpload>
-              )}
-            </Card>
-
-            {/* Transcripts Upload */}
-            <Card className="p-4 border bg-white shadow-sm transition-all duration-300 hover:shadow-md">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-blue-100 rounded-full">
-                  <FileText size={20} className="text-blue-600" />
-                </div>
-                <h3 className="font-medium">Transcripts</h3>
-              </div>
-
-              {uploadedFiles.transcripts ? (
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex items-center gap-2 text-green-700">
-                    <CheckCircle2 size={16} className="text-green-600" />
-                    <span className="text-sm">Uploaded</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-green-200 text-green-700 hover:bg-green-50 h-8"
-                    onClick={() => {
-                      setProfileData((prevData) => ({
-                        ...prevData,
-                        documents: {
-                          ...prevData.documents,
-                          transcripts: undefined,
-                        },
-                      }));
-                      setUploadedFiles((prev) => ({ ...prev, transcripts: false }));
-                    }}
-                  >
-                    <X size={14} className="mr-1" /> Remove
-                  </Button>
-                </div>
-              ) : (
-                <DocumentUpload
-                  allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
-                  onSuccess={(fileId) => handleFileUploaded(fileId, "transcripts")}
-                  className="h-20"
-                >
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <Upload size={16} className="mb-1 text-blue-500" />
-                    <span className="text-xs text-center text-gray-500">Upload Transcripts</span>
-                  </div>
-                </DocumentUpload>
-              )}
-            </Card>
-
-            {/* Statement of Purpose Upload */}
-            <Card className="p-4 border bg-white shadow-sm transition-all duration-300 hover:shadow-md md:col-span-2">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-blue-100 rounded-full">
-                  <FileText size={20} className="text-blue-600" />
-                </div>
-                <h3 className="font-medium">Statement of Purpose</h3>
-              </div>
-
-              {uploadedFiles.statementOfPurpose ? (
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex items-center gap-2 text-green-700">
-                    <CheckCircle2 size={16} className="text-green-600" />
-                    <span className="text-sm">Uploaded</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-green-200 text-green-700 hover:bg-green-50 h-8"
-                    onClick={() => {
-                      setProfileData((prevData) => ({
-                        ...prevData,
-                        documents: {
-                          ...prevData.documents,
-                          statementOfPurpose: undefined,
-                        },
-                      }));
-                      setUploadedFiles((prev) => ({ ...prev, statementOfPurpose: false }));
-                    }}
-                  >
-                    <X size={14} className="mr-1" /> Remove
-                  </Button>
-                </div>
-              ) : (
-                <DocumentUpload
-                  allowedFileTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']}
-                  onSuccess={(fileId) => handleFileUploaded(fileId, "statementOfPurpose")}
-                  className="h-20"
-                >
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <Upload size={16} className="mb-1 text-blue-500" />
-                    <span className="text-xs text-center text-gray-500">Upload Statement of Purpose</span>
-                  </div>
-                </DocumentUpload>
-              )}
-            </Card>
+            )}
           </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Resume Upload */}
+            <DocumentUpload
+              onSuccess={(fileId) => handleFileUploaded(fileId, 'resume')}
+              allowedFileTypes={['.pdf', '.docx', '.doc']}
+              className="h-36"
+              vectorStoreId={storeVectorStoreId || ''}
+              disabled={!isDocumentUploadEnabled}
+            >
+              <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                <FileText className="mb-2 h-8 w-8 text-blue-500" />
+                <p className="font-medium text-sm">Resume/CV</p>
+                <p className="text-xs text-zinc-500 mt-1">PDF, DOCX</p>
+                {uploadedFiles.resume && (
+                  <div className="mt-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
+                    <CheckCircle className="h-3 w-3 mr-1" /> Uploaded
+                  </div>
+                )}
+              </div>
+            </DocumentUpload>
+            
+            {/* Transcripts Upload */}
+            <DocumentUpload
+              onSuccess={(fileId) => handleFileUploaded(fileId, 'transcripts')}
+              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
+              className="h-36"
+              vectorStoreId={storeVectorStoreId || ''}
+              disabled={!isDocumentUploadEnabled}
+            >
+              <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                <GraduationCap className="mb-2 h-8 w-8 text-blue-500" />
+                <p className="font-medium text-sm">Transcripts</p>
+                <p className="text-xs text-zinc-500 mt-1">PDF, JPG, PNG</p>
+                {uploadedFiles.transcripts && (
+                  <div className="mt-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
+                    <CheckCircle className="h-3 w-3 mr-1" /> Uploaded
+                  </div>
+                )}
+              </div>
+            </DocumentUpload>
+            
+            {/* Statement of Purpose Upload */}
+            <DocumentUpload
+              onSuccess={(fileId) => handleFileUploaded(fileId, 'statementOfPurpose')}
+              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
+              className="h-36"
+              vectorStoreId={storeVectorStoreId || ''}
+              disabled={!isDocumentUploadEnabled}
+            >
+              <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                <ScrollText className="mb-2 h-8 w-8 text-blue-500" />
+                <p className="font-medium text-sm">Statement of Purpose</p>
+                <p className="text-xs text-zinc-500 mt-1">PDF, DOCX, TXT</p>
+                {uploadedFiles.statementOfPurpose && (
+                  <div className="mt-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
+                    <CheckCircle className="h-3 w-3 mr-1" /> Uploaded
+                  </div>
+                )}
+              </div>
+            </DocumentUpload>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-between pt-6 border-t mt-6">
+            <p className="text-sm text-zinc-500 mb-4 sm:mb-0">
+              {hasImportedData 
+                ? "You can continue filling your profile in the next steps."
+                : "You can continue without importing data and fill your profile manually."}
+            </p>
+            <Button 
+              onClick={handleContinue}
+              className="flex items-center space-x-2 min-w-[150px]"
+              size="lg"
+              disabled={extractingInfo}
+            >
+              {extractingInfo ? (
+                <>
+                  <span>{extractionProgress || "Analyzing documents..."}</span>
+                  <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin ml-2"></div>
+                </>
+              ) : (
+                <>
+                  <span>Continue</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+          
+          {/* Show extraction error if there is one */}
+          {errorMessage && !extractingInfo && (
+            <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">
+              <AlertCircle className="h-4 w-4 inline mr-2" />
+              {errorMessage}
+            </div>
+          )}
+          
+          {/* Add the extraction animation just before closing div */}
+          <AnimatePresence>
+            {extractingInfo && renderExtractionAnimation()}
+          </AnimatePresence>
         </TabsContent>
       </Tabs>
-
-      <div className="flex flex-col sm:flex-row items-center justify-between pt-6 border-t mt-6">
-        <p className="text-sm text-zinc-500 mb-4 sm:mb-0">
-          {hasImportedData 
-            ? "You can continue filling your profile in the next steps."
-            : "You can't continue without importing data and fill your profile manually."}
-        </p>
-        <Button 
-          onClick={handleContinue}
-          className="flex items-center space-x-2 min-w-[150px]"
-          size="lg"
-          disabled={extractingInfo}
-        >
-          {extractingInfo ? (
-            <>
-              <span>{extractionProgress || "Analyzing documents..."}</span>
-              <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin ml-2"></div>
-            </>
-          ) : (
-            <>
-              <span>Continue</span>
-              <ArrowRight className="h-4 w-4" />
-            </>
-          )}
-        </Button>
-      </div>
-      
-      {/* Show extraction error if there is one */}
-      {errorMessage && !extractingInfo && (
-        <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">
-          <AlertCircle className="h-4 w-4 inline mr-2" />
-          {errorMessage}
-        </div>
-      )}
-      
-      {/* Add the extraction animation just before closing div */}
-      <AnimatePresence>
-        {extractingInfo && renderExtractionAnimation()}
-      </AnimatePresence>
     </div>
   );
 } 

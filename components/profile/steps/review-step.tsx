@@ -35,23 +35,21 @@ export default function ReviewStep({
   const router = useRouter();
   
   // Use our stores
-  const { setVectorStoreId, setProfileComplete } = useProfileStore();
+  const { vectorStoreId: storeVectorStoreId, setVectorStoreId, setProfileComplete } = useProfileStore();
   const { setUserProfile } = useRecommendationsStore();
   const { setVectorStore, setFileSearchEnabled } = useToolsStore();
 
-  // Add a useEffect to check for uploaded documents in localStorage
+  // Add a useEffect to verify vector store ID consistency
   useEffect(() => {
-    // Check if documents need to be updated from the vector store
-    const vectorStoreId = localStorage.getItem('userVectorStoreId');
-    
-    if (vectorStoreId && !profileData.vectorStoreId) {
-      // If there's a vector store ID in localStorage but not in profileData, update it
+    // Check if vector store ID needs to be updated from the store to profile data
+    if (storeVectorStoreId && !profileData.vectorStoreId) {
+      // If there's a vector store ID in the store but not in profileData, update it
       setProfileData(prev => ({
         ...prev,
-        vectorStoreId: vectorStoreId
+        vectorStoreId: storeVectorStoreId
       }));
     }
-  }, [profileData.vectorStoreId, setProfileData]);
+  }, [storeVectorStoreId, profileData.vectorStoreId, setProfileData]);
 
   const handleTriggerCompletion = async () => {
     if (isEditMode) {

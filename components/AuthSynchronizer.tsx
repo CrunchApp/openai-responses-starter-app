@@ -27,7 +27,9 @@ export default function AuthSynchronizer() {
   // Get profile store actions
   const {
     clearStore: clearProfileStore,
-    hydrated: profileStoreHydrated
+    hydrated: profileStoreHydrated,
+    setCurrentStep,
+    completedSteps
   } = useProfileStore();
   
   // Create Supabase client
@@ -35,10 +37,28 @@ export default function AuthSynchronizer() {
   
   // Use a ref to track if we've already synced the state
   const hasSyncedRef = useRef(false);
+  // Track if we're in a guest session to prevent clearing profile store
+  const isGuestSessionRef = useRef(false);
   
   // Combine hydration checks
   const storeHydrated = recStoreHydrated && profileStoreHydrated;
   
+  // On initial load, determine if we're in a guest session
+  useEffect(() => {
+    if (storeHydrated) {
+      // Check if there's profile data in the store but no authenticated user
+      // This indicates a guest user with wizard progress
+      const { currentStep, completedSteps, profileData } = useProfileStore.getState();
+      
+      if (!user && (currentStep > 0 || completedSteps.length > 0 || (profileData && Object.keys(profileData).length > 0))) {
+        console.log('📝 Detected guest session with existing profile data:', { currentStep, completedStepsCount: completedSteps.length });
+        isGuestSessionRef.current = true;
+      } else {
+        isGuestSessionRef.current = false;
+      }
+    }
+  }, [storeHydrated, user]);
+
   // Directly check Supabase auth status on component mount
   useEffect(() => {
     async function checkAuthWithSupabase() {
@@ -53,8 +73,17 @@ export default function AuthSynchronizer() {
           // If the error is related to a missing session, clear auth state to be safe
           if (error.message?.includes('session')) {
             console.log('🔒 Auth session error detected, clearing state');
+            console.log('[AuthSync] Clearing stores due to Supabase session error');
             clearRecommendationsStore();
-            clearProfileStore();
+            
+            // ONLY clear profile store if NOT a guest session with progress
+            if (!isGuestSessionRef.current) {
+              clearProfileStore();
+              console.log('[AuthSync] Profile store cleared (not a guest session)');
+            } else {
+              console.log('[AuthSync] Preserving profile store for guest session');
+            }
+            
             setRecAuthState(false, null);
           }
           return;
@@ -78,15 +107,33 @@ export default function AuthSynchronizer() {
           }
         } else {
           console.log('🔒 No authenticated user found in Supabase, clearing stores.');
+          console.log('[AuthSync] Clearing recommendations store due to no Supabase user');
           clearRecommendationsStore();
-          clearProfileStore();
+          
+          // ONLY clear profile store if NOT a guest session with progress
+          if (!isGuestSessionRef.current) {
+            console.log('[AuthSync] Clearing profile store (not a guest session)');
+            clearProfileStore();
+          } else {
+            console.log('[AuthSync] Preserving profile store for guest session with progress');
+          }
+          
           setRecAuthState(false, null); // Ensure auth state is false after clearing
         }
       } catch (error) {
         console.error('Error in checkAuthWithSupabase:', error);
         // If there's an unexpected error, reset auth state to be safe
+        console.log('[AuthSync] Clearing recommendations store due to unexpected error');
         clearRecommendationsStore();
-        clearProfileStore();
+        
+        // ONLY clear profile store if NOT a guest session with progress
+        if (!isGuestSessionRef.current) {
+          console.log('[AuthSync] Clearing profile store due to unexpected error');
+          clearProfileStore();
+        } else {
+          console.log('[AuthSync] Preserving profile store for guest session despite error');
+        }
+        
         setRecAuthState(false, null);
       }
     }
@@ -119,7 +166,8 @@ export default function AuthSynchronizer() {
         userId,
         user: user ? user.id : null,
         hydrated: storeHydrated,
-        authLoading
+        authLoading,
+        isGuestSession: isGuestSessionRef.current
       });
       
       // If states don't match, update the recommendations store
@@ -137,8 +185,17 @@ export default function AuthSynchronizer() {
         } else if (!authContextHasUser) {
           // User is signing OUT via AuthContext
           console.log('🔒 User signed out via AuthContext. Clearing stores.');
+          console.log('[AuthSync] Clearing recommendations store due to AuthContext sign out');
           clearRecommendationsStore();
-          clearProfileStore();
+          
+          // ONLY clear profile store if this isn't just a page load for a guest user session
+          if (!isGuestSessionRef.current) {
+            console.log('[AuthSync] Clearing profile store due to AuthContext sign out');
+            clearProfileStore();
+          } else {
+            console.log('[AuthSync] Preserving profile store for guest session during AuthContext check');
+          }
+          
           setRecAuthState(false, null); // Ensure auth state is set to false *after* clearing
         }
       } else {
@@ -174,8 +231,14 @@ export default function AuthSynchronizer() {
               }
             } else if (event === 'SIGNED_OUT') {
               console.log('🔒 User signed out via Supabase listener. Clearing stores.');
+              console.log('[AuthSync] Clearing recommendations store due to Supabase SIGNED_OUT event');
               clearRecommendationsStore();
+              
+              // For actual sign-out events, we always want to clear the profile store
+              // This is an explicit user action, not just a page load check
+              console.log('[AuthSync] Clearing profile store due to Supabase SIGNED_OUT event');
               clearProfileStore();
+              
               setRecAuthState(false, null); // Ensure auth state is set to false *after* clearing
             } else if (event === 'USER_UPDATED' && session?.user) {
               // Handle potential user updates if necessary, e.g., email change

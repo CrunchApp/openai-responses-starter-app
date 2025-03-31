@@ -5,6 +5,11 @@ alwaysApply: false
 ---
 ---
 description: Guidelines for writing Supabase database functions
+globs: 
+alwaysApply: false
+---
+---
+description: Guidelines for writing Supabase database functions
 globs: **/*.sql
 alwaysApply: false
 ---

@@ -244,13 +244,55 @@ export const processMessages = async () => {
         // After output item is done, adding tool call ID
         const { item } = data || {};
 
-        const toolCallMessage = chatMessages.find((m) => m.id === item.id);
+        // Ensure item exists before proceeding
+        if (!item || !item.id) {
+          console.warn("Received response.output_item.done without a valid item or item.id");
+          break; // Exit if item is invalid
+        }
+
+        const chatMessagesState = useConversationStore.getState().chatMessages;
+        const toolCallMessage = chatMessagesState.find((m) => m.id === item.id);
+
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.call_id = item.call_id;
-          setChatMessages([...chatMessages]);
+          setChatMessages([...chatMessagesState]); // Update UI state
         }
-        conversationItems.push(item);
-        setConversationItems([...conversationItems]);
+        
+        // Add the final item to the items sent to the API
+        const currentConversationItems = useConversationStore.getState().conversationItems;
+        setConversationItems([...currentConversationItems, item]);
+
+        // --- Save completed assistant message --- 
+        if (item.type === 'message' && item.role === 'assistant') {
+          // Find the final state of the message in chatMessages (which includes streamed text/annotations)
+          const finalChatMessage = chatMessagesState.find((m): m is MessageItem =>
+            m.type === 'message' && m.id === item.id
+          );
+
+          if (finalChatMessage) {
+            console.log("Saving final assistant message to DB:", finalChatMessage.id);
+            // Use the addChatMessage from the store to save it
+            // Ensure this doesn't trigger another API call unnecessarily
+            useConversationStore.getState().addChatMessage(finalChatMessage);
+          } else {
+            console.warn("Could not find final assistant message in chatMessages to save.");
+            // As a fallback, try creating a message item from the raw API response item
+            // Note: This might miss annotations added during streaming
+            const fallbackMessageItem: MessageItem = {
+              type: "message",
+              role: "assistant",
+              id: item.id,
+              // Attempt to handle potentially missing/malformed content
+              content: Array.isArray(item.content) && item.content.length > 0 
+                        ? item.content 
+                        : [{ type: 'output_text', text: 'Error: Content missing or invalid' }]
+            };
+            console.log("Saving fallback assistant message to DB:", fallbackMessageItem.id);
+            useConversationStore.getState().addChatMessage(fallbackMessageItem);
+          }
+        }
+        // *** IMPORTANT: Added missing break statement ***
+        break; 
       }
 
       case "response.function_call_arguments.delta": {

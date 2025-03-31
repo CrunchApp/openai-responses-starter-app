@@ -8,6 +8,11 @@ description: Guidelines for Backend API Architecture and Development Guidelines 
 globs: 
 alwaysApply: false
 ---
+---
+description: Guidelines for Backend API Architecture and Development Guidelines creating typesafe apis on hono restful API
+globs: 
+alwaysApply: false
+---
 
 # Vista Education Adviser – Backend API Architecture & Development Guidelines
 

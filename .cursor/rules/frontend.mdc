@@ -1,4 +1,9 @@
 ---
+description: Database rules for working with Supabase and creating backend apis
+globs: 
+alwaysApply: false
+---
+---
 description: Always follow for applying any updates to the front-end and components in the project
 globs: 
 alwaysApply: false

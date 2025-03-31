@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: true
+---
+---
 description: Understanding the project and its overview
 globs: 
 alwaysApply: true

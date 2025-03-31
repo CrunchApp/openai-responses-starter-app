@@ -5,6 +5,11 @@ alwaysApply: false
 ---
 ---
 description: Guidelines for writing Postgres migrations
+globs: 
+alwaysApply: false
+---
+---
+description: Guidelines for writing Postgres migrations
 globs: "supabase/migrations/**/*.sql"
 ---
 

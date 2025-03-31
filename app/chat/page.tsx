@@ -1,6 +1,7 @@
 "use client";
 import Assistant from "@/components/assistant";
 import ToolsPanel from "@/components/tools-panel";
+import ConversationSelector from "@/components/conversation-selector";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import { PageWrapper } from "@/components/layouts/PageWrapper";
@@ -14,8 +15,13 @@ export default function ChatPage() {
         <div className="w-full md:w-[70%] relative">
           <Assistant />
         </div>
-        <div className="hidden md:block w-[30%]">
-          <ToolsPanel />
+        <div className="hidden md:flex md:flex-col md:w-[30%]">
+          <div className="p-4 border-b border-gray-200">
+            <ConversationSelector />
+          </div>
+          {/* <div className="flex-grow overflow-auto">
+            <ToolsPanel />
+          </div> */}
         </div>
         {/* Hamburger menu for small screens */}
         <div className="absolute top-4 right-4 md:hidden">
@@ -30,7 +36,10 @@ export default function ChatPage() {
               <button className="mb-4" onClick={() => setIsToolsPanelOpen(false)}>
                 <X size={24} />
               </button>
-              <ToolsPanel />
+              <div className="mb-4">
+                <ConversationSelector />
+              </div>
+              {/* <ToolsPanel /> */}
             </div>
           </div>
         )}

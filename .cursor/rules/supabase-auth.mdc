@@ -5,6 +5,11 @@ alwaysApply: false
 ---
 ---
 description: Guidelines for writing Next.js apps with Supabase Auth
+globs: 
+alwaysApply: false
+---
+---
+description: Guidelines for writing Next.js apps with Supabase Auth
 globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
 ---
 

@@ -159,24 +159,39 @@ export async function toggleRecommendationFavorite(
       console.error('Auth error in toggleRecommendationFavorite:', authError?.message);
       return { success: false, error: 'User not authenticated' };
     }
+    
     // Ensure the provided userId matches the authenticated user
     if (user.id !== userId) {
       console.warn(`User ID mismatch in toggleRecommendationFavorite: provided ${userId}, authenticated ${user.id}`);
-      // Optionally return an error, or proceed if this check isn't strictly necessary
-      // return { success: false, error: 'User ID mismatch' };
+      return { success: false, error: 'User ID mismatch' };
     }
-    // --- End user check ---
 
     // Call the Supabase function to toggle the favorite status
     const { data, error } = await supabase.rpc(
       'toggle_recommendation_favorite',
       {
-        p_user_id: userId, // Use the verified or originally passed userId
+        p_user_id: userId,
         p_recommendation_id: recommendationId
       }
     );
     
     if (error) {
+      // Check for specific error types and provide user-friendly messages
+      if (error.message.includes('invalid input syntax for type uuid')) {
+        console.error('Invalid recommendation ID format:', recommendationId);
+        return { 
+          success: false, 
+          error: 'Invalid recommendation format. Please try again or contact support if the issue persists.' 
+        };
+      }
+      
+      if (error.message.includes('Recommendation not found')) {
+        return { 
+          success: false, 
+          error: 'This recommendation could not be found. It may have been deleted.' 
+        };
+      }
+      
       throw new Error(`Failed to toggle recommendation favorite: ${error.message}`);
     }
     

@@ -86,21 +86,25 @@ export default function RecommendationsPage() {
     setLoading,
     setError,
     toggleFavorite,
-    hydrated
+    hydrated,
+    appendRecommendations
   } = useRecommendationsStore();
     
   // Local UI state
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState("recommendations");
   const [feedbackProgram, setFeedbackProgram] = useState<string | null>(null);
+  const [isAppending, setIsAppending] = useState(false);
   
   // For initialization and loading state
   const [isInitializing, setIsInitializing] = useState(true);
+  const [newRecommendationIds, setNewRecommendationIds] = useState<string[]>([]); 
   
   // Refs to track initialization status
   const initializedRef = useRef(false);
   const fetchingRef = useRef(false);
   const profileCheckedRef = useRef(false);
+  const newRecommendationsRef = useRef<HTMLDivElement>(null);
 
   // Destructure the reset functions from the stores
   const { 
@@ -196,7 +200,7 @@ export default function RecommendationsPage() {
   }, [hydrated, authLoading, user, isProfileComplete, vectorStoreId, router, setUserProfile, setProfileComplete, setVectorStoreId, setFileSearchEnabled, vectorStore, fileSearchEnabled, setError, isAuthenticated, userId]);
   
   // Fetch recommendations from the API - NOT auto-triggered
-  async function fetchRecommendations() {
+  async function fetchRecommendations(isAppending = false) {
     if (!hydrated) {
       console.log("Store not hydrated yet, cannot fetch recommendations");
       setError("Please wait for application to initialize");
@@ -209,6 +213,9 @@ export default function RecommendationsPage() {
       return;
     }
     
+    // Update appending state
+    setIsAppending(isAppending);
+    
     // Get the authentication state from context, not just the store
     const authFromContext = Boolean(user);
     // Use the more reliable auth context state
@@ -219,7 +226,8 @@ export default function RecommendationsPage() {
       authFromContext,
       storeAuth: isAuthenticated,
       userId: authUserId,
-      isGuest
+      isGuest,
+      isAppending
     });
     
     if (vectorStore && vectorStore.id) {
@@ -248,20 +256,28 @@ export default function RecommendationsPage() {
           isGuest // Pass isGuest flag directly from auth context
         );
         
-        processRecommendationResults(result);
+        processRecommendationResults(result, isAppending);
       } catch (error) {
         console.error('Error fetching recommendations:', error);
         setError(error instanceof Error ? error.message : 'An unexpected error occurred');
         setLoading(false);
         fetchingRef.current = false;
+        setIsAppending(false);
       }
     }
   }
   
   // Helper function to process recommendation results
-  function processRecommendationResults(result: any) {
+  function processRecommendationResults(result: {
+    recommendations: RecommendationProgram[];
+    error?: string;
+    dbSaveError?: string;
+    partialSave?: boolean;
+    savedCount?: number;
+  }, isAppending = false) {
     if (result.error) {
       setError(result.error);
+      setIsAppending(false);
     } else if (result.recommendations && result.recommendations.length > 0) {
       // Set favorites based on stored favorites
       const recommendationsWithFavorites = result.recommendations.map((rec: RecommendationProgram) => ({
@@ -269,25 +285,51 @@ export default function RecommendationsPage() {
         isFavorite: favoritesIds.includes(rec.id)
       }));
       
-      setRecommendations(recommendationsWithFavorites);
+      // Keep track of new recommendation IDs for highlighting
+      const newIds = recommendationsWithFavorites.map((rec: RecommendationProgram) => rec.id);
+      setNewRecommendationIds(newIds);
+      
+      // Use either setRecommendations or appendRecommendations based on isAppending
+      if (isAppending) {
+        console.log(`Appending ${recommendationsWithFavorites.length} new recommendations`);
+        // Append recommendations
+        appendRecommendations(recommendationsWithFavorites);
+        
+        // Scroll to new recommendations after rendering
+        setTimeout(() => {
+          if (newRecommendationsRef.current) {
+            newRecommendationsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+      } else {
+        console.log(`Setting ${recommendationsWithFavorites.length} new recommendations`);
+        // Replace recommendations
+        setRecommendations(recommendationsWithFavorites);
+      }
       
       // Handle database save errors for authenticated users
       if (result.dbSaveError) {
         console.warn("Recommendations generated but not saved properly to database:", result.dbSaveError);
         
         if (result.partialSave) {
-          setError(`Some recommendations could not be saved to your account (${result.savedCount}/${result.recommendations.length} saved). The error was: ${result.dbSaveError}`);
+          setError(`${isAppending ? "New recommendations" : "Recommendations"} could not be fully saved to your account (${result.savedCount}/${result.recommendations.length} saved). The error was: ${result.dbSaveError}`);
         } else {
-          setError(`Recommendations generated but couldn't be saved to your account: ${result.dbSaveError}`);
+          setError(`${isAppending ? "New recommendations" : "Recommendations"} generated but couldn't be saved to your account: ${result.dbSaveError}`);
         }
       }
+
+      // Clear the highlight after 5 seconds
+      setTimeout(() => {
+        setNewRecommendationIds([]);
+      }, 10000);
     } else {
       // If no recommendations, set an error message
-      setError("No recommendations found that match your profile");
+      setError(isAppending ? "No additional recommendations found that match your profile" : "No recommendations found that match your profile");
     }
     
     setLoading(false);
     fetchingRef.current = false;
+    setIsAppending(false);
   }
 
   const handleGoToAssistant = () => {
@@ -514,7 +556,7 @@ export default function RecommendationsPage() {
                 <p className="text-center mb-4">Click below to generate recommendations based on your profile</p>
                 <Button 
                   size="lg"
-                  onClick={fetchRecommendations} 
+                  onClick={() => fetchRecommendations(false)} 
                   disabled={isLoading || (!isAuthenticated && hasReachedGuestLimit)}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
@@ -549,6 +591,18 @@ export default function RecommendationsPage() {
               </div>
             )}
             
+            {isLoading && isAppending && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md mb-6 flex items-start">
+                <Loader2 className="h-5 w-5 mr-2 mt-0.5 text-blue-500 animate-spin" />
+                <div>
+                  <p className="font-medium">Finding more recommendations</p>
+                  <p className="text-sm">
+                    Analyzing your profile to discover additional educational opportunities...
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <Tabs defaultValue="recommendations" className="w-full" onValueChange={setSelectedTab}>
               <TabsList className="grid w-full grid-cols-3 mb-6">
                 <TabsTrigger value="recommendations" className="text-sm md:text-base">
@@ -574,6 +628,16 @@ export default function RecommendationsPage() {
                     animate="visible"
                     className="space-y-6"
                   >
+                    {isAppending && (
+                      <div 
+                        ref={newRecommendationsRef} 
+                        className="border-t-2 border-b-2 border-blue-200 py-3 my-4 bg-blue-50 rounded-md text-center"
+                      >
+                        <p className="text-sm text-blue-600 font-medium">
+                          New recommendations will be added below
+                        </p>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h2 className="text-xl font-semibold">Programs matched to your profile</h2>
@@ -589,13 +653,13 @@ export default function RecommendationsPage() {
                           Edit Profile
                         </Button>
                         
-                        {/* Only show generate new recommendations button for authenticated users 
+                        {/* Only show generate more recommendations button for authenticated users 
                             or guests who haven't reached their limit */}
                         {(isAuthenticated || !hasReachedGuestLimit) && (
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={fetchRecommendations}
+                            onClick={() => fetchRecommendations(true)}
                             disabled={isLoading}
                           >
                             {isLoading ? (
@@ -606,7 +670,7 @@ export default function RecommendationsPage() {
                             ) : (
                               <>
                                 <Scroll className="w-4 h-4 mr-2" />
-                                Generate New
+                                Generate More
                               </>
                             )}
                           </Button>
@@ -632,10 +696,15 @@ export default function RecommendationsPage() {
                       variants={itemVariants}
                       layout
                     >
-                      <Card className={`overflow-hidden transition-all duration-300 hover:shadow-md ${program.id === expandedCardId ? 'ring-2 ring-blue-200' : ''}`}>
+                      <Card className={`overflow-hidden transition-all duration-300 hover:shadow-md ${
+                        program.id === expandedCardId ? 'ring-2 ring-blue-200' : ''
+                      } ${newRecommendationIds.includes(program.id) ? 'ring-2 ring-green-300 bg-green-50' : ''}`}>
                         <CardHeader className="pb-2">
                           <div className="flex justify-between items-start">
                             <div>
+                              {newRecommendationIds.includes(program.id) && (
+                                <Badge className="mb-2 bg-green-100 text-green-800 hover:bg-green-100">New</Badge>
+                              )}
                               <CardTitle className="text-lg md:text-xl font-bold mb-1">
                                 {program.name}
                               </CardTitle>
@@ -857,7 +926,7 @@ export default function RecommendationsPage() {
                     <h3 className="text-xl font-semibold mb-2">No recommendations yet</h3>
                     <p className="text-zinc-600 mb-6">Generate recommendations based on your profile</p>
                     <Button 
-                      onClick={fetchRecommendations} 
+                      onClick={() => fetchRecommendations(false)} 
                       disabled={isLoading || (!isAuthenticated && hasReachedGuestLimit)}
                       size="lg"
                       className="bg-blue-600 hover:bg-blue-700"

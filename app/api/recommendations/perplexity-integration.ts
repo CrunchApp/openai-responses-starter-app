@@ -440,7 +440,7 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
       const academicFitScore = Math.min(98, Math.floor(matchScore + Math.random() * 3));
       
       return {
-        id: `prg_${Date.now()}_${index}`,
+        id: `${crypto.randomUUID()}`,
         ...program,
         fieldOfStudy: program.fieldOfStudy || pathway.fieldOfStudy,
         degreeType: program.degreeType || pathway.qualificationType,

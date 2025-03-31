@@ -29,6 +29,7 @@ interface RecommendationsState {
   
   // Methods
   setRecommendations: (recommendations: RecommendationProgram[]) => void;
+  appendRecommendations: (newRecommendations: RecommendationProgram[]) => void;
   addRecommendation: (recommendation: RecommendationProgram) => void;
   toggleFavorite: (recommendationId: string) => void;
   addToFavorites: (recommendationId: string) => void;
@@ -93,6 +94,47 @@ const useRecommendationsStore = create<RecommendationsState>()(
         
         return { 
           recommendations,
+          lastGeneratedAt: Date.now(),
+          isLoading: false
+        };
+      }),
+      
+      appendRecommendations: (newRecommendations) => set((state) => {
+        // Create a map of existing recommendations by ID for faster lookup
+        const existingRecsMap = new Map(
+          state.recommendations.map(rec => [rec.id, rec])
+        );
+        
+        // Filter out duplicates and merge with existing recommendations
+        const filteredNewRecs = newRecommendations.filter(rec => !existingRecsMap.has(rec.id));
+        
+        // If no new recommendations after filtering, just return current state
+        if (filteredNewRecs.length === 0) {
+          return { isLoading: false };
+        }
+        
+        // Apply favorite status based on favoritesIds
+        const newRecsWithFavorites = filteredNewRecs.map(rec => ({
+          ...rec,
+          isFavorite: state.favoritesIds.includes(rec.id)
+        }));
+        
+        // Increment generation count for guests
+        if (!state.isAuthenticated) {
+          const newGenerationCount = state.generationCount + 1;
+          const hasReachedGuestLimit = newGenerationCount >= 1; // Limit to 1 generation for guests
+          
+          return { 
+            recommendations: [...state.recommendations, ...newRecsWithFavorites],
+            lastGeneratedAt: Date.now(),
+            isLoading: false,
+            generationCount: newGenerationCount,
+            hasReachedGuestLimit
+          };
+        }
+        
+        return { 
+          recommendations: [...state.recommendations, ...newRecsWithFavorites],
           lastGeneratedAt: Date.now(),
           isLoading: false
         };
@@ -245,9 +287,39 @@ const useRecommendationsStore = create<RecommendationsState>()(
           
           if (!result.success) {
             console.error('Error syncing favorite with Supabase:', result.error);
+            
+            // Revert the UI state on error
+            set((state) => ({
+              recommendations: state.recommendations.map(rec => 
+                rec.id === recommendationId 
+                  ? { ...rec, isFavorite: !rec.isFavorite } 
+                  : rec
+              ),
+              favoritesIds: state.favoritesIds.includes(recommendationId)
+                ? state.favoritesIds.filter(id => id !== recommendationId)
+                : [...state.favoritesIds, recommendationId]
+            }));
+            
+            // Set error message
+            set({ error: result.error || 'Failed to update favorite status' });
           }
         } catch (error) {
           console.error('Error syncing favorite with Supabase:', error);
+          
+          // Revert the UI state on error
+          set((state) => ({
+            recommendations: state.recommendations.map(rec => 
+              rec.id === recommendationId 
+                ? { ...rec, isFavorite: !rec.isFavorite } 
+                : rec
+            ),
+            favoritesIds: state.favoritesIds.includes(recommendationId)
+              ? state.favoritesIds.filter(id => id !== recommendationId)
+              : [...state.favoritesIds, recommendationId],
+            error: error instanceof Error 
+              ? error.message 
+              : 'Failed to update favorite status'
+          }));
         }
       },
       

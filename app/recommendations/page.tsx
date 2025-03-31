@@ -63,6 +63,7 @@ import HydrationLoading from "@/components/ui/hydration-loading";
 import GuestLimitMonitor from "@/components/GuestLimitMonitor";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import { PageWrapper } from "@/components/layouts/PageWrapper";
+import { RecommendationProgressModal, RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
 
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
@@ -119,7 +120,24 @@ export default function RecommendationsPage() {
   const [isResetting, setIsResetting] = useState(false);
 
   // Memoize the fetchRecommendations function to use in useEffect
-  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [vectorStore, favoritesIds, setRecommendations, setUserProfile, setLoading, setError, userProfile, isAuthenticated]);
+  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [
+    vectorStore, 
+    favoritesIds, 
+    setRecommendations, 
+    setUserProfile, 
+    setLoading, 
+    setError, 
+    userProfile, 
+    isAuthenticated,
+    RECOMMENDATION_STAGES_ENHANCED.length // Add length as dependency
+  ]);
+
+  // Add new state variables
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentStageIndex, setCurrentStageIndex] = useState(0);
+  const [isGenerationComplete, setIsGenerationComplete] = useState(false); 
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   // Wait for hydration and auth state before proceeding
   useEffect(() => {
@@ -199,43 +217,124 @@ export default function RecommendationsPage() {
     checkProfile();
   }, [hydrated, authLoading, user, isProfileComplete, vectorStoreId, router, setUserProfile, setProfileComplete, setVectorStoreId, setFileSearchEnabled, vectorStore, fileSearchEnabled, setError, isAuthenticated, userId]);
   
-  // Fetch recommendations from the API - NOT auto-triggered
+  // Updated function to manage progress simulation with more stages and refined timing
+  const startProgressSimulation = () => {
+    setCurrentStageIndex(0);
+    setIsGenerationComplete(false);
+    setIsModalOpen(true);
+    
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    progressTimeoutsRef.current.forEach(clearTimeout);
+    progressTimeoutsRef.current = [];
+    
+    // Refined stage timing in milliseconds for ENHANCED stages
+    const stageTiming = [
+      1000, // Analyzing profile: 1s
+      3500, // Generating pathways (start): 3.5s (AI call)
+       500, // Generating pathways (complete): 0.5s
+      // Pathway 1 Research Loop
+      1000, // Init research 1: 1s
+      5000, // Query Perplexity 1: 5s (API call)
+      3000, // Process Results 1: 3s (AI call)
+      // Pathway 2 Research Loop
+      1000, // Init research 2: 1s
+      5000, // Query Perplexity 2: 5s (API call)
+      3000, // Process Results 2: 3s (AI call)
+      // Pathway 3 Research Loop
+      1000, // Init research 3: 1s
+      5000, // Query Perplexity 3: 5s (API call)
+      3000, // Process Results 3: 3s (AI call)
+      // Final Stages
+      1500, // Calculating match scores: 1.5s
+      1000  // Preparing recommendations: 1s
+    ];
+
+    // Ensure timing array matches the number of stages
+    if (stageTiming.length !== RECOMMENDATION_STAGES_ENHANCED.length) {
+      console.error("Mismatch between stage timings and number of stages!");
+      // Use default timing or handle error appropriately
+      // For now, we'll log the error and proceed, which might look odd
+    }
+    
+    let cumulativeTime = 0;
+    
+    RECOMMENDATION_STAGES_ENHANCED.forEach((_stage, index: number) => {
+      // Use the timing for the current stage, default to 1s if mismatch
+      const currentStageDuration = stageTiming[index] ?? 1000;
+      
+      if (index === 0) {
+        setCurrentStageIndex(0); // Start immediately
+      } else {
+        const timeout = setTimeout(() => {
+          // Ensure we don't exceed the bounds of the stages array
+          if (index < RECOMMENDATION_STAGES_ENHANCED.length) {
+             setCurrentStageIndex(index);
+          }
+        }, cumulativeTime);
+        progressTimeoutsRef.current.push(timeout);
+      }
+      cumulativeTime += currentStageDuration;
+    });
+  };
+
+  const stopProgressSimulation = (showComplete: boolean = true) => {
+    progressTimeoutsRef.current.forEach(clearTimeout);
+    progressTimeoutsRef.current = [];
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+
+    // Set to the last *actual* stage index before closing/completing
+    const finalStageIndex = RECOMMENDATION_STAGES_ENHANCED.length - 1;
+    setCurrentStageIndex(finalStageIndex); 
+    
+    if (showComplete) {
+      setIsGenerationComplete(true);
+      // Keep modal open slightly longer to show final checkmark
+      setTimeout(() => {
+        setIsModalOpen(false);
+        // Reset completion state after modal closes
+        setTimeout(() => setIsGenerationComplete(false), 300); 
+      }, 1200); // Increased delay for final stage view
+    } else {
+      setIsModalOpen(false);
+      setIsGenerationComplete(false);
+    }
+  };
+
+  // Fetch recommendations from the API
   async function fetchRecommendations(isAppending = false) {
     if (!hydrated) {
       console.log("Store not hydrated yet, cannot fetch recommendations");
       setError("Please wait for application to initialize");
       return;
     }
-    
+
     if (authLoading) {
       console.log("Auth still loading, cannot fetch recommendations");
       setError("Please wait for authentication to complete");
       return;
     }
-    
-    // Update appending state
+
+    // Start loading state and progress animation
+    setLoading(true);
+    startProgressSimulation();
     setIsAppending(isAppending);
-    
-    // Get the authentication state from context, not just the store
+
     const authFromContext = Boolean(user);
-    // Use the more reliable auth context state
     const isGuest = !authFromContext;
     const authUserId = user?.id || userId;
 
-    console.log("Fetching recommendations with auth state:", { 
+    console.log("Fetching recommendations with auth state:", {
       authFromContext,
       storeAuth: isAuthenticated,
       userId: authUserId,
       isGuest,
       isAppending
     });
-    
+
     if (vectorStore && vectorStore.id) {
       try {
-        setLoading(true);
         setError(null);
-        
-        // Get cached profile from localStorage as fallback
+
         let cachedUserProfile = null;
         try {
           const profileDataString = localStorage.getItem('userProfileData');
@@ -245,28 +344,44 @@ export default function RecommendationsPage() {
         } catch (error) {
           console.error('Error parsing cached profile data:', error);
         }
-        
-        // Use profile data from store or from localStorage
+
         const profileToUse = userProfile || cachedUserProfile;
 
-        // Call our server action to generate recommendations with consistent guest/auth flag
+        // Make the API call
         const result = await generateRecommendations(
-          vectorStore.id, 
+          vectorStore.id,
           profileToUse,
-          isGuest // Pass isGuest flag directly from auth context
+          isGuest
         );
-        
-        processRecommendationResults(result, isAppending);
+
+        // Process results FIRST
+        processRecommendationResults(result, isAppending); 
+        // Then stop simulation (shows completion if successful)
+        stopProgressSimulation(true); 
+
       } catch (error) {
         console.error('Error fetching recommendations:', error);
         setError(error instanceof Error ? error.message : 'An unexpected error occurred');
-        setLoading(false);
-        fetchingRef.current = false;
-        setIsAppending(false);
+        stopProgressSimulation(false); // Stop simulation immediately on error
+        // setLoading(false); // Handled by processRecommendationResults or here in catch
+        // fetchingRef.current = false;
+        // setIsAppending(false);
+      } finally {
+         // Ensure loading states are reset even if processing fails before stopSimulation
+         setLoading(false); 
+         fetchingRef.current = false;
+         setIsAppending(false);
       }
+    } else {
+      // Handle case where vectorStore is missing
+      setError("User profile vector store not found. Please ensure profile setup is complete.");
+      stopProgressSimulation(false);
+      setLoading(false);
+      fetchingRef.current = false;
+      setIsAppending(false);
     }
   }
-  
+
   // Helper function to process recommendation results
   function processRecommendationResults(result: {
     recommendations: RecommendationProgram[];
@@ -275,27 +390,27 @@ export default function RecommendationsPage() {
     partialSave?: boolean;
     savedCount?: number;
   }, isAppending = false) {
+    // Remove loading state updates from here
+    // setLoading(false); // Now handled in fetchRecommendations
+    // fetchingRef.current = false; // Now handled in fetchRecommendations
+    // setIsAppending(false); // Now handled in fetchRecommendations
+
     if (result.error) {
       setError(result.error);
-      setIsAppending(false);
+      // Modal stopping is handled in fetchRecommendations
     } else if (result.recommendations && result.recommendations.length > 0) {
-      // Set favorites based on stored favorites
       const recommendationsWithFavorites = result.recommendations.map((rec: RecommendationProgram) => ({
         ...rec,
         isFavorite: favoritesIds.includes(rec.id)
       }));
-      
-      // Keep track of new recommendation IDs for highlighting
+
       const newIds = recommendationsWithFavorites.map((rec: RecommendationProgram) => rec.id);
       setNewRecommendationIds(newIds);
-      
-      // Use either setRecommendations or appendRecommendations based on isAppending
+
       if (isAppending) {
         console.log(`Appending ${recommendationsWithFavorites.length} new recommendations`);
-        // Append recommendations
         appendRecommendations(recommendationsWithFavorites);
-        
-        // Scroll to new recommendations after rendering
+
         setTimeout(() => {
           if (newRecommendationsRef.current) {
             newRecommendationsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -303,33 +418,27 @@ export default function RecommendationsPage() {
         }, 100);
       } else {
         console.log(`Setting ${recommendationsWithFavorites.length} new recommendations`);
-        // Replace recommendations
         setRecommendations(recommendationsWithFavorites);
       }
-      
-      // Handle database save errors for authenticated users
+
       if (result.dbSaveError) {
         console.warn("Recommendations generated but not saved properly to database:", result.dbSaveError);
-        
-        if (result.partialSave) {
-          setError(`${isAppending ? "New recommendations" : "Recommendations"} could not be fully saved to your account (${result.savedCount}/${result.recommendations.length} saved). The error was: ${result.dbSaveError}`);
-        } else {
-          setError(`${isAppending ? "New recommendations" : "Recommendations"} generated but couldn't be saved to your account: ${result.dbSaveError}`);
+        const saveErrorMsg = result.partialSave
+          ? `${isAppending ? "New recommendations" : "Recommendations"} could not be fully saved (${result.savedCount}/${result.recommendations.length} saved). Error: ${result.dbSaveError}`
+          : `${isAppending ? "New recommendations" : "Recommendations"} generated but couldn't be saved: ${result.dbSaveError}`;
+          
+        if (typeof setError === 'function') {
+          const prevError = errorMessage || '';
+          setError(prevError ? `${prevError}\n${saveErrorMsg}` : saveErrorMsg);
         }
       }
 
-      // Clear the highlight after 5 seconds
       setTimeout(() => {
         setNewRecommendationIds([]);
       }, 10000);
     } else {
-      // If no recommendations, set an error message
       setError(isAppending ? "No additional recommendations found that match your profile" : "No recommendations found that match your profile");
     }
-    
-    setLoading(false);
-    fetchingRef.current = false;
-    setIsAppending(false);
   }
 
   const handleGoToAssistant = () => {
@@ -459,18 +568,19 @@ export default function RecommendationsPage() {
     return <HydrationLoading />;
   }
 
-  // Add our guest limit monitor component
+  // Add the Modal
   return (
     <PageWrapper allowGuest>
+      <RecommendationProgressModal
+        isOpen={isModalOpen}
+        progressStages={RECOMMENDATION_STAGES_ENHANCED}
+        currentStageIndex={currentStageIndex}
+        isComplete={isGenerationComplete}
+      />
+
       <GuestLimitMonitor />
       <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-            <p className="text-zinc-600">Generating personalized recommendations...</p>
-            <p className="text-zinc-500 text-sm mt-2">This may take a moment as we analyze your profile.</p>
-          </div>
-        ) : userProfile ? (
+        {userProfile ? (
           <>
             <div className="mb-6 flex justify-between items-center">
               <motion.div
@@ -556,14 +666,14 @@ export default function RecommendationsPage() {
                 <p className="text-center mb-4">Click below to generate recommendations based on your profile</p>
                 <Button 
                   size="lg"
-                  onClick={() => fetchRecommendations(false)} 
-                  disabled={isLoading || (!isAuthenticated && hasReachedGuestLimit)}
+                  onClick={() => fetchRecommendations(false)}
+                  disabled={isModalOpen || (!isAuthenticated && hasReachedGuestLimit)}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {isLoading ? (
+                  {isModalOpen ? (
                     <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Generating Recommendations...
+                      Generating...
                     </>
                   ) : (
                     <>
@@ -591,7 +701,7 @@ export default function RecommendationsPage() {
               </div>
             )}
             
-            {isLoading && isAppending && (
+            {isModalOpen && isAppending && (
               <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md mb-6 flex items-start">
                 <Loader2 className="h-5 w-5 mr-2 mt-0.5 text-blue-500 animate-spin" />
                 <div>
@@ -660,9 +770,9 @@ export default function RecommendationsPage() {
                             variant="outline" 
                             size="sm"
                             onClick={() => fetchRecommendations(true)}
-                            disabled={isLoading}
+                            disabled={isModalOpen}
                           >
-                            {isLoading ? (
+                            {isModalOpen ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 Generating...
@@ -927,14 +1037,14 @@ export default function RecommendationsPage() {
                     <p className="text-zinc-600 mb-6">Generate recommendations based on your profile</p>
                     <Button 
                       onClick={() => fetchRecommendations(false)} 
-                      disabled={isLoading || (!isAuthenticated && hasReachedGuestLimit)}
+                      disabled={isModalOpen || (!isAuthenticated && hasReachedGuestLimit)}
                       size="lg"
                       className="bg-blue-600 hover:bg-blue-700"
                     >
-                      {isLoading ? (
+                      {isModalOpen ? (
                         <>
                           <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                          Generating Recommendations...
+                          Generating...
                         </>
                       ) : (
                         <>

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { RecommendationProgram } from './types';
+import { syncRecommendationsToVectorStore, syncSingleRecommendationToVectorStore } from './vector-store-helpers';
 
 /**
  * Save a recommendation to Supabase
@@ -195,9 +196,136 @@ export async function toggleRecommendationFavorite(
       throw new Error(`Failed to toggle recommendation favorite: ${error.message}`);
     }
     
+    // Successfully toggled favorite status in Supabase
+    const newStatus = data as boolean;
+    console.log(`Toggled favorite status to ${newStatus} for recommendation ${recommendationId}`);
+    
+    // Retrieve vector store ID for this user
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('vector_store_id')
+      .eq('id', userId)
+      .single();
+    
+    if (profileError) {
+      console.error('Error retrieving vector store ID:', profileError);
+      // Return success for the favorite toggle but note sync issue
+      return {
+        success: true,
+        newStatus,
+        error: 'Favorite status updated but failed to sync with AI system'
+      };
+    }
+    
+    const vectorStoreId = profileData.vector_store_id;
+    
+    if (!vectorStoreId) {
+      // No vector store to sync to, just return the result
+      return {
+        success: true,
+        newStatus
+      };
+    }
+    
+    // First get the basic recommendation data
+    const { data: recommendationData, error: recError } = await supabase
+      .from('recommendations')
+      .select('id, match_score, is_favorite, match_rationale, program_id')
+      .eq('id', recommendationId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (recError) {
+      console.error('Error retrieving recommendation details:', recError);
+      return {
+        success: true,
+        newStatus,
+        error: 'Favorite status updated but failed to sync with AI system'
+      };
+    }
+    
+    if (!recommendationData || !recommendationData.program_id) {
+      console.error('Missing recommendation data or program_id:', recommendationId);
+      return {
+        success: true,
+        newStatus,
+        error: 'Favorite status updated but failed to sync with AI system due to missing data'
+      };
+    }
+    
+    // Then get the program data separately for clarity
+    const { data: programData, error: programError } = await supabase
+      .from('programs')
+      .select('*')
+      .eq('id', recommendationData.program_id)
+      .single();
+    
+    if (programError || !programData) {
+      console.error('Error retrieving program data:', programError || 'No program found');
+      return {
+        success: true,
+        newStatus,
+        error: 'Favorite status updated but failed to sync with AI system due to missing program data'
+      };
+    }
+    
+    console.log('Successfully retrieved program data:', programData.name);
+    
+    // Create a recommendation object from the retrieved data
+    const recommendation: RecommendationProgram = {
+      id: recommendationData.id,
+      name: programData.name || 'Unknown Program',
+      institution: programData.institution || 'Unknown Institution',
+      degreeType: programData.degree_type || 'Unknown',
+      fieldOfStudy: programData.field_of_study || 'Unknown',
+      description: programData.description || '',
+      costPerYear: programData.cost_per_year || 0,
+      duration: programData.duration || 0,
+      location: programData.location || 'Unknown',
+      startDate: programData.start_date || '',
+      applicationDeadline: programData.application_deadline || '',
+      requirements: programData.requirements || [],
+      highlights: programData.highlights || [],
+      matchScore: recommendationData.match_score || 0,
+      matchRationale: recommendationData.match_rationale || {},
+      isFavorite: recommendationData.is_favorite || false,
+      // Get scholarships if available (would require a separate query if needed)
+      scholarships: []
+    };
+    
+    // Sync the updated recommendation to the Vector Store
+    try {
+      console.log('Syncing recommendation to Vector Store:', recommendation.id);
+      const syncResult = await syncSingleRecommendationToVectorStore(
+        userId,
+        recommendation,
+        vectorStoreId
+      );
+      
+      if (!syncResult.success) {
+        console.error('Error syncing recommendation to Vector Store:', syncResult.error);
+        // Return success for the favorite toggle but note sync issue
+        return {
+          success: true,
+          newStatus,
+          error: 'Favorite status updated but failed to sync with AI system'
+        };
+      }
+      
+      console.log('Successfully synced updated recommendation to Vector Store with file ID:', syncResult.fileId);
+    } catch (syncError) {
+      console.error('Error syncing recommendation to Vector Store:', syncError);
+      // Return success for the favorite toggle but note sync issue
+      return {
+        success: true,
+        newStatus,
+        error: 'Favorite status updated but failed to sync with AI system'
+      };
+    }
+    
     return {
       success: true,
-      newStatus: data as boolean
+      newStatus
     };
   } catch (error) {
     console.error('Error toggling recommendation favorite:', error);
@@ -230,6 +358,7 @@ export async function saveRecommendationsBatch(
     let hasError = false;
     let firstError = '';
     let savedCount = 0;
+    const savedRecommendations: RecommendationProgram[] = [];
     
     // Process each recommendation
     for (const rec of recommendations) {
@@ -257,7 +386,7 @@ export async function saveRecommendationsBatch(
       console.log(`Saving recommendation ${rec.id} for program "${rec.name}" with vector store ID: ${vectorStoreId}`);
       
       // Call Supabase function to store recommendation
-      const { data, error } = await supabase.rpc(
+      const { data: recommendationId, error } = await supabase.rpc(
         'store_recommendation',
         {
           p_user_id: userId,
@@ -272,25 +401,64 @@ export async function saveRecommendationsBatch(
         console.error(`Error saving recommendation ${rec.id} to Supabase:`, error);
         // Continue trying to save other recommendations
       } else {
-        console.log(`Successfully saved recommendation ${rec.id} with result:`, data);
+        console.log(`Successfully saved recommendation ${rec.id} with ID: ${recommendationId}`);
         savedCount++;
+        
+        // Store the saved recommendation with its actual database ID for vector store syncing
+        const savedRec = {
+          ...rec,
+          id: recommendationId // Use the ID returned from Supabase
+        };
+        savedRecommendations.push(savedRec);
       }
     }
     
     // Log summary
     if (hasError) {
       console.error(`Completed with errors: Saved ${savedCount}/${recommendations.length} recommendations`);
-      return {
-        success: savedCount > 0, // Partial success if at least one was saved
-        error: `Failed to save some recommendations: ${firstError}`,
-        savedCount
-      };
+    } else {
+      console.log(`Successfully saved all ${savedCount} recommendations`);
     }
     
-    console.log(`Successfully saved all ${savedCount} recommendations`);
+    // After successfully saving to Supabase, sync recommendations to Vector Store
+    if (savedRecommendations.length > 0) {
+      try {
+        console.log(`Syncing ${savedRecommendations.length} recommendations to Vector Store...`);
+        // Sync the saved recommendations to the Vector Store
+        const syncResult = await syncRecommendationsToVectorStore(
+          userId,
+          savedRecommendations,
+          vectorStoreId
+        );
+        
+        if (!syncResult.success) {
+          console.error('Error syncing recommendations to Vector Store:', syncResult.error);
+          // Return success but with warning about sync
+          return { 
+            success: true,
+            savedCount,
+            error: `Recommendations saved to database but failed to sync to AI system: ${syncResult.error}`
+          };
+        }
+        
+        console.log(`Successfully synced ${savedRecommendations.length} recommendations to Vector Store with file IDs:`, syncResult.fileIds);
+      } catch (syncError) {
+        console.error('Error syncing recommendations to Vector Store:', syncError);
+        // Return success but with warning about sync
+        return { 
+          success: true,
+          savedCount,
+          error: 'Recommendations saved to database but failed to sync to AI system for chat interactions'
+        };
+      }
+    } else {
+      console.log('No recommendations were saved successfully, skipping Vector Store sync');
+    }
+    
     return { 
-      success: true,
-      savedCount
+      success: savedCount > 0,
+      savedCount,
+      error: hasError ? `Failed to save some recommendations: ${firstError}` : undefined
     };
   } catch (error) {
     console.error('Error in saveRecommendationsBatch:', error);

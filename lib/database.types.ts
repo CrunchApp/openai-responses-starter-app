@@ -26,6 +26,7 @@ export interface Database {
           preferences: Json | null
           documents: Json | null
           vector_store_id: string | null
+          profile_file_id: string | null
           created_at: string
           updated_at: string | null
         }
@@ -45,6 +46,7 @@ export interface Database {
           preferences?: Json | null
           documents?: Json | null
           vector_store_id?: string | null
+          profile_file_id?: string | null
           created_at?: string
           updated_at?: string | null
         }
@@ -64,6 +66,7 @@ export interface Database {
           preferences?: Json | null
           documents?: Json | null
           vector_store_id?: string | null
+          profile_file_id?: string | null
           created_at?: string
           updated_at?: string | null
         }

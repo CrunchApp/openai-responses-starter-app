@@ -30,8 +30,97 @@ import { Label } from "@/components/ui/label";
 import { z } from 'zod';
 import { useAuth } from "@/app/components/auth/AuthContext"; // Import useAuth
 
+// Helper function to convert a Blob to a base64 string
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      // Remove the data URL prefix (e.g., "data:application/json;base64,")
+      const base64Content = base64.split(',')[1];
+      resolve(base64Content);
+    };
+    reader.onerror = () => reject(new Error('Failed to convert blob to base64'));
+    reader.readAsDataURL(blob);
+  });
+};
+
 // Derive the Education type directly from the schema
 type EducationSchemaType = z.infer<typeof ProfileSchema.shape.education.element>;
+
+// Helper function to sync profile data to the Vector Store
+const syncProfileToVectorStore = async (profileData: UserProfile, vectorStoreId: string): Promise<string> => {
+  if (!vectorStoreId) {
+    throw new Error("No vector store ID provided. Cannot sync profile.");
+  }
+
+  try {
+    console.log("Syncing profile to Vector Store with ID:", vectorStoreId);
+    console.log("Profile data to sync:", {
+      profileFileId: profileData.profileFileId,
+      firstName: profileData.firstName,
+      lastName: profileData.lastName,
+      // Include limited personal info for privacy
+    });
+
+    // Get existing profile file ID from the profile data
+    const existingProfileFileId = profileData.profileFileId;
+    
+    // Delete existing file if there is one
+    if (existingProfileFileId) {
+      console.log("Deleting existing profile file:", existingProfileFileId);
+      try {
+        const deleteResponse = await fetch(`/api/vector_stores/delete_file?file_id=${existingProfileFileId}`, { 
+          method: "DELETE" 
+        });
+        console.log("Delete file response:", deleteResponse.status, await deleteResponse.text());
+      } catch (deleteError) {
+        console.error("Error deleting file (continuing anyway):", deleteError);
+        // Continue even if deletion fails, as we'll replace it anyway
+      }
+    } else {
+      console.log("No existing profile file ID found, skipping deletion step");
+    }
+
+    // Upload new profile JSON
+    const profileJson = JSON.stringify(profileData, null, 2);
+    const profileBlob = new Blob([profileJson], { type: "application/json" });
+    const base64Content = await blobToBase64(profileBlob);
+    const fileObject = { name: "user_profile.json", content: base64Content };
+    
+    const uploadResponse = await fetch("/api/vector_stores/upload_file", {
+      method: "POST", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify({ fileObject }),
+    });
+    
+    if (!uploadResponse.ok) {
+      throw new Error("Failed to upload profile JSON to Vector Store");
+    }
+    
+    const uploadData = await uploadResponse.json();
+    const newFileId = uploadData.id;
+    
+    // Add file to vector store
+    const addFileResponse = await fetch("/api/vector_stores/add_file", {
+      method: "POST", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify({ fileId: newFileId, vectorStoreId }),
+    });
+    
+    if (!addFileResponse.ok) {
+      throw new Error("Failed to add profile file to vector store");
+    }
+    
+    console.log("Profile synced to Vector Store successfully. New File ID:", newFileId);
+    
+    // Return the new file ID so it can be stored in the profile
+    return newFileId;
+  } catch (error) {
+    console.error("Error syncing profile to Vector Store:", error);
+    throw error; // Re-throw to let the caller handle it
+  }
+};
 
 export default function ProfileDashboard() {
   const [expandedSection, setExpandedSection] = useState("personal");
@@ -51,7 +140,7 @@ export default function ProfileDashboard() {
   const [isAddEducationModalOpen, setIsAddEducationModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth(); // Get user and auth loading state
+  const { user, loading: authLoading, vectorStoreId: authVectorStoreId } = useAuth(); // Get vectorStoreId from auth
   
   // Add effect to check auth state
   useEffect(() => {
@@ -78,6 +167,7 @@ export default function ProfileDashboard() {
           if (profileData.error) {
             setError(profileData.error);
           } else {
+            console.log("Fetched profile with file ID:", profileData.profile.profileFileId);
             setUserProfile(profileData.profile);
             setEditedProfile(profileData.profile);
           }
@@ -115,22 +205,90 @@ export default function ProfileDashboard() {
     try {
       setIsLoading(true);
       
-      // Call the API to update the profile
-      const response = await fetch('/api/profile/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(editedProfile),
-      });
+      // First, sync with Vector Store if possible
+      // Get vectorStoreId from auth context or userProfile
+      const vsId = authVectorStoreId || userProfile?.vectorStoreId;
       
-      const result = await response.json();
-      
-      if (result.error) {
-        setError(result.error);
-      } else {
+      if (!vsId) {
+        console.error("No vector store ID available for synchronization");
+        
+        // If no vector store ID, just update in Supabase
+        const response = await fetch('/api/profile/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(editedProfile),
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        
+        // Update local state
         setUserProfile(editedProfile);
         setEditSection(null);
+      } else {
+        try {
+          // Sync the updated profile to the Vector Store
+          const newFileId = await syncProfileToVectorStore(editedProfile, vsId);
+          console.log("Profile successfully synced to Vector Store");
+          
+          // Update the profile with the new file ID
+          const updatedProfile = {
+            ...editedProfile,
+            profileFileId: newFileId
+          };
+          
+          // Save the updated profile with the file ID to Supabase
+          const updateResponse = await fetch('/api/profile/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updatedProfile),
+          });
+          
+          const updateResult = await updateResponse.json();
+          
+          if (updateResult.error) {
+            console.error("Error updating profile with file ID:", updateResult.error);
+            // Continue with local state update anyway
+          } else {
+            console.log("Successfully updated profile in Supabase with new file ID:", newFileId);
+          }
+          
+          // Update local state with the edited profile including the new file ID
+          setUserProfile(updatedProfile);
+          setEditSection(null);
+        } catch (syncError) {
+          console.error("Error syncing profile to Vector Store:", syncError);
+          // Don't block the main flow, but show a warning
+          setError("Profile updated successfully but failed to sync with AI system. Some features may show outdated information.");
+          
+          // Fall back to just updating in Supabase
+          const response = await fetch('/api/profile/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(editedProfile),
+          });
+          
+          const result = await response.json();
+          
+          if (result.error) {
+            setError(result.error);
+            return;
+          }
+          
+          // Update local state
+          setUserProfile(editedProfile);
+          setEditSection(null);
+        }
       }
     } catch (error) {
       console.error("Error updating profile:", error);

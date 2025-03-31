@@ -690,7 +690,7 @@ export default function RecommendationsPage() {
                     </div>
                   </div>
                   
-                  {recommendations.map((program) => (
+                  {recommendations.map((program: RecommendationProgram) => (
                     <motion.div 
                       key={program.id}
                       variants={itemVariants}

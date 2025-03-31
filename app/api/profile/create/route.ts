@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
         preferences: profileData.preferences || {},
         documents: profileData.documents || {},
         vector_store_id: profileData.vectorStoreId || null,
+        profile_file_id: profileData.profileFileId || null,
         
         // Timestamps
         created_at: now,

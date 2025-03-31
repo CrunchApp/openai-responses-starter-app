@@ -66,7 +66,8 @@ export async function GET(
       preferences: profile.preferences || { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 0 } }, // Provide default structure
       documents: profile.documents || {},
       
-      vectorStoreId: profile.vector_store_id || undefined
+      vectorStoreId: profile.vector_store_id || undefined,
+      profileFileId: profile.profile_file_id || undefined
     }
     
     return NextResponse.json({ profile: formattedProfile })

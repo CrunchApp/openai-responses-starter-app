@@ -23,4 +23,16 @@ export const toolsList = [
     description: "Get a programming joke",
     parameters: {},
   },
+  {
+    name: "query_supabase_database",
+    description:
+      "Query the Supabase database using a natural language question to retrieve relevant user data or context. Use this to fetch information potentially stored in the database based on the user's request.",
+    parameters: {
+      natural_language_query: {
+        type: "string",
+        description:
+          "The user's question or request in natural language, which will be used to query the database.",
+      },
+    },
+  },
 ];

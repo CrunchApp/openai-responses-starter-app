@@ -46,6 +46,11 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString()
     };
 
+    // Add the profile_file_id if provided
+    if (profileData.profileFileId) {
+      updateData.profile_file_id = profileData.profileFileId;
+    }
+
     // Remove undefined fields to avoid overwriting existing data with null
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 

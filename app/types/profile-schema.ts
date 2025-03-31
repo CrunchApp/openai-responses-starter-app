@@ -72,6 +72,9 @@ export const ProfileSchema = z.object({
   
   // Vector store ID
   vectorStoreId: z.string().optional(),
+  
+  // Vector store profile file ID
+  profileFileId: z.string().optional(),
 });
 
 // Export a single unified type to be used throughout the application

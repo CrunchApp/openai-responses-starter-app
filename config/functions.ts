@@ -25,7 +25,26 @@ export const get_joke = async () => {
   return res;
 };
 
+export const querySupabaseDatabase = async ({
+  natural_language_query,
+}: {
+  natural_language_query: string;
+}) => {
+  console.log("natural_language_query", natural_language_query);
+  // We'll need to pass the query to the backend API route
+  const res = await fetch(
+    `/api/functions/query_supabase?query=${encodeURIComponent(
+      natural_language_query
+    )}`
+  ).then((res) => res.json());
+
+  console.log("executed querySupabaseDatabase function", res);
+
+  return res;
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
+  query_supabase_database: querySupabaseDatabase,
 };

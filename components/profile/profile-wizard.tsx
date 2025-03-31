@@ -323,23 +323,15 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       // Ensure finalVectorStoreId is a string before proceeding
       const guaranteedVectorStoreId = finalVectorStoreId;
 
-      // Update profileData with the vectorStoreID before saving
-      const profileToSave: UserProfile = {
-        ...profileData,
-        vectorStoreId: guaranteedVectorStoreId
-      };
-
-      // 2. Save Profile JSON to Vector Store (Common to both paths)
-      // Delete existing file if in edit mode and file ID exists
-      const existingProfileFileId = localStorage.getItem('userProfileFileId');
-      if (isEdit && existingProfileFileId) {
-        console.log("Deleting existing profile file:", existingProfileFileId);
-        await fetch(`/api/vector_stores/delete_file?file_id=${existingProfileFileId}`, { method: "DELETE" });
+      // Delete existing file if in edit mode and profile has a file ID
+      if (isEdit && profileData.profileFileId) {
+        console.log("Deleting existing profile file:", profileData.profileFileId);
+        await fetch(`/api/vector_stores/delete_file?file_id=${profileData.profileFileId}`, { method: "DELETE" });
         // Ignore errors for deletion, proceed with upload
       }
 
       // Upload new profile JSON
-      const profileJson = JSON.stringify(profileToSave, null, 2);
+      const profileJson = JSON.stringify(profileData, null, 2);
       const profileBlob = new Blob([profileJson], { type: "application/json" });
       const base64Content = await blobToBase64(profileBlob);
       const fileObject = { name: "user_profile.json", content: base64Content };
@@ -350,7 +342,6 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       if (!uploadResponse.ok) throw new Error("Failed to upload profile JSON");
       const uploadData = await uploadResponse.json();
       const newFileId = uploadData.id;
-      localStorage.setItem('userProfileFileId', newFileId); // Store new file ID
       
       // Add file to vector store
       const addFileResponse = await fetch("/api/vector_stores/add_file", {
@@ -358,6 +349,13 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       });
       if (!addFileResponse.ok) throw new Error("Failed to add profile file to vector store");
       console.log("Profile JSON saved to Vector Store, File ID:", newFileId);
+
+      // Update profileData with the vectorStoreID and file ID before saving
+      const profileToSave: UserProfile = {
+        ...profileData,
+        vectorStoreId: guaranteedVectorStoreId,
+        profileFileId: newFileId
+      };
 
       // --- Path-Specific Logic ---
       if (userId) {
@@ -382,7 +380,6 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
         clearProfileWizardStore();
         clearRecommendationsStore();
         localStorage.removeItem('userProfileData');
-        localStorage.removeItem('userProfileFileId');
         console.log("Cleared local stores and storage for registered user.");
       } else {
         // --- PATH B (Guest User) ---
@@ -469,7 +466,6 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       }
 
       // Clear localStorage items related to the profile/wizard
-      localStorage.removeItem('userProfileFileId');
       localStorage.removeItem('userProfileData'); // Guest profile data
 
       // Reset Zustand stores using their respective actions

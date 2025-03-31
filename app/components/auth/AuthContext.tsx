@@ -64,7 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               last_name: userMeta?.last_name || '',
               email: userData?.user?.email || '',
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              vector_store_id: null,
+              profile_file_id: null
             })
             .select('*')
             .single()
@@ -85,6 +87,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setVectorStoreId(null);
       }
+
+      // Log profile data for debugging
+      console.log("Fetched profile data:", {
+        id: data.id,
+        vectorStoreId: data.vector_store_id,
+        profileFileId: data.profile_file_id
+      });
 
       return data
     } catch (error) {

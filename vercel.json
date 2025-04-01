@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/api/recommendations/**/*.ts": {
+      "maxDuration": 60
+    }
+  }
+} 

@@ -234,7 +234,7 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
     
     try {
       responsesApiResult = await openai.responses.create({
-        model: "gpt-4o-2024-08-06",
+        model: "gpt-4o-mini",
         // Use the search query + full instructions
         input: `${searchQuery}\n\n${prompt}`,
         tools: [fileSearchOptions],
@@ -245,7 +245,7 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
       
       // If there was an error, retry with a simpler approach
       responsesApiResult = await openai.responses.create({
-        model: "gpt-4o-2024-08-06",
+        model: "gpt-4o-mini",
         // Use the search query + full instructions
         input: `${searchQuery}\n\n${prompt}`,
         tools: [{
@@ -333,7 +333,7 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
         console.log("Falling back to Chat Completions API with structured outputs");
         
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o-2024-08-06",
+          model: "gpt-4o-mini",
           messages: [
             { 
               role: "system", 

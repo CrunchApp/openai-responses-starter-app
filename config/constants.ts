@@ -1,4 +1,4 @@
-export const MODEL = "gpt-4o-mini";
+export const MODEL = "o3-mini-2025-01-31";
 
 // Developer prompt for the Vista Education Adviser assistant
 export const DEVELOPER_PROMPT = `

@@ -1137,7 +1137,7 @@ export default function RecommendationsPage() {
                                       </AlertDialog>
                                     </div>
                                     <Button
-                                    onClick={() => router.push(program.pageLink)} >
+                                    onClick={() => window.open(program.pageLink, "_blank")}>
                                       Explore Program
                                     </Button>
                                   </div>
@@ -1249,7 +1249,7 @@ export default function RecommendationsPage() {
                     <h3 className="text-xl font-semibold mb-2">No applications yet</h3>
                     <p className="text-zinc-600 mb-6">Track your education program applications here</p>
                     <Button variant="outline">
-                      Start an Application
+                      Coming Soon
                     </Button>
                   </div>
                 ) : (

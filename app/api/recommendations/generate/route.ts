@@ -240,7 +240,7 @@ Think carefully about each suggestion and ensure they truly fit the user's uniqu
   
     // Use a powerful model with strong reasoning capabilities
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", 
+      model: "o3-mini-2025-01-31", 
       messages: [
         { role: "system", content: "You are an expert career and education pathway planner with decades of experience." },
         { role: "user", content: prompt }

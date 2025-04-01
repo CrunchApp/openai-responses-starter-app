@@ -24,7 +24,7 @@ export interface Database {
           application_deadline: string
           requirements: string[]
           highlights: string[]
-          page_link: string[]
+          page_link: string
           created_at: string | null
           updated_at: string | null
         }
@@ -42,7 +42,7 @@ export interface Database {
           application_deadline: string
           requirements: string[]
           highlights: string[]
-          page_link: string[]
+          page_link: string
           created_at?: string | null
           updated_at?: string | null
         }
@@ -60,7 +60,7 @@ export interface Database {
           application_deadline?: string
           requirements?: string[]
           highlights?: string[]
-          page_link: string[]
+          page_link: string
           created_at?: string | null
           updated_at?: string | null
         }

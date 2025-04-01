@@ -20,7 +20,8 @@ import {
   Trash2,
   Loader2,
   Lock,
-  Shield
+  Shield,
+  CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import useToolsStore from "@/stores/useToolsStore";
@@ -57,7 +58,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { generateRecommendations } from "./actions";
+import { 
+  generateRecommendations, 
+  fetchUserRecommendations, 
+  toggleRecommendationFavorite,
+  resetRecommendations as resetRecommendationsAction 
+} from "./actions";
 import { RecommendationProgram } from "@/app/recommendations/types";
 import HydrationLoading from "@/components/ui/hydration-loading";
 import GuestLimitMonitor from "@/components/GuestLimitMonitor";
@@ -88,7 +94,8 @@ export default function RecommendationsPage() {
     setError,
     toggleFavorite,
     hydrated,
-    appendRecommendations
+    appendRecommendations,
+    clearRecommendations
   } = useRecommendationsStore();
     
   // Local UI state
@@ -118,6 +125,10 @@ export default function RecommendationsPage() {
 
   // Add reset loading state
   const [isResetting, setIsResetting] = useState(false);
+
+  // Add reset-related state
+  const [isResettingRecommendations, setIsResettingRecommendations] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState<{success: boolean; message: string} | null>(null);
 
   // Memoize the fetchRecommendations function to use in useEffect
   const fetchRecommendationsCallback = useCallback(fetchRecommendations, [
@@ -556,6 +567,44 @@ export default function RecommendationsPage() {
     }
   };
 
+  // Add reset recommendations function
+  const handleResetRecommendations = async () => {
+    try {
+      setIsResettingRecommendations(true);
+      setResetSuccess(null);
+      
+      const result = await resetRecommendationsAction();
+      
+      if (result.success) {
+        console.log(`Successfully reset recommendations, deleted ${result.deletedCount} items`);
+        setResetSuccess({
+          success: true,
+          message: `Successfully deleted ${result.deletedCount} recommendations.`
+        });
+        
+        // Clear recommendations from the store
+        clearRecommendations();
+        
+        // Optional: Refresh the page or redirect to reload the component
+        // router.refresh();
+      } else {
+        console.error('Failed to reset recommendations:', result.error);
+        setResetSuccess({
+          success: false,
+          message: result.error || 'Failed to reset recommendations'
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting recommendations:', error);
+      setResetSuccess({
+        success: false,
+        message: error instanceof Error ? error.message : 'An unexpected error occurred'
+      });
+    } finally {
+      setIsResettingRecommendations(false);
+    }
+  };
+
   // Add a banner that appears when profile is loaded until first recommendations are loaded
   useEffect(() => {
     if (!isInitializing && userProfile && !recommendations.length && !isLoading) {
@@ -786,6 +835,58 @@ export default function RecommendationsPage() {
                           </Button>
                         )}
                         
+                        {/* Reset Recommendations Button - only for authenticated users */}
+                        {isAuthenticated && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                disabled={isResettingRecommendations || recommendations.length === 0}
+                              >
+                                {isResettingRecommendations ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Resetting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Reset All
+                                  </>
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Reset All Recommendations?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete all your recommendations and saved programs. 
+                                  You'll need to generate new recommendations afterward. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel disabled={isResettingRecommendations}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={handleResetRecommendations} 
+                                  className="bg-red-500 hover:bg-red-600"
+                                  disabled={isResettingRecommendations}
+                                >
+                                  {isResettingRecommendations ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Resetting...
+                                    </>
+                                  ) : (
+                                    "Reset All Recommendations"
+                                  )}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                        
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm">Sort By</Button>
@@ -799,6 +900,23 @@ export default function RecommendationsPage() {
                       </DropdownMenu>
                     </div>
                   </div>
+                  
+                  {/* Add status message for reset action */}
+                  {resetSuccess && (
+                    <div className={`mb-4 px-4 py-3 rounded-md ${
+                      resetSuccess.success 
+                        ? 'bg-green-50 border border-green-200 text-green-800' 
+                        : 'bg-red-50 border border-red-200 text-red-800'
+                    }`}>
+                      <p className="flex items-center">
+                        {resetSuccess.success 
+                          ? <CheckCircle2 className="h-4 w-4 mr-2" /> 
+                          : <AlertCircle className="h-4 w-4 mr-2" />
+                        }
+                        {resetSuccess.message}
+                      </p>
+                    </div>
+                  )}
                   
                   {recommendations.map((program: RecommendationProgram) => (
                     <motion.div 
@@ -1018,7 +1136,8 @@ export default function RecommendationsPage() {
                                         </AlertDialogContent>
                                       </AlertDialog>
                                     </div>
-                                    <Button>
+                                    <Button
+                                    onClick={() => router.push(program.pageLink)} >
                                       Explore Program
                                     </Button>
                                   </div>

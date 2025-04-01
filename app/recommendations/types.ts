@@ -25,6 +25,7 @@ export interface RecommendationProgram {
   applicationDeadline: string;
   requirements: string[];
   highlights: string[];
+  pageLink: string;
   matchRationale: {
     careerAlignment: number;
     budgetFit: number;

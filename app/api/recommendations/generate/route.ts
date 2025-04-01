@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     
     const timeoutId = setTimeout(() => {
       isTimedOut = true;
-      console.error('Recommendation generation timed out after 150 seconds');
+      console.error('Recommendation generation timed out after 240 seconds');
     }, MAX_EXECUTION_TIME);
     
     // If we're already timed out, return an error response
@@ -85,20 +85,42 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 2: Use Program Research Agent to find specific programs based on the pathways
-    let recommendations;
+    let recommendations: RecommendationProgram[] = [];
+    let researchError = null;
+    
     try {
       recommendations = await researchSpecificPrograms(educationPathways, userProfile);
-      console.log('Specific programs researched successfully');
+      console.log(`Specific programs researched successfully: ${recommendations.length} programs found`);
     } catch (error) {
       console.error('Error researching specific programs:', error);
+      researchError = error;
+      // We'll continue with empty recommendations array rather than failing immediately
+    }
+    
+    // If there was an error researching AND we got no recommendations, return an error
+    if (researchError && recommendations.length === 0) {
       clearTimeout(timeoutId);
       return NextResponse.json({ 
-        error: "Failed to research specific programs matching your profile. Please try again."
+        error: "We couldn't find programs matching your profile. Please try again or adjust your preferences."
       }, { status: 500 });
     }
     
-    // Step 3: Calculate match scores and prepare the final recommendations 
-    const enhancedRecommendations = enhanceRecommendationsWithMatchScores(recommendations, userProfile);
+    // Step 3: Calculate match scores and prepare the final recommendations
+    let enhancedRecommendations: RecommendationProgram[] = [];
+    
+    try {
+      // Only enhance if we have recommendations
+      if (recommendations.length > 0) {
+        enhancedRecommendations = enhanceRecommendationsWithMatchScores(recommendations, userProfile);
+        console.log(`Enhanced ${enhancedRecommendations.length} recommendations with match scores`);
+      } else {
+        console.warn('No recommendations to enhance');
+      }
+    } catch (enhanceError) {
+      console.error('Error enhancing recommendations with match scores:', enhanceError);
+      // If enhancement fails, use the original recommendations
+      enhancedRecommendations = recommendations;
+    }
     
     // Clean up and return final recommendations
     clearTimeout(timeoutId);
@@ -106,11 +128,36 @@ export async function POST(request: NextRequest) {
     const executionTime = Date.now() - startTime;
     console.log(`Recommendations generated in ${executionTime}ms`);
     
-    return NextResponse.json({ recommendations: enhancedRecommendations });
-  } catch (error) {
-    console.error('Error generating recommendations:', error);
+    // If we still have no recommendations, provide a helpful error
+    if (enhancedRecommendations.length === 0) {
+      // Include a warning in the response rather than a full error
+      return NextResponse.json({ 
+        recommendations: [],
+        warning: "We couldn't find specific programs matching your criteria. Try adjusting your preferences."
+      });
+    }
+    
     return NextResponse.json({ 
-      error: "An unexpected error occurred while generating recommendations. Please try again."
+      recommendations: enhancedRecommendations,
+      // Include a warning if there was a research error but we still found some programs
+      ...(researchError ? { warning: "We found some programs, but encountered issues during research. Results may be limited." } : {})
+    });
+    
+  } catch (error) {
+    console.error('Fatal error generating recommendations:', error);
+    
+    // Provide a helpful error message
+    let errorMessage = "An unexpected error occurred while generating recommendations.";
+    if (error instanceof Error) {
+      // Include a simplified error message if available
+      errorMessage = error.message.includes("timeout") 
+        ? "The recommendation process timed out. Please try again."
+        : "An error occurred during recommendation generation. Please try again.";
+    }
+    
+    return NextResponse.json({ 
+      error: errorMessage,
+      recommendations: [] // Return empty array instead of undefined
     }, { status: 500 });
   }
 }
@@ -248,50 +295,65 @@ async function researchSpecificPrograms(pathways: any, userProfile: UserProfile)
       }, timeoutMs);
     });
 
-    // Process pathways in parallel with Promise.all
-    const recommendationsPromise = Promise.all(
+    // Process pathways with better error handling - each pathway processed independently
+    // so errors in one don't affect the others
+    const pathwayResultsPromise = Promise.all(
       limitedPathwaysArray.map(async (pathway: any, index: number) => {
-        if (hasTimedOut) return []; // Skip if already timed out
-        
-        console.log(`Researching pathway ${index + 1}/${limitedPathwaysArray.length}: ${pathway.title}`);
-        const query = constructDetailedQuery(pathway, userProfile);
+        if (hasTimedOut) return { success: false, results: [], pathway }; // Skip if already timed out
         
         try {
+          console.log(`Researching pathway ${index + 1}/${limitedPathwaysArray.length}: ${pathway.title}`);
+          const query = constructDetailedQuery(pathway, userProfile);
+          
           // Use searchProgramsWithPerplexityAPI which will handle the API call and parsing
           const results = await searchProgramsWithPerplexityAPI(query, pathway);
           console.log(`Found ${results.length} programs for pathway "${pathway.title}"`);
-          return results;
+          return { success: true, results, pathway };
         } catch (error) {
           console.error(`Error searching pathway "${pathway.title}":`, error);
-          // Don't fall back to simulated data - let the error propagate
-          throw error;
+          // Return an empty result set for this pathway but don't fail the entire process
+          return { success: false, results: [], error, pathway };
         }
       })
     );
     
     // Race the research promise against the timeout
-    const results = await Promise.race([
-      recommendationsPromise,
+    const pathwayResults = await Promise.race([
+      pathwayResultsPromise,
       timeoutPromise
     ]);
     
-    // Flatten the results array and remove any empty arrays
-    const allRecommendations = (Array.isArray(results) ? results.flat() : [])
-      .filter(item => item);
+    // Gather successful results
+    const successfulResults = pathwayResults
+      .filter(result => result.success && result.results.length > 0)
+      .flatMap(result => result.results);
     
-    // If we got no recommendations, this is a real issue since APIs are working
-    if (allRecommendations.length === 0) {
-      console.error('No recommendations found after searching all pathways');
-      throw new Error('Failed to find any matching programs for your pathways');
+    // Log any failures for monitoring
+    const failedPathways = pathwayResults.filter(result => !result.success);
+    if (failedPathways.length > 0) {
+      console.warn(`${failedPathways.length} pathway(s) failed to process:`, 
+        failedPathways.map(f => f.pathway.title).join(', '));
+    }
+    
+    // If we got no recommendations from any pathway, check if we at least tried some pathways
+    if (successfulResults.length === 0) {
+      // Only throw if ALL pathways failed
+      if (pathwayResults.every(result => !result.success)) {
+        console.error('All pathways failed to produce recommendations');
+        throw new Error('Failed to find any matching programs for your pathways');
+      }
+      
+      // If some pathways were attempted but returned no results, that's not an error
+      console.warn('No recommendations found from successful pathway searches');
     }
     
     // Log success information
-    console.log(`Successfully found ${allRecommendations.length} recommendations using API integration`);
+    console.log(`Successfully found ${successfulResults.length} recommendations across ${pathwayResults.filter(r => r.success).length} pathways`);
     
     // Sort by match score before returning
-    return allRecommendations
+    return successfulResults
       .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, 10); // Limit to top 10 recommendations
+      .slice(0, 15); // Limit to top 10 recommendations
   } catch (error: any) {
     console.error('Error researching specific programs:', {
       message: error.message, 
@@ -319,31 +381,17 @@ function constructDetailedQuery(pathway: any, userProfile: UserProfile): string 
   
   // Create a structured query based on the pathway and user profile
   const query = `
-Find specific ${pathway.qualificationType} programs in ${pathway.fieldOfStudy} 
+Find 5 specific ${pathway.qualificationType} programs in ${pathway.fieldOfStudy} 
 ${pathway.subfields ? `with specializations like ${pathway.subfields.join(', ')}` : ''}
 in ${pathway.targetRegions.join(', ')}. 
 Budget range: ${budgetRange} per year. 
 Duration: ${pathway.duration.min}-${pathway.duration.max} months.
+Make sure you include an accurate URL to the program webpage plus any relevant scholarships, financial aid, or other funding opportunities that could help with affordability.
 
-USER PROFILE DETAILS:
-- Name: ${userProfile.firstName} ${userProfile.lastName}
-- Education: ${educationHistory}
-- Career goals: ${userProfile.careerGoals.shortTerm} (short term), ${userProfile.careerGoals.longTerm} (long term)
-- Target industries: ${userProfile.careerGoals.desiredIndustry.join(', ')}
-- Target roles: ${userProfile.careerGoals.desiredRoles.join(', ')}
-- Skills: ${skillsList}
+USER PREFERENCES:
 - Preferred locations: ${preferredLocations}
 - Study mode preference: ${userProfile.preferences.studyMode}
 - Target start date: ${userProfile.preferences.startDate}
-- Documents submitted: ${userProfile.documents ? 
-    Object.entries(userProfile.documents)
-      .filter(([, value]) => value)
-      .map(([key]) => key)
-      .join(', ') || 'None' 
-    : 'None'
-  }
-
-Also include any relevant scholarships, financial aid, or other funding opportunities that could help with affordability.
 
 ${pathway.queryString || ''}
 
@@ -360,6 +408,8 @@ Format each program as a structured entry with:
 - Application deadlines
 - Key requirements
 - Program highlights
+- Program webpage URL
+- Scholarships and funding opportunities
 `;
 
   return query;

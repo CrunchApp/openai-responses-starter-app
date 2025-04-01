@@ -234,6 +234,7 @@ export async function syncRecommendationsToVectorStore(
         applicationDeadline: recommendation.applicationDeadline,
         requirements: recommendation.requirements || [],
         highlights: recommendation.highlights || [],
+        pageLink: recommendation.pageLink,
         matchScore: recommendation.matchScore,
         matchRationale: recommendation.matchRationale,
         isFavorite: recommendation.isFavorite || false,
@@ -288,36 +289,86 @@ export async function syncRecommendationsToVectorStore(
     if (fileIds.length > 0) {
       console.log(`Adding ${fileIds.length} files to Vector Store: ${vectorStoreId}`);
       const batchUrl = `${baseUrl}/api/vector_stores/add_files_batch`;
-      console.log(`POST request to: ${batchUrl}`);
+      console.log(`POST request to: ${batchUrl} with data:`, { vectorStoreId, fileIds });
       
-      // Get fresh headers for this request
-      const batchHeaders = await getAuthHeaders();
-      
-      const addFilesResponse = await fetch(batchUrl, {
-        method: "POST",
-        headers: batchHeaders,
-        body: JSON.stringify({
-          vectorStoreId,
-          fileIds
-        }),
-        credentials: 'include'
-      });
-      
-      if (!addFilesResponse.ok) {
-        const errorText = await addFilesResponse.text();
-        console.error(`Batch add failed with status ${addFilesResponse.status}: ${errorText}`);
+      try {
+        // Get fresh headers for this request
+        const batchHeaders = await getAuthHeaders();
+        console.log('Auth headers for batch request:', Object.keys(batchHeaders).join(', '));
         
-        // Check if this is an auth error and provide more specific information
-        if (addFilesResponse.status === 401) {
-          console.error("Authentication error when adding files to vector store. User session may have expired.");
-          throw new Error(`Authentication error when adding files to vector store: ${errorText}`);
+        // Make the batch request with explicit error handling
+        const addFilesResponse = await fetch(batchUrl, {
+          method: "POST",
+          headers: batchHeaders,
+          body: JSON.stringify({
+            vectorStoreId,
+            fileIds
+          }),
+          credentials: 'include'
+        });
+        
+        // Log the status of the response for debugging
+        console.log(`Batch add response status: ${addFilesResponse.status}`);
+        
+        if (!addFilesResponse.ok) {
+          // Try to extract the error message from the response
+          let errorText = '';
+          try {
+            const errorJson = await addFilesResponse.json();
+            errorText = JSON.stringify(errorJson);
+          } catch {
+            errorText = await addFilesResponse.text();
+          }
+          
+          console.error(`Batch add failed with status ${addFilesResponse.status}: ${errorText}`);
+          
+          // If batch add fails, try adding files one by one as a fallback
+          console.log("Batch add failed, attempting to add files individually...");
+          const addFileUrl = `${baseUrl}/api/vector_stores/add_file`;
+          
+          let individualSuccessCount = 0;
+          
+          for (const fileId of fileIds) {
+            try {
+              // Get fresh headers for each request
+              const fileHeaders = await getAuthHeaders();
+              
+              const addSingleFileResponse = await fetch(addFileUrl, {
+                method: "POST",
+                headers: fileHeaders,
+                body: JSON.stringify({
+                  vectorStoreId,
+                  fileId
+                }),
+                credentials: 'include'
+              });
+              
+              if (addSingleFileResponse.ok) {
+                console.log(`Successfully added file ${fileId} to vector store`);
+                individualSuccessCount++;
+              } else {
+                console.error(`Failed to add file ${fileId} to vector store: ${addSingleFileResponse.status}`);
+              }
+            } catch (singleFileError) {
+              console.error(`Error adding file ${fileId} to vector store:`, singleFileError);
+            }
+          }
+          
+          if (individualSuccessCount > 0) {
+            console.log(`Successfully added ${individualSuccessCount}/${fileIds.length} files individually`);
+          } else {
+            // If all individual adds fail too, throw an error
+            throw new Error(`Failed to add recommendation files to vector store batch: ${errorText}`);
+          }
+        } else {
+          // Successfully added all files in a batch
+          const batchResult = await addFilesResponse.json();
+          console.log(`Successfully added ${fileIds.length} recommendation files to vector store with batch ID: ${batchResult.batch_id}`);
         }
-        
-        throw new Error(`Failed to add recommendation files to vector store batch: ${errorText}`);
+      } catch (batchError) {
+        console.error('Error in batch operation:', batchError);
+        throw new Error(`Failed to add files to vector store: ${batchError instanceof Error ? batchError.message : String(batchError)}`);
       }
-      
-      const batchResult = await addFilesResponse.json();
-      console.log(`Successfully added ${fileIds.length} recommendation files to vector store with batch ID: ${batchResult.batch_id}`);
     } else {
       console.log("No recommendation files to add to vector store");
     }
@@ -385,6 +436,7 @@ export async function syncSingleRecommendationToVectorStore(
       applicationDeadline: recommendation.applicationDeadline,
       requirements: recommendation.requirements || [],
       highlights: recommendation.highlights || [],
+      pageLink: recommendation.pageLink,
       matchScore: recommendation.matchScore,
       matchRationale: recommendation.matchRationale,
       isFavorite: recommendation.isFavorite || false,

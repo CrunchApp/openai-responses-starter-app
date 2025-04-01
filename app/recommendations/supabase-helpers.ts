@@ -33,6 +33,7 @@ export async function saveRecommendation(
       applicationDeadline: recommendation.applicationDeadline,
       requirements: recommendation.requirements || [],
       highlights: recommendation.highlights || [],
+      pageLink: recommendation.pageLink,
       match_score: recommendation.matchScore, // Intentionally snake_case for the function
       is_favorite: recommendation.isFavorite || false, // Intentionally snake_case for the function
       match_rationale: recommendation.matchRationale, // Intentionally snake_case for the function
@@ -110,6 +111,7 @@ export async function fetchUserRecommendations(userId: string): Promise<{
       applicationDeadline: item.application_deadline || 'N/A',
       requirements: Array.isArray(item.requirements) ? item.requirements : [], // Default to empty array
       highlights: Array.isArray(item.highlights) ? item.highlights : [], // Default to empty array
+      pageLink: item.page_link,
       matchRationale: item.match_rationale && typeof item.match_rationale === 'object'
         ? { // Provide default structure for matchRationale
             careerAlignment: item.match_rationale.careerAlignment ?? 0,
@@ -286,6 +288,7 @@ export async function toggleRecommendationFavorite(
       applicationDeadline: programData.application_deadline || '',
       requirements: programData.requirements || [],
       highlights: programData.highlights || [],
+      pageLink: programData.page_link,
       matchScore: recommendationData.match_score || 0,
       matchRationale: recommendationData.match_rationale || {},
       isFavorite: recommendationData.is_favorite || false,
@@ -377,6 +380,7 @@ export async function saveRecommendationsBatch(
         applicationDeadline: rec.applicationDeadline,
         requirements: rec.requirements || [],
         highlights: rec.highlights || [],
+        pageLink: rec.pageLink,
         match_score: rec.matchScore, // Intentionally snake_case for the function
         is_favorite: rec.isFavorite || false, // Intentionally snake_case for the function
         match_rationale: rec.matchRationale, // Intentionally snake_case for the function
@@ -501,6 +505,122 @@ export async function checkUserAuthentication(): Promise<{
     return {
       isAuthenticated: false,
       userId: null
+    };
+  }
+}
+
+/**
+ * Delete all recommendations for a user from Supabase
+ * and clean up associated files in the vector store
+ */
+export async function deleteUserRecommendations(
+  userId: string,
+  vectorStoreId: string | null
+): Promise<{ success: boolean; error?: string; deletedCount?: number }> {
+  try {
+    if (!userId) {
+      throw new Error('User ID is required to delete recommendations');
+    }
+    
+    console.log(`Deleting all recommendations for user ${userId}`);
+    const supabase = await createClient();
+    
+    // First, get all recommendation IDs for the user to find associated files
+    const { data: recommendationData, error: fetchError } = await supabase
+      .from('recommendations')
+      .select('id')
+      .eq('user_id', userId);
+    
+    if (fetchError) {
+      console.error('Error fetching recommendations:', fetchError);
+      throw new Error(`Failed to fetch recommendations: ${fetchError.message}`);
+    }
+    
+    const recommendationIds = recommendationData?.map(rec => rec.id) || [];
+    console.log(`Found ${recommendationIds.length} recommendations to delete`);
+    
+    // Track any errors during file deletion
+    let fileDeleteError = null;
+    
+    // Delete associated files from both Supabase and Vector Store
+    if (recommendationIds.length > 0) {
+      try {
+        // Get the recommendation files from Supabase
+        const { data: filesData, error: filesError } = await supabase
+          .from('recommendation_files')
+          .select('*')
+          .in('recommendation_id', recommendationIds);
+        
+        if (filesError) {
+          console.error('Error fetching recommendation files:', filesError);
+          fileDeleteError = `Failed to fetch recommendation files: ${filesError.message}`;
+        } else {
+          const fileIds = filesData?.map(file => file.file_id) || [];
+          
+          // First delete the entries from the recommendation_files table
+          if (fileIds.length > 0) {
+            const { error: deleteFileRecordsError } = await supabase
+              .from('recommendation_files')
+              .delete()
+              .in('recommendation_id', recommendationIds);
+            
+            if (deleteFileRecordsError) {
+              console.error('Error deleting recommendation file records:', deleteFileRecordsError);
+              fileDeleteError = `Failed to delete recommendation file records: ${deleteFileRecordsError.message}`;
+            }
+            
+            // Then, if there's a vector store ID, delete the files from OpenAI
+            if (vectorStoreId && fileIds.length > 0) {
+              try {
+                // Import the API to delete files from vector store
+                const { cleanupVectorStoreFiles } = await import('../api/vector_stores/services/cleanup');
+                const cleanupResult = await cleanupVectorStoreFiles(vectorStoreId, fileIds);
+                
+                if (!cleanupResult.success) {
+                  console.error('Error cleaning up vector store files:', cleanupResult.error);
+                  fileDeleteError = `Failed to delete some files from vector store: ${cleanupResult.error}`;
+                }
+              } catch (cleanupError) {
+                console.error('Error importing or calling cleanupVectorStoreFiles:', cleanupError);
+                fileDeleteError = 'Failed to clean up vector store files due to service error';
+              }
+            }
+          }
+        }
+      } catch (filesProcessError) {
+        console.error('Error processing recommendation files:', filesProcessError);
+        fileDeleteError = 'Failed to process recommendation files';
+      }
+    }
+    
+    // Finally, delete the recommendations from the database
+    const { error: deleteError } = await supabase
+      .from('recommendations')
+      .delete()
+      .eq('user_id', userId);
+    
+    if (deleteError) {
+      console.error('Error deleting recommendations:', deleteError);
+      throw new Error(`Failed to delete recommendations: ${deleteError.message}`);
+    }
+    
+    const deletedCount = recommendationIds.length;
+    console.log(`Successfully deleted ${deletedCount} recommendations for user ${userId}`);
+    
+    // Return success with count and any file deletion errors
+    return { 
+      success: true, 
+      deletedCount,
+      ...(fileDeleteError ? { error: fileDeleteError } : {})
+    };
+  } catch (error) {
+    console.error('Error in deleteUserRecommendations:', error);
+    return {
+      success: false,
+      error: error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred while deleting recommendations',
+      deletedCount: 0
     };
   }
 } 

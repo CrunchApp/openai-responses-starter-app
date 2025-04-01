@@ -5,7 +5,8 @@ import {
   checkUserAuthentication,
   saveRecommendationsBatch,
   fetchUserRecommendations as fetchFromSupabase,
-  toggleRecommendationFavorite as toggleFavoriteInSupabase
+  toggleRecommendationFavorite as toggleFavoriteInSupabase,
+  deleteUserRecommendations
 } from './supabase-helpers';
 
 // API URL from environment variables with fallback
@@ -280,4 +281,69 @@ export async function toggleRecommendationFavorite(
   error?: string;
 }> {
   return toggleFavoriteInSupabase(userId, recommendationId);
+}
+
+/**
+ * Reset all recommendations for the authenticated user
+ * Deletes from Supabase and cleans up vector store files
+ */
+export async function resetRecommendations(): Promise<{
+  success: boolean;
+  error?: string;
+  deletedCount?: number;
+}> {
+  try {
+    console.log('Resetting recommendations for authenticated user');
+    
+    // Check authentication
+    const { isAuthenticated, userId } = await checkUserAuthentication();
+    console.log(`Auth check result: isAuthenticated=${isAuthenticated}, userId=${userId}`);
+    
+    // If not authenticated, return error
+    if (!isAuthenticated || !userId) {
+      console.log('User not authenticated, cannot reset recommendations');
+      return { 
+        success: false, 
+        error: 'You must be logged in to reset recommendations' 
+      };
+    }
+    
+    // Fetch vector store ID from user profile
+    const supabase = await import('@/lib/supabase/server').then(mod => mod.createClient());
+    
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('vector_store_id')
+      .eq('id', userId)
+      .single();
+    
+    if (profileError) {
+      console.error('Error retrieving profile data:', profileError);
+      return { 
+        success: false, 
+        error: 'Failed to retrieve user profile data' 
+      };
+    }
+    
+    const vectorStoreId = profileData?.vector_store_id;
+    console.log(`Retrieved vector store ID for user: ${vectorStoreId || 'none'}`);
+    
+    // Delete all recommendations and associated files
+    const result = await deleteUserRecommendations(userId, vectorStoreId);
+    
+    // Return the result
+    return {
+      success: result.success,
+      error: result.error,
+      deletedCount: result.deletedCount,
+    };
+  } catch (error) {
+    console.error('Error resetting recommendations:', error);
+    return {
+      success: false,
+      error: error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred while resetting recommendations'
+    };
+  }
 } 

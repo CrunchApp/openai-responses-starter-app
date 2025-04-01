@@ -11,7 +11,25 @@ import {
 } from './supabase-helpers';
 
 // API URL from environment variables with fallback
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = (() => {
+  // Check if we're in the browser
+  if (typeof window !== 'undefined') {
+    // In the browser, if NEXT_PUBLIC_API_URL is set to localhost,
+    // but we're not on localhost, use the current hostname
+    const configuredUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+    
+    if (configuredUrl.includes('localhost') && !window.location.host.includes('localhost')) {
+      // We're in production but using localhost URL
+      // Construct URL from current origin
+      return window.location.origin;
+    }
+    
+    return configuredUrl;
+  }
+  
+  // Server-side, just use the configured URL
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+})();
 
 /**
  * Main server action to generate recommendations

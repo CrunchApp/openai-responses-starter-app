@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { RecommendationProgram } from "@/app/recommendations/types";
 import { UserProfile } from "@/app/types/profile-schema";
-import { fetchUserRecommendations, toggleRecommendationFavorite } from "@/app/recommendations/actions";
+import { fetchUserRecommendations, toggleRecommendationFavorite, submitRecommendationFeedback } from "@/app/recommendations/actions";
 
 interface RecommendationsState {
   // Recommendations data
@@ -37,6 +37,9 @@ interface RecommendationsState {
   setUserProfile: (userProfile: UserProfile) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
+  
+  // Feedback methods
+  submitFeedback: (recommendationId: string, reason: string) => void;
   
   // Auth methods
   setAuthState: (isAuthenticated: boolean, userId: string | null) => void;
@@ -349,6 +352,36 @@ const useRecommendationsStore = create<RecommendationsState>()(
         ...initialState, // Reset everything to initial defaults
         hydrated: state.hydrated, // Preserve only hydration status
       })),
+      
+      // Add the submitFeedback method
+      submitFeedback: (recommendationId: string, reason: string) => set((state) => {
+        // Update local state with feedback data
+        const updatedRecommendations = state.recommendations.map(rec => 
+          rec.id === recommendationId 
+            ? { 
+                ...rec, 
+                feedbackNegative: true, 
+                feedbackReason: reason,
+                feedbackSubmittedAt: new Date().toISOString()
+              } 
+            : rec
+        );
+        
+        // If authenticated, sync with Supabase (but don't await)
+        if (state.isAuthenticated && state.userId) {
+          try {
+            console.log(`Syncing feedback for recommendation ${recommendationId} to Supabase`);
+            submitRecommendationFeedback(state.userId, recommendationId, reason)
+              .catch(error => console.error('Background feedback sync error:', error));
+          } catch (error) {
+            console.error('Error initiating feedback sync:', error);
+          }
+        } else {
+          console.log('User not authenticated, feedback stored only locally');
+        }
+        
+        return { recommendations: updatedRecommendations };
+      }),
     }),
     {
       name: "vista-recommendations-storage",

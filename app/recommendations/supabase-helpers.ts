@@ -623,4 +623,135 @@ export async function deleteUserRecommendations(
       deletedCount: 0
     };
   }
+}
+
+/**
+ * Submit negative feedback for a recommendation
+ */
+export async function submitRecommendationFeedback(
+  userId: string,
+  recommendationId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!userId || !recommendationId || !reason) {
+      throw new Error('User ID, recommendation ID, and feedback reason are required');
+    }
+    
+    console.log(`Submitting negative feedback for recommendation ${recommendationId} from user ${userId} with reason: ${reason}`);
+    
+    const supabase = await createClient();
+    
+    // Check if the recommendation exists and belongs to the user
+    const { data: recommendation, error: fetchError } = await supabase
+      .from('recommendations')
+      .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id')
+      .eq('id', recommendationId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (fetchError) {
+      console.error('Error fetching recommendation:', fetchError);
+      throw new Error(`Recommendation not found or doesn't belong to the user`);
+    }
+    
+    // Update the recommendation with feedback
+    const { error: updateError } = await supabase
+      .from('recommendations')
+      .update({
+        feedback_negative: true,
+        feedback_reason: reason,
+        feedback_submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', recommendationId)
+      .eq('user_id', userId);
+    
+    if (updateError) {
+      console.error('Error updating recommendation with feedback:', updateError);
+      throw new Error(`Failed to update recommendation with feedback: ${updateError.message}`);
+    }
+    
+    console.log(`Successfully updated recommendation ${recommendationId} with negative feedback`);
+    
+    // If vector store exists, sync the updated recommendation
+    if (recommendation.vector_store_id) {
+      try {
+        // Get the full program data to create a complete recommendation object
+        const { data: programData, error: programError } = await supabase
+          .from('programs')
+          .select('*')
+          .eq('id', recommendation.program_id)
+          .single();
+        
+        if (programError || !programData) {
+          console.error('Error retrieving program data:', programError || 'No program found');
+          return {
+            success: true,
+            error: 'Feedback saved but failed to sync with AI system due to missing program data'
+          };
+        }
+        
+        // Create a complete recommendation object with feedback data
+        const updatedRecommendation: RecommendationProgram = {
+          id: recommendationId,
+          name: programData.name || 'Unknown Program',
+          institution: programData.institution || 'Unknown Institution',
+          degreeType: programData.degree_type || 'Unknown',
+          fieldOfStudy: programData.field_of_study || 'Unknown',
+          description: programData.description || '',
+          costPerYear: programData.cost_per_year || 0,
+          duration: programData.duration || 0,
+          location: programData.location || 'Unknown',
+          startDate: programData.start_date || '',
+          applicationDeadline: programData.application_deadline || '',
+          requirements: programData.requirements || [],
+          highlights: programData.highlights || [],
+          pageLink: programData.page_link,
+          matchScore: recommendation.match_score || 0,
+          matchRationale: recommendation.match_rationale || {},
+          isFavorite: recommendation.is_favorite || false,
+          // Include feedback data
+          feedbackNegative: true,
+          feedbackReason: reason,
+          feedbackSubmittedAt: new Date().toISOString(),
+          // Get scholarships if available (would require a separate query if needed)
+          scholarships: []
+        };
+        
+        // Sync to Vector Store
+        const { success: syncSuccess, error: syncError } = await syncSingleRecommendationToVectorStore(
+          userId,
+          updatedRecommendation,
+          recommendation.vector_store_id
+        );
+        
+        if (!syncSuccess) {
+          console.error('Error syncing updated recommendation to Vector Store:', syncError);
+          return {
+            success: true,
+            error: 'Feedback saved but failed to sync with AI system'
+          };
+        }
+        
+        console.log('Successfully synced updated recommendation with feedback to Vector Store');
+      } catch (syncError) {
+        console.error('Error preparing or syncing recommendation update:', syncError);
+        return {
+          success: true,
+          error: 'Feedback saved but failed to sync with AI system'
+        };
+      }
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error submitting recommendation feedback:', error);
+    return {
+      success: false,
+      error: error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred while submitting feedback',
+    };
+  }
 } 

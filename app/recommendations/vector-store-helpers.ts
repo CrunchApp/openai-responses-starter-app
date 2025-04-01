@@ -238,9 +238,11 @@ export async function syncRecommendationsToVectorStore(
         matchScore: recommendation.matchScore,
         matchRationale: recommendation.matchRationale,
         isFavorite: recommendation.isFavorite || false,
+        feedbackNegative: recommendation.feedbackNegative || false,
+        feedbackReason: recommendation.feedbackReason || null,
+        feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
         scholarships: recommendation.scholarships || [],
         userId: userId,
-        // Add metadata about when this was added
         syncedAt: new Date().toISOString()
       }, null, 2);
       
@@ -440,10 +442,12 @@ export async function syncSingleRecommendationToVectorStore(
       matchScore: recommendation.matchScore,
       matchRationale: recommendation.matchRationale,
       isFavorite: recommendation.isFavorite || false,
+      feedbackNegative: recommendation.feedbackNegative || false,
+      feedbackReason: recommendation.feedbackReason || null,
+      feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
       scholarships: recommendation.scholarships || [],
       userId: userId,
       syncedAt: new Date().toISOString(),
-      // Include a note about updating to ensure content is different
       updateNote: `Updated at ${new Date().toISOString()}`
     }, null, 2);
     

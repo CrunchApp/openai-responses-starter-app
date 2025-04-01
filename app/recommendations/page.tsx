@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { 
   BookOpen, 
   Calendar, 
@@ -95,7 +95,8 @@ export default function RecommendationsPage() {
     toggleFavorite,
     hydrated,
     appendRecommendations,
-    clearRecommendations
+    clearRecommendations,
+    submitFeedback
   } = useRecommendationsStore();
     
   // Local UI state
@@ -149,6 +150,40 @@ export default function RecommendationsPage() {
   const [isGenerationComplete, setIsGenerationComplete] = useState(false); 
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const progressTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+
+  // Add state for tracking the selected feedback reason
+  const [selectedFeedbackReason, setSelectedFeedbackReason] = useState<string>("interest");
+
+  // Add state for filtering
+  const [filterOption, setFilterOption] = useState<string>("all");
+  
+  // Calculate counts for different types of recommendations
+  const feedbackCount = useMemo(() => 
+    recommendations.filter(rec => rec.feedbackNegative).length, 
+    [recommendations]
+  );
+  
+  const favoritesCount = useMemo(() => 
+    recommendations.filter(rec => rec.isFavorite).length, 
+    [recommendations]
+  );
+  
+  // Filter recommendations based on the selected option
+  const getFilteredRecommendations = useCallback(() => {
+    if (!recommendations || recommendations.length === 0) return [];
+    
+    switch (filterOption) {
+      case "favorites":
+        return recommendations.filter(rec => rec.isFavorite);
+      case "feedback":
+        return recommendations.filter(rec => rec.feedbackNegative);
+      case "all":
+      default:
+        return recommendations;
+    }
+  }, [recommendations, filterOption]);
+  
+  const filteredRecommendations = getFilteredRecommendations();
 
   // Wait for hydration and auth state before proceeding
   useEffect(() => {
@@ -496,14 +531,41 @@ export default function RecommendationsPage() {
     }
   };
 
-  const handleFeedbackSubmit = (id: string, isPositive: boolean, reason?: string) => {
+  const handleFeedbackSubmit = (id: string, reason: string) => {
     // Close feedback dialog
     setFeedbackProgram(null);
     
-    // Add analytics or API call here to record feedback
-    console.log(`Feedback for ${id}: ${isPositive ? 'Positive' : 'Negative'}${reason ? ` - ${reason}` : ''}`);
+    // Validate input
+    if (!reason) {
+      console.error('No feedback reason provided');
+      setError('Please select a reason for your feedback');
+      return;
+    }
     
-    // Could update recommendation metrics here if needed
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      const wantsToSignUp = window.confirm(
+        'To save your feedback, you need to create an account. Would you like to sign up now?'
+      );
+      
+      if (wantsToSignUp) {
+        router.push('/auth/signup');
+        return;
+      }
+    }
+    
+    try {
+      // Submit negative feedback using the store method
+      submitFeedback(id, reason);
+      
+      // Show a success notification
+      // This could be implemented with a toast notification library
+      // For now, just log to console
+      console.log(`Negative feedback submitted for ${id}: ${reason}`);
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      setError('Failed to submit feedback. Please try again.');
+    }
   };
   
   // Variants for animations
@@ -800,104 +862,124 @@ export default function RecommendationsPage() {
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h2 className="text-xl font-semibold">Programs matched to your profile</h2>
-                        <p className="text-sm text-zinc-500">{recommendations.length} recommendations found</p>
+                        <p className="text-sm text-zinc-500">
+                          {recommendations.length} recommendations found 
+                          {favoritesCount > 0 && ` • ${favoritesCount} favorites`}
+                          {feedbackCount > 0 && ` • ${feedbackCount} with feedback`}
+                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => router.push("/profile?edit=true")}
-                        >
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit Profile
-                        </Button>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Label htmlFor="filter" className="text-sm">Filter:</Label>
+                          <select 
+                            id="filter"
+                            className="text-sm rounded-md border border-zinc-200 px-2 py-1"
+                            value={filterOption}
+                            onChange={(e) => setFilterOption(e.target.value)}
+                          >
+                            <option value="all">All Programs</option>
+                            <option value="favorites">Favorites Only ({favoritesCount})</option>
+                            <option value="feedback">With Feedback ({feedbackCount})</option>
+                          </select>
+                        </div>
                         
-                        {/* Only show generate more recommendations button for authenticated users 
-                            or guests who haven't reached their limit */}
-                        {(isAuthenticated || !hasReachedGuestLimit) && (
+                        <div className="flex gap-2">
                           <Button 
                             variant="outline" 
-                            size="sm"
-                            onClick={() => fetchRecommendations(true)}
-                            disabled={isModalOpen}
+                            size="sm" 
+                            onClick={() => router.push("/profile?edit=true")}
                           >
-                            {isModalOpen ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Generating...
-                              </>
-                            ) : (
-                              <>
-                                <Scroll className="w-4 h-4 mr-2" />
-                                Generate More
-                              </>
-                            )}
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit Profile
                           </Button>
-                        )}
-                        
-                        {/* Reset Recommendations Button - only for authenticated users */}
-                        {isAuthenticated && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                disabled={isResettingRecommendations || recommendations.length === 0}
-                              >
-                                {isResettingRecommendations ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Resetting...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Reset All
-                                  </>
-                                )}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Reset All Recommendations?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete all your recommendations and saved programs. 
-                                  You'll need to generate new recommendations afterward. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel disabled={isResettingRecommendations}>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={handleResetRecommendations} 
-                                  className="bg-red-500 hover:bg-red-600"
-                                  disabled={isResettingRecommendations}
+                          
+                          {/* Only show generate more recommendations button for authenticated users 
+                              or guests who haven't reached their limit */}
+                          {(isAuthenticated || !hasReachedGuestLimit) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => fetchRecommendations(true)}
+                              disabled={isModalOpen}
+                            >
+                              {isModalOpen ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Generating...
+                                </>
+                              ) : (
+                                <>
+                                  <Scroll className="w-4 h-4 mr-2" />
+                                  Generate More
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          
+                          {/* Reset Recommendations Button - only for authenticated users */}
+                          {isAuthenticated && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  disabled={isResettingRecommendations || recommendations.length === 0}
                                 >
                                   {isResettingRecommendations ? (
                                     <>
-                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                       Resetting...
                                     </>
                                   ) : (
-                                    "Reset All Recommendations"
+                                    <>
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Reset All
+                                    </>
                                   )}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                        
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm">Sort By</Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem>Match Score (High to Low)</DropdownMenuItem>
-                          <DropdownMenuItem>Cost (Low to High)</DropdownMenuItem>
-                          <DropdownMenuItem>Duration (Short to Long)</DropdownMenuItem>
-                          <DropdownMenuItem>Application Deadline</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Reset All Recommendations?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete all your recommendations and saved programs. 
+                                    You'll need to generate new recommendations afterward. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel disabled={isResettingRecommendations}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={handleResetRecommendations} 
+                                    className="bg-red-500 hover:bg-red-600"
+                                    disabled={isResettingRecommendations}
+                                  >
+                                    {isResettingRecommendations ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Resetting...
+                                      </>
+                                    ) : (
+                                      "Reset All Recommendations"
+                                    )}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">Sort By</Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem>Match Score (High to Low)</DropdownMenuItem>
+                            <DropdownMenuItem>Cost (Low to High)</DropdownMenuItem>
+                            <DropdownMenuItem>Duration (Short to Long)</DropdownMenuItem>
+                            <DropdownMenuItem>Application Deadline</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </div>
                   
@@ -918,7 +1000,7 @@ export default function RecommendationsPage() {
                     </div>
                   )}
                   
-                  {recommendations.map((program: RecommendationProgram) => (
+                  {filteredRecommendations.map((program: RecommendationProgram) => (
                     <motion.div 
                       key={program.id}
                       variants={itemVariants}
@@ -1068,46 +1150,38 @@ export default function RecommendationsPage() {
                                         <MessageSquare className="w-4 h-4 mr-2" />
                                         Ask AI About This Program
                                       </Button>
-                                      <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                          <Button 
-                                            variant="ghost" 
-                                            size="sm"
-                                            onClick={() => setFeedbackProgram(program.id)}
-                                          >
-                                            <Info className="w-4 h-4 mr-2" />
-                                            Give Feedback
-                                          </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                          <AlertDialogHeader>
-                                            <AlertDialogTitle>Program Feedback</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                              Is this program relevant to your educational goals?
-                                            </AlertDialogDescription>
-                                          </AlertDialogHeader>
-                                          <div className="flex flex-col gap-4 py-4">
-                                            <div className="flex gap-4">
-                                              <Button 
-                                                variant="outline" 
-                                                className="flex-1 flex gap-2"
-                                                onClick={() => handleFeedbackSubmit(program.id, true)}
+                                      
+                                      {/* Show feedback status or enable submitting feedback */}
+                                      {program.feedbackNegative ? (
+                                        <div className="flex items-center text-zinc-500 text-sm">
+                                          <ThumbsDown className="w-4 h-4 mr-2 text-red-500" />
+                                          <span>Feedback submitted: {program.feedbackReason}</span>
+                                        </div>
+                                      ) : (
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="sm"
+                                              onClick={() => setFeedbackProgram(program.id)}
+                                            >
+                                              <Info className="w-4 h-4 mr-2" />
+                                              Give Feedback
+                                            </Button>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>Program Feedback</AlertDialogTitle>
+                                              <AlertDialogDescription>
+                                                What's the reason this program doesn't match your needs?
+                                              </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <div className="flex flex-col gap-4 py-4">
+                                              <RadioGroup 
+                                                defaultValue="interest" 
+                                                value={selectedFeedbackReason}
+                                                onValueChange={setSelectedFeedbackReason}
                                               >
-                                                <ThumbsUp className="h-4 w-4" />
-                                                Yes, this fits
-                                              </Button>
-                                              <Button 
-                                                variant="outline" 
-                                                className="flex-1 flex gap-2"
-                                                onClick={() => handleFeedbackSubmit(program.id, false)}
-                                              >
-                                                <ThumbsDown className="h-4 w-4" />
-                                                Not relevant
-                                              </Button>
-                                            </div>
-                                            <div className="border-t pt-4">
-                                              <h4 className="text-sm font-medium mb-3">If not relevant, why?</h4>
-                                              <RadioGroup defaultValue="default">
                                                 <div className="flex items-center space-x-2 mb-2">
                                                   <RadioGroupItem value="interest" id="interest" />
                                                   <Label htmlFor="interest">Changed interest area</Label>
@@ -1126,15 +1200,17 @@ export default function RecommendationsPage() {
                                                 </div>
                                               </RadioGroup>
                                             </div>
-                                          </div>
-                                          <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleFeedbackSubmit(program.id, false, "Changed interest area")}>
-                                              Submit Feedback
-                                            </AlertDialogAction>
-                                          </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                      </AlertDialog>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                              <AlertDialogAction 
+                                                onClick={() => handleFeedbackSubmit(program.id, selectedFeedbackReason)}
+                                              >
+                                                Submit Feedback
+                                              </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
+                                      )}
                                     </div>
                                     <Button
                                     onClick={() => window.open(program.pageLink, "_blank")}>

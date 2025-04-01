@@ -37,4 +37,7 @@ export interface RecommendationProgram {
     amount: string;
     eligibility: string;
   }[];
+  feedbackNegative?: boolean;
+  feedbackReason?: string;
+  feedbackSubmittedAt?: string;
 } 

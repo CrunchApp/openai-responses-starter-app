@@ -6,7 +6,8 @@ import {
   saveRecommendationsBatch,
   fetchUserRecommendations as fetchFromSupabase,
   toggleRecommendationFavorite as toggleFavoriteInSupabase,
-  deleteUserRecommendations
+  deleteUserRecommendations,
+  submitRecommendationFeedback as submitFeedbackToSupabase
 } from './supabase-helpers';
 
 // API URL from environment variables with fallback
@@ -344,6 +345,28 @@ export async function resetRecommendations(): Promise<{
       error: error instanceof Error 
         ? error.message 
         : 'An unexpected error occurred while resetting recommendations'
+    };
+  }
+}
+
+/**
+ * Submit negative feedback for a recommendation
+ */
+export async function submitRecommendationFeedback(
+  userId: string,
+  recommendationId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Forward the request to the supabase helper function
+    return await submitFeedbackToSupabase(userId, recommendationId, reason);
+  } catch (error) {
+    console.error('Error in submitRecommendationFeedback action:', error);
+    return {
+      success: false,
+      error: error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred while submitting feedback'
     };
   }
 } 

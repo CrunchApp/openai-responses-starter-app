@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useAuth } from '@/app/components/auth/AuthContext';
 import useRecommendationsStore from '@/stores/useRecommendationsStore';
 import useProfileStore from '@/stores/useProfileStore';
+import useToolsStore from '@/stores/useToolsStore';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 /**
@@ -14,7 +15,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 export default function AuthSynchronizer() {
   console.log('⚡ AuthSynchronizer component loaded');
 
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, vectorStoreId: authVectorStoreId, loading: authLoading } = useAuth();
   const { 
     isAuthenticated, 
     userId, 
@@ -31,6 +32,12 @@ export default function AuthSynchronizer() {
     setCurrentStep,
     completedSteps
   } = useProfileStore();
+  
+  // Get tools store for vector store synchronization
+  const {
+    setVectorStore,
+    vectorStore
+  } = useToolsStore();
   
   // Create Supabase client
   const supabase = createClientComponentClient();
@@ -58,6 +65,40 @@ export default function AuthSynchronizer() {
       }
     }
   }, [storeHydrated, user]);
+
+  // Sync vector store ID from auth context to tools store
+  useEffect(() => {
+    // Only proceed if we have an auth vector store ID and auth is no longer loading
+    if (authVectorStoreId && !authLoading) {
+      console.log('🔄 Syncing vector store ID from auth context:', authVectorStoreId);
+      
+      // Check if we need to update the vector store in tools store
+      if (!vectorStore || vectorStore.id !== authVectorStoreId) {
+        // Fetch vector store details and update tools store
+        const fetchVectorStore = async () => {
+          try {
+            const response = await fetch(
+              `/api/vector_stores/retrieve_store?vector_store_id=${authVectorStoreId}`
+            );
+            
+            if (response.ok) {
+              const storeData = await response.json();
+              if (storeData.id) {
+                console.log('✅ Successfully fetched vector store details:', storeData.id);
+                setVectorStore(storeData);
+              }
+            } else {
+              console.error('Failed to fetch vector store details:', response.statusText);
+            }
+          } catch (error) {
+            console.error('Error fetching vector store details:', error);
+          }
+        };
+        
+        fetchVectorStore();
+      }
+    }
+  }, [authVectorStoreId, authLoading, vectorStore, setVectorStore]);
 
   // Directly check Supabase auth status on component mount
   useEffect(() => {

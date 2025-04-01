@@ -4,7 +4,7 @@ import {
   BookOpen, 
   Calendar, 
   Clock, 
-  DollarSign, 
+  BanknoteIcon, 
   Edit, 
   FileText, 
   Globe, 
@@ -591,9 +591,9 @@ export default function RecommendationsPage() {
                 <h1 className="text-2xl md:text-3xl font-bold mb-2">
                   Hi {userProfile.firstName}, welcome to your education dashboard
                 </h1>
-                <p className="text-zinc-600">
+                {/* <p className="text-zinc-600">
                   Exploring {userProfile.goal} programs in {userProfile.desiredField} based on your profile
-                </p>
+                </p> */}
                 
                 {/* Account status indicator */}
                 {!isAuthenticated && (
@@ -843,8 +843,8 @@ export default function RecommendationsPage() {
                         <CardContent className="pb-2">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                             <div className="flex items-center">
-                              <DollarSign className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">${(program.costPerYear ?? 0).toLocaleString()}/year</span>
+                              <BanknoteIcon className="h-4 w-4 text-zinc-500 mr-2" />
+                              <span className="text-sm">£{(program.costPerYear ?? 0).toLocaleString()}/year</span>
                             </div>
                             <div className="flex items-center">
                               <Clock className="h-4 w-4 text-zinc-500 mr-2" />
@@ -1084,7 +1084,7 @@ export default function RecommendationsPage() {
                               {program.duration ?? 0} months
                             </span>
                             <span className="flex items-center">
-                              <DollarSign className="h-3 w-3 mr-1" />
+                              <BanknoteIcon className="h-3 w-3 mr-1" />
                               ${(program.costPerYear ?? 0).toLocaleString()}/year
                             </span>
                           </div>

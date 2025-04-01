@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Chat from "./chat";
 import useConversationStore from "@/stores/useConversationStore";
 import { Item, processMessages } from "@/lib/assistant";
@@ -17,7 +17,8 @@ export default function Assistant() {
     createNewConversation,
     setActiveConversation,
     isLoading,
-    error
+    error,
+    setError
   } = useConversationStore();
   
   const [isInitialized, setIsInitialized] = useState(false);
@@ -36,7 +37,11 @@ export default function Assistant() {
           setAuthState(false, null);
         } else if (user) {
           console.log('User authenticated:', user.id);
+          // Set authentication state but don't create a conversation automatically
           setAuthState(true, user.id);
+          
+          // If there's an active conversation in session/local storage, we can load it here
+          // This will be handled by the conversation selector component
         } else {
           console.log('No authenticated user');
           setAuthState(false, null);
@@ -61,7 +66,11 @@ export default function Assistant() {
         console.log('Auth state changed:', event);
         
         if (event === 'SIGNED_IN' && session?.user) {
+          // Just update auth state, don't create a new conversation automatically
           setAuthState(true, session.user.id);
+          
+          // Don't load a conversation here - wait for user action
+          // or let conversation selector handle this
         } else if (event === 'SIGNED_OUT') {
           setAuthState(false, null);
           setActiveConversation(null);
@@ -74,42 +83,67 @@ export default function Assistant() {
     };
   }, [setAuthState, setActiveConversation]);
 
-  const handleSendMessage = async (message: string) => {
+  // Simplified version of handleSendMessage that doesn't create automatic conversation
+  const handleSendMessage = useCallback(async (message: string) => {
+    setError(null);
+    
+    // Skip empty messages
     if (!message.trim()) return;
 
-    let currentConversationId = activeConversationId;
+    // If not authenticated or signed in, store message locally only
+    if (!isAuthenticated || !userId) {
+      addChatMessage({
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: message }],
+      });
+      
+      // Process messages without saving to DB
+      processMessages();
+      return;
+    }
 
     // If authenticated but no active conversation, create one first
-    if (isAuthenticated && userId && !currentConversationId) {
-      console.log("No active conversation, creating a new one...");
+    if (!activeConversationId) {
+      // Create a new conversation in the DB
+      console.log('Creating new conversation before sending first message');
       const newConversationId = await createNewConversation();
-      if (newConversationId) {
-        currentConversationId = newConversationId;
-        console.log("New conversation created with ID:", newConversationId);
-      } else {
-        console.error("Failed to create a new conversation.");
+      
+      if (!newConversationId) {
+        setError("Failed to create a new conversation. Please try again.");
         return;
       }
     }
 
-    const userItem: Item = {
-      type: "message",
-      role: "user",
-      content: [{ type: "input_text", text: message.trim() }],
-    };
-    const userMessage: any = {
-      role: "user",
-      content: message.trim(),
-    };
-
     try {
-      await addConversationItem(userMessage);
-      await addChatMessage(userItem);
+      // Add user message to chat (will be saved to DB via the store)
+      await addChatMessage({
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: message }],
+      });
+
+      // Add user message to conversation items (for API context)
+      await addConversationItem({
+        role: "user",
+        content: message,
+      });
+
+      // Process messages
       await processMessages();
     } catch (error) {
-      console.error("Error processing message:", error);
+      console.error("Error sending message:", error);
+      setError("Failed to send message. Please try again.");
     }
-  };
+  }, [
+    isAuthenticated,
+    userId,
+    activeConversationId,
+    createNewConversation,
+    addChatMessage,
+    addConversationItem,
+    setError,
+  ]);
 
   return (
     <div className="h-full w-full bg-gradient-to-b from-blue-50 to-white">

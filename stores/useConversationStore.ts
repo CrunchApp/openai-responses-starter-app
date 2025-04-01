@@ -27,7 +27,7 @@ interface ConversationState {
   // Messages management
   setChatMessages: (items: Item[]) => void;
   setConversationItems: (messages: any[]) => void;
-  addChatMessage: (item: Item) => Promise<void>;
+  addChatMessage: (item: Item, skipAddToChat?: boolean) => Promise<void>;
   addConversationItem: (message: ChatCompletionMessageParam) => Promise<void>;
   
   // State management
@@ -55,12 +55,19 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   conversationItems: [],
   
   // Auth management
-  setAuthState: (isAuthenticated, userId) => 
-    set({ isAuthenticated, userId }),
+  setAuthState: (isAuthenticated, userId) => {
+    // Only update auth state, don't create conversations automatically
+    set({ isAuthenticated, userId });
+    // Note: Don't create a new conversation here - wait for explicit user action
+  },
   
   // Conversation management
-  setActiveConversation: (conversationId) => 
-    set({ activeConversationId: conversationId }),
+  setActiveConversation: (conversationId) => {
+    // Just set the active conversation ID
+    set({ activeConversationId: conversationId });
+    // Note: If conversationId is null, we're clearing the active conversation
+    // Wait for explicit user action before creating a new one
+  },
   
   createNewConversation: async () => {
     const { isAuthenticated, userId } = get();
@@ -289,11 +296,13 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   
   setConversationItems: (messages) => set({ conversationItems: messages }),
   
-  addChatMessage: async (item) => {
+  addChatMessage: async (item, skipAddToChat = false) => {
     const { activeConversationId, isAuthenticated, userId, chatMessages } = get();
     
-    // Update local state immediately
-    set((state) => ({ chatMessages: [...state.chatMessages, item] }));
+    // Update local state immediately if not skipped
+    if (!skipAddToChat) {
+      set((state) => ({ chatMessages: [...state.chatMessages, item] }));
+    }
     
     // If authenticated and has active conversation, save to database
     if (isAuthenticated && userId && activeConversationId) {

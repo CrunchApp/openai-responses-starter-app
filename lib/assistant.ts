@@ -117,6 +117,9 @@ export const processMessages = async () => {
 
   let assistantMessageContent = "";
   let functionArguments = "";
+  
+  // Track which messages have been added to avoid duplication
+  const addedMessageIds = new Set();
 
   await handleTurn(allConversationItems, tools, async ({ event, data }) => {
     switch (event) {
@@ -124,7 +127,8 @@ export const processMessages = async () => {
       case "response.output_text.annotation.added": {
         const { delta, item_id, annotation } = data;
 
-        console.log("event", data);
+        // For debugging
+        console.log("Streaming delta:", { event, delta: delta?.slice(0, 20), item_id });
 
         let partial = "";
         if (typeof delta === "string") {
@@ -132,15 +136,15 @@ export const processMessages = async () => {
         }
         assistantMessageContent += partial;
 
-        // If the last message isn't an assistant message, create a new one
-        const lastItem = chatMessages[chatMessages.length - 1];
-        if (
-          !lastItem ||
-          lastItem.type !== "message" ||
-          lastItem.role !== "assistant" ||
-          (lastItem.id && lastItem.id !== item_id)
-        ) {
-          chatMessages.push({
+        // Check if we already have a message with this ID
+        let assistantMessage = chatMessages.find(
+          (m) => m.type === "message" && m.role === "assistant" && m.id === item_id
+        ) as MessageItem | undefined;
+
+        if (!assistantMessage) {
+          // No message with this ID exists yet, create a new one
+          console.log("Creating new assistant message with ID:", item_id);
+          assistantMessage = {
             type: "message",
             role: "assistant",
             id: item_id,
@@ -148,11 +152,17 @@ export const processMessages = async () => {
               {
                 type: "output_text",
                 text: assistantMessageContent,
+                annotations: annotation ? [annotation] : undefined,
               },
             ],
-          } as MessageItem);
+          };
+          
+          chatMessages.push(assistantMessage);
+          addedMessageIds.add(item_id); // Track that we've added this message ID
         } else {
-          const contentItem = lastItem.content[0];
+          // Update the existing message
+          console.log("Updating existing assistant message with ID:", item_id);
+          const contentItem = assistantMessage.content[0];
           if (contentItem && contentItem.type === "output_text") {
             contentItem.text = assistantMessageContent;
             if (annotation) {
@@ -174,33 +184,47 @@ export const processMessages = async () => {
         if (!item || !item.type) {
           break;
         }
+        
         // Handle differently depending on the item type
         switch (item.type) {
           case "message": {
+            // IMPORTANT: Skip adding assistant messages here completely
+            // They are already handled by response.output_text.delta
+            if (item.role === "assistant") {
+              // Only track in conversationItems for API context, not in UI
+              const itemExists = conversationItems.some(
+                (ci) => ci.role === "assistant" && JSON.stringify(ci.content) === JSON.stringify(item.content)
+              );
+              
+              if (!itemExists) {
+                console.log("Adding assistant message to conversationItems only:", item.id);
+                conversationItems.push({
+                  role: "assistant",
+                  content: item.content
+                });
+                setConversationItems([...conversationItems]);
+              }
+              break;
+            }
+            
+            // Non-assistant messages can be handled normally
+            console.log("Adding non-assistant message:", item.role, item.id);
             const text = item.content?.text || "";
             chatMessages.push({
               type: "message",
-              role: "assistant",
+              role: item.role,
+              id: item.id,
               content: [
                 {
-                  type: "output_text",
-                  text,
-                },
-              ],
-            });
-            conversationItems.push({
-              role: "assistant",
-              content: [
-                {
-                  type: "output_text",
+                  type: "input_text", // For user messages we use input_text
                   text,
                 },
               ],
             });
             setChatMessages([...chatMessages]);
-            setConversationItems([...conversationItems]);
             break;
           }
+          
           case "function_call": {
             functionArguments += item.arguments || "";
             chatMessages.push({
@@ -216,6 +240,7 @@ export const processMessages = async () => {
             setChatMessages([...chatMessages]);
             break;
           }
+          
           case "web_search_call": {
             chatMessages.push({
               type: "tool_call",
@@ -226,6 +251,7 @@ export const processMessages = async () => {
             setChatMessages([...chatMessages]);
             break;
           }
+          
           case "file_search_call": {
             chatMessages.push({
               type: "tool_call",
@@ -241,7 +267,7 @@ export const processMessages = async () => {
       }
 
       case "response.output_item.done": {
-        // After output item is done, adding tool call ID
+        // After output item is done, add tool call ID or save message
         const { item } = data || {};
 
         // Ensure item exists before proceeding
@@ -250,49 +276,43 @@ export const processMessages = async () => {
           break; // Exit if item is invalid
         }
 
-        const chatMessagesState = useConversationStore.getState().chatMessages;
-        const toolCallMessage = chatMessagesState.find((m) => m.id === item.id);
-
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
-          toolCallMessage.call_id = item.call_id;
-          setChatMessages([...chatMessagesState]); // Update UI state
+        // Add final message state to conversation context
+        if (!conversationItems.some(
+          ci => ci.type === item.type && ci.id === item.id
+        )) {
+          setConversationItems([...conversationItems, item]);
         }
-        
-        // Add the final item to the items sent to the API
-        const currentConversationItems = useConversationStore.getState().conversationItems;
-        setConversationItems([...currentConversationItems, item]);
 
-        // --- Save completed assistant message --- 
-        if (item.type === 'message' && item.role === 'assistant') {
-          // Find the final state of the message in chatMessages (which includes streamed text/annotations)
-          const finalChatMessage = chatMessagesState.find((m): m is MessageItem =>
-            m.type === 'message' && m.id === item.id
-          );
-
-          if (finalChatMessage) {
-            console.log("Saving final assistant message to DB:", finalChatMessage.id);
-            // Use the addChatMessage from the store to save it
-            // Ensure this doesn't trigger another API call unnecessarily
-            useConversationStore.getState().addChatMessage(finalChatMessage);
-          } else {
-            console.warn("Could not find final assistant message in chatMessages to save.");
-            // As a fallback, try creating a message item from the raw API response item
-            // Note: This might miss annotations added during streaming
-            const fallbackMessageItem: MessageItem = {
-              type: "message",
-              role: "assistant",
-              id: item.id,
-              // Attempt to handle potentially missing/malformed content
-              content: Array.isArray(item.content) && item.content.length > 0 
-                        ? item.content 
-                        : [{ type: 'output_text', text: 'Error: Content missing or invalid' }]
-            };
-            console.log("Saving fallback assistant message to DB:", fallbackMessageItem.id);
-            useConversationStore.getState().addChatMessage(fallbackMessageItem);
+        // For tool calls, update status
+        if (item.type !== "message") {
+          const chatMessagesState = useConversationStore.getState().chatMessages;
+          const toolCallMessage = chatMessagesState.find((m) => m.id === item.id);
+          
+          if (toolCallMessage && toolCallMessage.type === "tool_call") {
+            toolCallMessage.call_id = item.call_id;
+            toolCallMessage.status = "completed";
+            setChatMessages([...chatMessagesState]);
           }
         }
-        // *** IMPORTANT: Added missing break statement ***
-        break; 
+        
+        // For assistant messages, save the final state to the database
+        else if (item.type === "message" && item.role === "assistant") {
+          console.log("Message done:", item.id);
+          
+          // Find the message in the current chat state (which includes streamed text)
+          const chatMessagesState = useConversationStore.getState().chatMessages;
+          const finalMessage = chatMessagesState.find(
+            (m): m is MessageItem => m.type === "message" && m.id === item.id
+          );
+          
+          if (finalMessage) {
+            console.log("Saving completed message to database:", finalMessage.id);
+            // Save to database without adding another copy to the UI
+            await useConversationStore.getState().addChatMessage(finalMessage, true);
+          }
+        }
+        
+        break;
       }
 
       case "response.function_call_arguments.delta": {
@@ -300,17 +320,17 @@ export const processMessages = async () => {
         functionArguments += data.delta || "";
         let parsedFunctionArguments = {};
         if (functionArguments.length > 0) {
-          parsedFunctionArguments = parse(functionArguments);
+          try {
+            parsedFunctionArguments = parse(functionArguments);
+          } catch {
+            // partial JSON can fail parse; ignore
+          }
         }
 
         const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.arguments = functionArguments;
-          try {
-            toolCallMessage.parsedArguments = parsedFunctionArguments;
-          } catch {
-            // partial JSON can fail parse; ignore
-          }
+          toolCallMessage.parsedArguments = parsedFunctionArguments;
           setChatMessages([...chatMessages]);
         }
         break;

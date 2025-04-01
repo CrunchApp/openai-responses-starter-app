@@ -45,6 +45,9 @@ export default function ConversationSelector() {
         
         const data = await response.json();
         setConversations(data.conversations || []);
+        
+        // Don't auto-select the first conversation - wait for explicit user action
+        // This prevents automatic conversation creation on page load
       } catch (error) {
         console.error('Error fetching conversations:', error);
         setError('Failed to load conversations');
@@ -100,9 +103,10 @@ export default function ConversationSelector() {
       // Remove from list
       setConversations(conversations.filter(c => c.id !== conversationId));
       
-      // If the active conversation was deleted, create a new one
+      // If the active conversation was deleted, clear it but don't create a new one automatically
       if (conversationId === activeConversationId) {
-        await createNewConversation();
+        setActiveConversation(null);
+        // Let the user explicitly start a new conversation
       }
     } catch (error) {
       console.error('Error deleting conversation:', error);

@@ -3,6 +3,14 @@ import { Item, MessageItem } from "@/lib/assistant";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { INITIAL_MESSAGE } from "@/config/constants";
 
+// Define Conversation type matching ConversationSelector
+type Conversation = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
 interface ConversationState {
   // Authentication and conversation state
   isAuthenticated: boolean;
@@ -16,13 +24,14 @@ interface ConversationState {
   chatMessages: Item[];
   // Items sent to the Responses API
   conversationItems: any[];
+  conversations: Conversation[]; // Add state to hold conversation list for UI updates
 
   // Auth management
   setAuthState: (isAuthenticated: boolean, userId: string | null) => void;
   
   // Conversation management
   setActiveConversation: (conversationId: string | null) => void;
-  createNewConversation: () => Promise<string | null>;
+  createNewConversation: (firstMessageContent?: string) => Promise<string | null>; // Accept optional first message
   loadConversation: (conversationId: string) => Promise<boolean>;
   
   // Messages management
@@ -36,6 +45,10 @@ interface ConversationState {
   setError: (error: string | null) => void;
   resetState: () => void;
   rawSet: (state: any) => void;
+
+  // New methods
+  updateConversationTitleInState: (conversationId: string, title: string) => void;
+  fetchConversations: () => Promise<void>; // Add method to fetch conversations
 }
 
 const useConversationStore = create<ConversationState>((set, get) => ({
@@ -55,56 +68,80 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     },
   ],
   conversationItems: [],
+  conversations: [], // Initialize conversations state
   
   // Auth management
   setAuthState: (isAuthenticated, userId) => {
-    // Only update auth state, don't create conversations automatically
     set({ isAuthenticated, userId });
-    // Note: Don't create a new conversation here - wait for explicit user action
+    if (isAuthenticated && userId) {
+      get().fetchConversations(); // Fetch conversations on auth
+    } else {
+      set({ conversations: [], activeConversationId: null }); // Clear on sign out
+    }
   },
   
   // Conversation management
   setActiveConversation: (conversationId) => {
-    // Just set the active conversation ID
     set({ activeConversationId: conversationId });
-    // Note: If conversationId is null, we're clearing the active conversation
-    // Wait for explicit user action before creating a new one
   },
   
-  createNewConversation: async () => {
+  // Method to fetch conversations
+  fetchConversations: async () => {
     const { isAuthenticated, userId } = get();
-    
-    if (!isAuthenticated || !userId) {
-      console.log('Creating local conversation only (not authenticated)');
-      // For unauthenticated users, just reset the state without creating a DB record
-      get().resetState();
-      return null;
-    }
-    
+    if (!isAuthenticated || !userId) return;
+
     try {
       set({ isLoading: true, error: null });
-      
-      const response = await fetch('/api/conversations', {
+      const response = await fetch('/api/conversations');
+      if (!response.ok) {
+        throw new Error('Failed to fetch conversations');
+      }
+      const data = await response.json();
+      set({ conversations: data.conversations || [] });
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      set({ error: 'Failed to load conversations' });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+  
+  createNewConversation: async (firstMessageContent?: string) => {
+    const { isAuthenticated, userId, resetState, fetchConversations, updateConversationTitleInState } = get();
+
+    if (!isAuthenticated || !userId) {
+      console.log('Creating local conversation only (not authenticated)');
+      resetState(); // Reset chat state for local session
+      return null;
+    }
+
+    try {
+      set({ isLoading: true, error: null });
+
+      // 1. Create conversation with a placeholder title
+      const placeholderTitle = "Generating title...";
+      const createResponse = await fetch('/api/conversations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          title: 'New Conversation',
+          title: placeholderTitle, // Use placeholder
         }),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
+
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
         throw new Error(errorData.error || 'Failed to create conversation');
       }
-      
-      const { conversation } = await response.json();
-      console.log('Created new conversation:', conversation.id);
-      
-      // Reset chat state and set the new conversation as active
+
+      const { conversation } = await createResponse.json();
+      const newConversationId = conversation.id;
+      console.log('Created new conversation with placeholder title:', newConversationId);
+
+      // 2. Reset chat state and set the new conversation as active
       set({
-        activeConversationId: conversation.id,
+        activeConversationId: newConversationId,
         chatMessages: [
           {
             type: "message",
@@ -113,17 +150,73 @@ const useConversationStore = create<ConversationState>((set, get) => ({
           },
         ],
         conversationItems: [],
+        isLoading: false, // Set loading false after initial creation
       });
-      
-      return conversation.id;
+
+      // 3. Fetch updated conversation list to include the new one with placeholder
+      await fetchConversations();
+
+      // 4. Asynchronously generate and update the title if first message exists
+      if (firstMessageContent) {
+        // Don't block the UI, run this in the background
+        (async () => {
+          try {
+            console.log(`Generating title for ${newConversationId}...`);
+            const titleResponse = await fetch('/api/generate-title', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messageContent: firstMessageContent }),
+            });
+
+            if (!titleResponse.ok) {
+              console.error('Failed to generate title:', await titleResponse.text());
+              // Keep placeholder title if generation fails
+              return;
+            }
+
+            const { title: generatedTitle } = await titleResponse.json();
+            console.log(`Generated title for ${newConversationId}: "${generatedTitle}"`);
+
+            // 5. Update the conversation title in the database
+            const updateResponse = await fetch(`/api/conversations/${newConversationId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: generatedTitle }),
+            });
+
+            if (!updateResponse.ok) {
+              console.error('Failed to update conversation title in DB:', await updateResponse.text());
+              return; // Title generated but failed to save, keep placeholder
+            }
+
+            console.log(`Successfully updated title for ${newConversationId} in DB.`);
+
+            // 6. Update the title in the local state for immediate UI reflection
+            updateConversationTitleInState(newConversationId, generatedTitle);
+
+          } catch (err) {
+            console.error(`Error during background title generation/update for ${newConversationId}:`, err);
+            // Handle errors silently in the background, keeping the placeholder
+          }
+        })();
+      }
+
+      return newConversationId;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create conversation';
       console.error('Error creating conversation:', errorMessage);
-      set({ error: errorMessage });
+      set({ error: errorMessage, isLoading: false });
       return null;
-    } finally {
-      set({ isLoading: false });
-    }
+    } 
+  },
+  
+  // Helper function to update title in local state
+  updateConversationTitleInState: (conversationId, title) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId ? { ...conv, title: title, updated_at: new Date().toISOString() } : conv
+      ),
+    }));
   },
   
   loadConversation: async (conversationId) => {
@@ -380,9 +473,18 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     ],
     conversationItems: [],
     error: null,
+    // Don't reset conversations list on resetState, only on sign out
   }),
   
   rawSet: set,
 }));
+
+// Fetch initial conversations when the store is initialized and user is authenticated
+useConversationStore.subscribe((state, prevState) => {
+  if (state.isAuthenticated && !prevState.isAuthenticated && state.userId) {
+    console.log("User authenticated, fetching initial conversations...");
+    state.fetchConversations();
+  }
+});
 
 export default useConversationStore;

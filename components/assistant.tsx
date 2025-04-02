@@ -90,7 +90,9 @@ export default function Assistant() {
     // Skip empty messages
     if (!message.trim()) return;
 
-    // If not authenticated or signed in, store message locally only
+    let currentActiveConversationId = activeConversationId;
+    
+    // If not authenticated or signed in, handle locally (no changes needed here)
     if (!isAuthenticated || !userId) {
       addChatMessage({
         type: "message",
@@ -103,16 +105,24 @@ export default function Assistant() {
       return;
     }
 
-    // If authenticated but no active conversation, create one first
-    if (!activeConversationId) {
-      // Create a new conversation in the DB
-      console.log('Creating new conversation before sending first message');
-      const newConversationId = await createNewConversation();
+    // If authenticated but no active conversation, create one first, passing the message
+    if (!currentActiveConversationId) {
+      console.log('Creating new conversation with first message for title generation');
+      // Pass the message content to createNewConversation
+      const newConversationId = await createNewConversation(message);
       
       if (!newConversationId) {
         setError("Failed to create a new conversation. Please try again.");
         return;
       }
+      // Update the local variable for the rest of the function
+      currentActiveConversationId = newConversationId;
+    }
+
+    // Ensure we have an active ID before proceeding
+    if (!currentActiveConversationId) {
+      setError("Cannot send message without an active conversation.");
+      return;
     }
 
     try {
@@ -129,7 +139,7 @@ export default function Assistant() {
         content: message,
       });
 
-      // Process messages
+      // Process messages (triggers API call)
       await processMessages();
     } catch (error) {
       console.error("Error sending message:", error);
@@ -138,7 +148,7 @@ export default function Assistant() {
   }, [
     isAuthenticated,
     userId,
-    activeConversationId,
+    activeConversationId, // Keep dependency for reactivity
     createNewConversation,
     addChatMessage,
     addConversationItem,
@@ -155,7 +165,7 @@ export default function Assistant() {
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">Vista Education Adviser</h1>
+            <h1 className="text-xl font-semibold text-gray-800">Vista Education Advisers</h1>
             <p className="text-sm text-gray-600">Your personal guide to educational success</p>
           </div>
         </div>

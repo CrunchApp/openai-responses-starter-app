@@ -25,12 +25,10 @@ export type WebSearchConfig = {
 
 interface StoreState {
   fileSearchEnabled: boolean;
-  //previousFileSearchEnabled: boolean;
   setFileSearchEnabled: (enabled: boolean) => void;
   webSearchEnabled: boolean;
   setWebSearchEnabled: (enabled: boolean) => void;
   functionsEnabled: boolean;
-  //previousFunctionsEnabled: boolean;
   setFunctionsEnabled: (enabled: boolean) => void;
   vectorStore: VectorStore | null;
   setVectorStore: (store: VectorStore) => void;
@@ -51,7 +49,6 @@ const useToolsStore = create<StoreState>()(
         },
       },
       fileSearchEnabled: true,
-      previousFileSearchEnabled: false,
       setFileSearchEnabled: (enabled) => {
         set({ fileSearchEnabled: enabled });
       },
@@ -60,7 +57,6 @@ const useToolsStore = create<StoreState>()(
         set({ webSearchEnabled: enabled });
       },
       functionsEnabled: false,
-      previousFunctionsEnabled: false,
       setFunctionsEnabled: (enabled) => {
         set({ functionsEnabled: enabled });
       },

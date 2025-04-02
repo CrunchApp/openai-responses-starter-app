@@ -154,7 +154,7 @@ export default function Home() {
                   <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
-              <Button 
+              {/* <Button 
                 variant="outline" 
                 size="default" 
                 className="relative overflow-hidden transition-all duration-300"
@@ -163,7 +163,7 @@ export default function Home() {
               >
                 <span className={`absolute inset-0 bg-primary/10 transform transition-transform duration-300 ${isHovered === 2 ? 'scale-90 opacity-100' : 'scale-0 opacity-0'}`}></span>
                 <Link href="/auth/login">Log In</Link>
-              </Button>
+              </Button> */}
             </div>
           </div>
           
@@ -293,9 +293,9 @@ export default function Home() {
                     Join Thousands of Successful Students
                   </h2>
                   <p className="mb-6 text-foreground/80">
-                    "Vista Education Adviser transformed my search for the right university. 
+                    "Vista transformed my search for the right university. 
                     The personalized recommendations perfectly matched my goals, and the AI assistant
-                    answered all my questions instantly. I'm now attending my dream program!"
+                    answered my questions instantly & on point. I'm now attending my dream program!"
                   </p>
                   <div className="flex items-center">
                     <div className="mr-4">
@@ -308,8 +308,8 @@ export default function Home() {
                       </div>
                     </div>
                     <div>
-                      <p className="font-semibold">Sarah E.</p>
-                      <p className="text-sm text-foreground/70">International Business Student</p>
+                      <p className="font-semibold">Vinay E.</p>
+                      <p className="text-sm text-foreground/70">International Medical Student</p>
                     </div>
                   </div>
                 </div>

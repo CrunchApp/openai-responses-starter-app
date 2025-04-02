@@ -21,7 +21,7 @@ export function GuestNavbar() {
           <div className="flex items-center">
             <Link href="/" className="flex items-center mr-8">
               <Image
-                src="/vista_logo.svg"
+                src="/vista_logo.png"
                 alt="Vista Logo"
                 width={64}
                 height={64}

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "Vista Education Adviser",
   description: "AI-powered education and career advisor",
   icons: {
-    icon: '/vista_logo.svg',
+    icon: '/vista_logo.png',
   },
 };
 

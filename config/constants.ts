@@ -1,4 +1,4 @@
-export const MODEL = "gpt-4o";
+export const MODEL = "gpt-4o-mini";
 
 // Developer prompt for the Vista Education Adviser assistant
 export const DEVELOPER_PROMPT = `

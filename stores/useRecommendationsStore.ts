@@ -46,7 +46,7 @@ interface RecommendationsState {
   incrementGenerationCount: () => void;
   
   // Supabase sync methods
-  syncWithSupabase: () => Promise<void>;
+  syncWithSupabase: (userId: string) => Promise<void>;
   syncFavoriteWithSupabase: (recommendationId: string) => Promise<void>;
   
   // Get favorite recommendations
@@ -216,7 +216,7 @@ const useRecommendationsStore = create<RecommendationsState>()(
           // We'll sync in the next tick to ensure state is updated first
           setTimeout(() => {
             if (isAuthenticated && userId) {
-              get().syncWithSupabase();
+              get().syncWithSupabase(userId);
             }
           }, 0);
         }
@@ -243,35 +243,53 @@ const useRecommendationsStore = create<RecommendationsState>()(
       }),
       
       // Sync with Supabase - fetch recommendations and update local state
-      syncWithSupabase: async () => {
-        const { isAuthenticated, userId } = get();
+      syncWithSupabase: async (userId: string) => {
+        if (!userId) {
+           console.warn('[RecStore] syncWithSupabase called without a userId. Aborting.');
+           return;
+        }
         
-        if (!isAuthenticated || !userId) return;
-        
+        console.log(`[RecStore] >>> ENTER syncWithSupabase for user: ${userId}`);
+
         try {
-          set({ isLoading: true });
+          set({ isLoading: true, error: null });
+          console.log(`[RecStore] State set to isLoading=true`);
           
-          // Fetch recommendations from Supabase
-          const { recommendations, error } = await fetchUserRecommendations(userId);
+          // Fetch recommendations from Supabase using the provided userId
+          console.log(`[RecStore] --- Calling fetchUserRecommendations for user ${userId}...`);
+          const { recommendations: fetchedRecs, error } = await fetchUserRecommendations(userId);
+          console.log(`[RecStore] --- fetchUserRecommendations returned.`);
           
           if (error) {
+            console.error(`[RecStore] <<< EXIT syncWithSupabase with ERROR: ${error}`);
             set({ error, isLoading: false });
+            return;
+          }
+
+          if (!fetchedRecs) {
+            console.warn(`[RecStore] fetchUserRecommendations returned successfully but with undefined recommendations for user ${userId}`);
+            set({ recommendations: [], favoritesIds: [], isLoading: false, lastGeneratedAt: Date.now(), error: null });
+            console.log(`[RecStore] <<< EXIT syncWithSupabase (no recommendations fetched)`);
             return;
           }
           
           // Extract favorite IDs
-          const favoritesIds = recommendations
+          const favoritesIds = fetchedRecs
             .filter(rec => rec.isFavorite)
             .map(rec => rec.id);
           
+          console.log(`[RecStore] Successfully fetched ${fetchedRecs.length} recommendations. Updating store...`);
           set({ 
-            recommendations,
+            recommendations: fetchedRecs, // Use the fetched recommendations
             favoritesIds,
             isLoading: false,
-            lastGeneratedAt: Date.now()
+            lastGeneratedAt: Date.now(),
+            error: null // Clear error on success
           });
+          console.log(`[RecStore] Store updated with ${fetchedRecs.length} recommendations.`);
+          console.log(`[RecStore] <<< EXIT syncWithSupabase successfully for user: ${userId}`);
         } catch (error) {
-          console.error('Error syncing with Supabase:', error);
+          console.error('[RecStore] <<< EXIT syncWithSupabase with UNEXPECTED CATCH error:', error);
           set({ 
             error: 'Failed to sync recommendations with server',
             isLoading: false

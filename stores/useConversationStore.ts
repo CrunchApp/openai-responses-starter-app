@@ -10,6 +10,7 @@ interface ConversationState {
   activeConversationId: string | null;
   isLoading: boolean;
   error: string | null;
+  hydrated: boolean;
   
   // Items displayed in the chat
   chatMessages: Item[];
@@ -44,6 +45,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   activeConversationId: null,
   isLoading: false,
   error: null,
+  hydrated: true,
   
   chatMessages: [
     {

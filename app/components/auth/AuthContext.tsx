@@ -13,6 +13,7 @@ interface AuthContextType {
   profile: Profile | null
   vectorStoreId: string | null
   loading: boolean
+  synchronized: boolean
   error: string | null
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ user: User | null; session: Session | null } | null>
   signIn: (email: string, password: string) => Promise<{ user: User | null; session: Session | null } | null>
@@ -20,6 +21,7 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>
   refreshSession: () => Promise<{ user: User | null; profile: Profile | null } | null>
+  setSynchronized: (value: boolean) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [vectorStoreId, setVectorStoreId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [synchronized, setSynchronized] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function fetchProfile(userId: string) {
@@ -372,13 +375,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile,
     vectorStoreId,
     loading,
+    synchronized,
     error,
     signUp,
     signIn,
     signOut,
     resetPassword,
     updatePassword,
-    refreshSession
+    refreshSession,
+    setSynchronized
   }
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>

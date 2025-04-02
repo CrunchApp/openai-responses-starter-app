@@ -125,6 +125,10 @@ export async function fetchUserRecommendations(userId: string): Promise<{
             locationMatch: 0,
             academicFit: 0,
           },
+      // Include feedback fields from the database
+      feedbackNegative: item.feedback_negative || false,
+      feedbackReason: item.feedback_reason || null,
+      feedbackSubmittedAt: item.feedback_submitted_at || null,
       scholarships: Array.isArray(item.scholarships) ? item.scholarships : undefined, // Keep as undefined if not present or not array
     }));
     

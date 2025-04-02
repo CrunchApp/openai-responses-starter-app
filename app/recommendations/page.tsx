@@ -185,6 +185,15 @@ export default function RecommendationsPage() {
   
   const filteredRecommendations = getFilteredRecommendations();
 
+  // *** Add useEffect to monitor recommendations state changes ***
+  useEffect(() => {
+    console.log(`[RecPage] Recommendations state updated. Count: ${recommendations?.length || 0}`);
+    // Optional: Log the actual recommendations if needed for debugging, but be mindful of large objects
+    // if (recommendations && recommendations.length > 0) {
+    //   console.log('[RecPage] First recommendation:', recommendations[0]);
+    // }
+  }, [recommendations]);
+
   // Wait for hydration and auth state before proceeding
   useEffect(() => {
     if (!hydrated || authLoading) {
@@ -1280,7 +1289,7 @@ export default function RecommendationsPage() {
                             </span>
                             <span className="flex items-center">
                               <BanknoteIcon className="h-3 w-3 mr-1" />
-                              ${(program.costPerYear ?? 0).toLocaleString()}/year
+                              £{(program.costPerYear ?? 0).toLocaleString()}/year
                             </span>
                           </div>
                           <p className="text-xs mt-2 text-zinc-500">Saved on {new Date().toLocaleDateString()}</p>

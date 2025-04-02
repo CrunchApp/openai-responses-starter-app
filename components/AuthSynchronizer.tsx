@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/components/auth/AuthContext';
 import useRecommendationsStore from '@/stores/useRecommendationsStore';
 import useProfileStore from '@/stores/useProfileStore';
 import useToolsStore from '@/stores/useToolsStore';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import useConversationStore from '@/stores/useConversationStore';
+import { createBrowserClient } from '@supabase/ssr';
 
 /**
  * Component that synchronizes authentication state between the main AuthContext
@@ -15,7 +16,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 export default function AuthSynchronizer() {
   console.log('⚡ AuthSynchronizer component loaded');
 
-  const { user, profile, vectorStoreId: authVectorStoreId, loading: authLoading } = useAuth();
+  const { user, profile, vectorStoreId: authVectorStoreId, loading: authLoading, setSynchronized } = useAuth();
   const { 
     isAuthenticated, 
     userId, 
@@ -39,26 +40,42 @@ export default function AuthSynchronizer() {
     vectorStore
   } = useToolsStore();
   
-  // Create Supabase client
-  const supabase = createClientComponentClient();
+  // Get conversation store hydration status
+  const {
+    hydrated: conversationStoreHydrated
+  } = useConversationStore();
+  
+  // Create Supabase client using ssr
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
   
   // Use a ref to track if we've already synced the state
   const hasSyncedRef = useRef(false);
   // Track if we're in a guest session to prevent clearing profile store
   const isGuestSessionRef = useRef(false);
+  // Internal state to track if sync operations are ongoing
+  const [isSyncing, setIsSyncing] = useState(true);
   
-  // Combine hydration checks
-  const storeHydrated = recStoreHydrated && profileStoreHydrated;
+  // Combine hydration checks - include conversation store
+  const storeHydrated = recStoreHydrated && profileStoreHydrated && conversationStoreHydrated;
+  
+  // Effect to manage the global synchronized flag based on authLoading and internal isSyncing
+  useEffect(() => {
+    if (authLoading || isSyncing) {
+      setSynchronized(false);
+    } else {
+      console.log('✅ AuthSynchronizer: Setting synchronized to TRUE');
+      setSynchronized(true);
+    }
+  }, [authLoading, isSyncing, setSynchronized]);
   
   // On initial load, determine if we're in a guest session
   useEffect(() => {
     if (storeHydrated) {
-      // Check if there's profile data in the store but no authenticated user
-      // This indicates a guest user with wizard progress
       const { currentStep, completedSteps, profileData } = useProfileStore.getState();
-      
       if (!user && (currentStep > 0 || completedSteps.length > 0 || (profileData && Object.keys(profileData).length > 0))) {
-        console.log('📝 Detected guest session with existing profile data:', { currentStep, completedStepsCount: completedSteps.length });
         isGuestSessionRef.current = true;
       } else {
         isGuestSessionRef.current = false;
@@ -68,257 +85,189 @@ export default function AuthSynchronizer() {
 
   // Sync vector store ID from auth context to tools store
   useEffect(() => {
-    // Only proceed if we have an auth vector store ID and auth is no longer loading
-    if (authVectorStoreId && !authLoading) {
-      console.log('🔄 Syncing vector store ID from auth context:', authVectorStoreId);
-      
-      // Check if we need to update the vector store in tools store
-      if (!vectorStore || vectorStore.id !== authVectorStoreId) {
-        // Fetch vector store details and update tools store
-        const fetchVectorStore = async () => {
-          try {
-            const response = await fetch(
-              `/api/vector_stores/retrieve_store?vector_store_id=${authVectorStoreId}`
-            );
-            
+    let didCancel = false; // Flag to prevent state updates if component unmounts
+    
+    async function fetchAndSetVectorStore() {
+      if (!authVectorStoreId || !vectorStore || vectorStore.id !== authVectorStoreId) {
+        setIsSyncing(true);
+        try {
+          const response = await fetch(
+            `/api/vector_stores/retrieve_store?vector_store_id=${authVectorStoreId}`
+          );
+          if (!didCancel) {
             if (response.ok) {
               const storeData = await response.json();
               if (storeData.id) {
                 console.log('✅ Successfully fetched vector store details:', storeData.id);
                 setVectorStore(storeData);
+              } else {
+                 console.error('Fetched vector store data missing ID');
               }
             } else {
               console.error('Failed to fetch vector store details:', response.statusText);
             }
-          } catch (error) {
+          }
+        } catch (error) {
+          if (!didCancel) {
             console.error('Error fetching vector store details:', error);
           }
-        };
-        
-        fetchVectorStore();
+        } finally {
+           if (!didCancel) {
+             //setIsSyncing(false); // Completion handled by checkAuthWithSupabase
+           }
+        }
+      } else {
+         //setIsSyncing(false); // Vector store already matches
       }
     }
-  }, [authVectorStoreId, authLoading, vectorStore, setVectorStore]);
 
-  // Directly check Supabase auth status on component mount
+    if (!authLoading && authVectorStoreId) {
+      fetchAndSetVectorStore();
+    }
+    // If no vector store ID and auth isn't loading, we aren't syncing this part.
+    // else if (!authLoading) {
+    //   setIsSyncing(false);
+    // }
+
+    return () => { didCancel = true; }; // Cleanup function
+  }, [authVectorStoreId, authLoading, vectorStore, setVectorStore, setIsSyncing]);
+
+  // Directly check Supabase auth status and sync stores
   useEffect(() => {
+    let didCancel = false;
+    
     async function checkAuthWithSupabase() {
+      console.log('🔄 AuthSynchronizer: Starting core auth check and store sync...');
+      setIsSyncing(true); // Start syncing process
+      
       try {
-        console.log('🔍 Checking auth with Supabase directly');
         const { data, error } = await supabase.auth.getUser();
         
+        if (didCancel) return;
+        
         if (error) {
-          // Instead of just logging the error, handle it gracefully
           console.error('Error fetching Supabase user:', error);
-          
-          // If the error is related to a missing session, clear auth state to be safe
           if (error.message?.includes('session')) {
-            console.log('🔒 Auth session error detected, clearing state');
-            console.log('[AuthSync] Clearing stores due to Supabase session error');
-            clearRecommendationsStore();
-            
-            // ONLY clear profile store if NOT a guest session with progress
-            if (!isGuestSessionRef.current) {
-              clearProfileStore();
-              console.log('[AuthSync] Profile store cleared (not a guest session)');
-            } else {
-              console.log('[AuthSync] Preserving profile store for guest session');
-            }
-            
-            setRecAuthState(false, null);
+             console.log('🔒 Auth session error detected, clearing state');
+             clearRecommendationsStore();
+             if (!isGuestSessionRef.current) clearProfileStore();
+             setRecAuthState(false, null);
           }
-          return;
+          // Don't set isSyncing false here, let finally handle it
+          return; // Exit early on error
         }
         
         const supabaseUser = data?.user;
         
         if (supabaseUser) {
           console.log('🔑 Found authenticated user from Supabase:', supabaseUser.id);
+          // Always set auth state and trigger sync if Supabase confirms user
+          console.log('🔄 Setting auth state and triggering sync with Supabase...');
           setRecAuthState(true, supabaseUser.id);
-          
-          // If we have a user in Supabase but not in our store, sync immediately
-          if (!isAuthenticated || userId !== supabaseUser.id) {
-            console.log('🔄 Immediate sync with Supabase needed');
-            try {
-              await syncWithSupabase();
-            } catch (syncError) {
-              console.error('Error syncing with Supabase:', syncError);
-              // Continue with auth state update even if sync fails
-            }
+          try {
+            await syncWithSupabase(supabaseUser.id); // *** Pass userId ***
+            console.log('✅ Sync with Supabase successful after initial check.');
+          } catch (syncError) {
+            console.error('Error awaiting syncWithSupabase during initial check:', syncError);
+            // Proceed even if sync fails, auth state is set, but log error
           }
         } else {
           console.log('🔒 No authenticated user found in Supabase, clearing stores.');
-          console.log('[AuthSync] Clearing recommendations store due to no Supabase user');
           clearRecommendationsStore();
-          
-          // ONLY clear profile store if NOT a guest session with progress
-          if (!isGuestSessionRef.current) {
-            console.log('[AuthSync] Clearing profile store (not a guest session)');
-            clearProfileStore();
-          } else {
-            console.log('[AuthSync] Preserving profile store for guest session with progress');
-          }
-          
-          setRecAuthState(false, null); // Ensure auth state is false after clearing
+          if (!isGuestSessionRef.current) clearProfileStore();
+          setRecAuthState(false, null);
         }
       } catch (error) {
-        console.error('Error in checkAuthWithSupabase:', error);
-        // If there's an unexpected error, reset auth state to be safe
-        console.log('[AuthSync] Clearing recommendations store due to unexpected error');
-        clearRecommendationsStore();
-        
-        // ONLY clear profile store if NOT a guest session with progress
-        if (!isGuestSessionRef.current) {
-          console.log('[AuthSync] Clearing profile store due to unexpected error');
-          clearProfileStore();
-        } else {
-          console.log('[AuthSync] Preserving profile store for guest session despite error');
+         if (!didCancel) {
+           console.error('Critical error in checkAuthWithSupabase:', error);
+           // Attempt cleanup even on critical error
+           clearRecommendationsStore();
+           if (!isGuestSessionRef.current) clearProfileStore();
+           setRecAuthState(false, null);
+         }
+      } finally {
+        if (!didCancel) {
+          console.log('🏁 AuthSynchronizer: Finished core auth check and store sync.');
+          setIsSyncing(false); // Finish syncing process *after* checks and potential await
         }
-        
-        setRecAuthState(false, null);
       }
     }
     
-    // Check on first render after hydration
-    if (storeHydrated && !hasSyncedRef.current) {
+    // Check on first render after hydration and when auth is not loading
+    if (storeHydrated && !authLoading && !hasSyncedRef.current) {
       checkAuthWithSupabase();
       hasSyncedRef.current = true;
-    }
-  }, [storeHydrated, isAuthenticated, userId, setRecAuthState, supabase, syncWithSupabase, clearRecommendationsStore, clearProfileStore]);
-  
-  // Handle authentication state changes from AuthContext
-  useEffect(() => {
-    console.log('🔄 AuthSynchronizer effect running (AuthContext)');
-    
-    // Wait for store to hydrate and auth to finish loading
-    if (!storeHydrated || authLoading) {
-      console.log('⏳ AuthSynchronizer: Waiting for hydration or auth to load...');
-      return;
+    } else if (!authLoading && hasSyncedRef.current && !isSyncing) {
+      // If auth loading finishes and we are NOT syncing, ensure synchronized is true
+      // This handles cases where sync finished before auth loading did
+      console.log('🏁 AuthSynchronizer: Auth loading finished and not syncing, ensuring synchronized=true.');
+      setSynchronized(true); 
+    } else if (!authLoading && !storeHydrated) {
+       // Edge case: Auth finished loading but stores aren't hydrated yet. Mark as not syncing.
+       // This prevents getting stuck if hydration takes longer than auth.
+       setIsSyncing(false);
     }
     
-    try {
-      const authContextHasUser = Boolean(user);
-      const storeIsAuthenticated = Boolean(isAuthenticated);
-      
-      // Log current state for debugging
-      console.log('🔍 AuthSynchronizer: Auth states', {
-        authContextHasUser,
-        storeIsAuthenticated,
-        userId,
-        user: user ? user.id : null,
-        hydrated: storeHydrated,
-        authLoading,
-        isGuestSession: isGuestSessionRef.current
-      });
-      
-      // If states don't match, update the recommendations store
-      if (authContextHasUser !== storeIsAuthenticated || (user && userId !== user.id)) {
-        console.log('📝 AuthSynchronizer: Auth state mismatch detected.');
-        
-        if (authContextHasUser && user) {
-          // User is signing IN or state is correcting to signed in
-          console.log('🔑 User signed in via AuthContext. Setting state and syncing.', user.id);
-          setRecAuthState(authContextHasUser, user.id);
-          syncWithSupabase().catch(err => {
-            console.error('Error syncing with Supabase:', err);
-            // Continue even if sync fails
-          });
-        } else if (!authContextHasUser) {
-          // User is signing OUT via AuthContext
-          console.log('🔒 User signed out via AuthContext. Clearing stores.');
-          console.log('[AuthSync] Clearing recommendations store due to AuthContext sign out');
-          clearRecommendationsStore();
-          
-          // ONLY clear profile store if this isn't just a page load for a guest user session
-          if (!isGuestSessionRef.current) {
-            console.log('[AuthSync] Clearing profile store due to AuthContext sign out');
-            clearProfileStore();
-          } else {
-            console.log('[AuthSync] Preserving profile store for guest session during AuthContext check');
-          }
-          
-          setRecAuthState(false, null); // Ensure auth state is set to false *after* clearing
-        }
-      } else {
-        console.log('✅ AuthSynchronizer: Auth states already in sync');
-      }
-    } catch (error) {
-      console.error('Error in AuthContext sync effect:', error);
-      // If there's an unexpected error, don't change auth state to avoid disruption
-    }
-  }, [user, authLoading, storeHydrated, isAuthenticated, userId, setRecAuthState, syncWithSupabase, clearRecommendationsStore, clearProfileStore]);
+    return () => { didCancel = true; };
+  }, [storeHydrated, authLoading, supabase, setRecAuthState, syncWithSupabase, clearRecommendationsStore, clearProfileStore, setIsSyncing, setSynchronized]);
   
-  // Listen for Supabase auth changes
+  // Listen for Supabase auth changes AFTER initial check
   useEffect(() => {
-    if (!storeHydrated) return;
+    if (!storeHydrated || !hasSyncedRef.current) return; // Only listen after initial sync attempt
     
     console.log('👂 Setting up Supabase auth listener');
+    let isSubscribed = true;
     
-    let subscription: { unsubscribe: () => void } | undefined;
-    
-    try {
-      const { data } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log(`📣 Supabase auth event: ${event}`);
-          
-          try {
-            if (event === 'SIGNED_IN' && session?.user) {
-              console.log('🔑 User signed in via Supabase listener:', session.user.id);
-              // Check if state already matches to prevent redundant syncs
-              const currentState = useRecommendationsStore.getState();
-              if (!currentState.isAuthenticated || currentState.userId !== session.user.id) {
-                setRecAuthState(true, session.user.id);
-                await syncWithSupabase();
-              }
-            } else if (event === 'SIGNED_OUT') {
-              console.log('🔒 User signed out via Supabase listener. Clearing stores.');
-              console.log('[AuthSync] Clearing recommendations store due to Supabase SIGNED_OUT event');
-              clearRecommendationsStore();
-              
-              // For actual sign-out events, we always want to clear the profile store
-              // This is an explicit user action, not just a page load check
-              console.log('[AuthSync] Clearing profile store due to Supabase SIGNED_OUT event');
-              clearProfileStore();
-              
-              setRecAuthState(false, null); // Ensure auth state is set to false *after* clearing
-            } else if (event === 'USER_UPDATED' && session?.user) {
-              // Handle potential user updates if necessary, e.g., email change
-              console.log('👤 User updated via Supabase listener:', session.user.id);
-              // Optionally re-sync or update specific user details
-              const currentState = useRecommendationsStore.getState();
-              if (currentState.isAuthenticated && currentState.userId === session.user.id) {
-                // Re-sync if needed, or update parts of the profile if applicable
-                // await syncWithSupabase();
-              } else {
-                // If user updated but state thinks they are logged out, treat as sign in
-                setRecAuthState(true, session.user.id);
-                await syncWithSupabase();
-              }
+    const { data } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!isSubscribed) return;
+        
+        console.log(`📣 Supabase auth event: ${event}`);
+        setIsSyncing(true); // Mark as syncing during auth change handling
+        
+        try {
+          const currentState = useRecommendationsStore.getState();
+          if (event === 'SIGNED_IN' && session?.user) {
+            console.log('🔑 User signed in via Supabase listener:', session.user.id);
+            if (!currentState.isAuthenticated || currentState.userId !== session.user.id) {
+              setRecAuthState(true, session.user.id);
+              await syncWithSupabase(session.user.id); // *** Pass userId ***
+              console.log('✅ Sync after SIGNED_IN event successful.');
             }
-          } catch (error) {
-            console.error('Error handling auth state change:', error);
-            // Don't throw, just log the error to prevent UI disruptions
+          } else if (event === 'SIGNED_OUT') {
+            console.log('🔒 User signed out via Supabase listener. Clearing stores.');
+            clearRecommendationsStore();
+            clearProfileStore(); // Always clear profile on explicit sign out
+            setRecAuthState(false, null);
+          } else if (event === 'USER_UPDATED' && session?.user) {
+             console.log('👤 User updated via Supabase listener:', session.user.id);
+             if (currentState.isAuthenticated && currentState.userId === session.user.id) {
+                // Optionally re-sync or update specific user details
+                // await syncWithSupabase(session.user.id); // Example if re-sync needed
+             } else {
+                setRecAuthState(true, session.user.id);
+                await syncWithSupabase(session.user.id); // *** Pass userId ***
+             }
           }
+        } catch (error) {
+          console.error('Error handling auth state change event:', error);
+        } finally {
+           if (isSubscribed) {
+             setIsSyncing(false); // Finish syncing after handling event
+           }
         }
-      );
+      }
+    );
       
-      subscription = data.subscription;
-    } catch (error) {
-      console.error('Error setting up Supabase auth listener:', error);
-    }
+    const subscription = data.subscription;
     
     // Cleanup
     return () => {
       console.log('🧹 Cleaning up Supabase auth listener');
-      if (subscription) {
-        try {
-          subscription.unsubscribe();
-        } catch (error) {
-          console.error('Error unsubscribing from auth listener:', error);
-        }
-      }
+      isSubscribed = false;
+      subscription?.unsubscribe();
     };
-  }, [storeHydrated, setRecAuthState, supabase, syncWithSupabase, clearRecommendationsStore, clearProfileStore]);
+  }, [storeHydrated, setRecAuthState, supabase, syncWithSupabase, clearRecommendationsStore, clearProfileStore, setIsSyncing]); // Depends on storeHydrated
   
   // This component doesn't render anything visible
   return null;

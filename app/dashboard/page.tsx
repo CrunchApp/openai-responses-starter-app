@@ -12,8 +12,9 @@ export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
   
   const displayName = profile?.first_name 
-    ? `${profile.first_name} ${profile.last_name || ''}` 
-    : user?.email?.split('@')[0] || 'there';
+  || user?.email?.split('@')[0] 
+  || 'there';
+
 
   const containerVariants = {
     hidden: { opacity: 0 },

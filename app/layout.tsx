@@ -10,6 +10,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Vista Education Adviser",
   description: "AI-powered education and career advisor",
+  icons: {
+    icon: '/vista_logo.svg',
+  },
 };
 
 export default function RootLayout({

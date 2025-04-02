@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { BookOpen, MessageSquare, LogIn } from 'lucide-react';
+import Image from 'next/image';
 
 export function GuestNavbar() {
   const pathname = usePathname();
@@ -18,8 +19,14 @@ export function GuestNavbar() {
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <Link href="/" className="font-bold text-xl mr-8">
-              Vista
+            <Link href="/" className="flex items-center mr-8">
+              <Image
+                src="/vista_logo.svg"
+                alt="Vista Logo"
+                width={64}
+                height={64}
+                className="mr-2"
+              />
             </Link>
             
             <nav className="hidden md:flex items-center space-x-4">
@@ -54,12 +61,12 @@ export function GuestNavbar() {
                 Sign In
               </Button>
             </Link>
-            <Link href="/auth/signup">
+            {/* <Link href="/auth/signup">
               <Button size="sm">
                 <LogIn className="h-4 w-4 mr-2" />
                 Sign Up
               </Button>
-            </Link>
+            </Link> */}
           </div>
         </div>
         

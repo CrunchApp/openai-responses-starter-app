@@ -131,7 +131,7 @@ export default function Home() {
         {/* Hero Section - With smaller text and buttons */}
         <main 
           ref={heroRef} 
-          className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 md:px-8 pt-16 pb-24 text-center bg-gradient-to-b from-background/80 via-background/70 to-background/80"
+          className="relative z-30 flex flex-col items-center justify-center min-h-screen px-4 md:px-8 pt-16 pb-24 text-center bg-gradient-to-b from-background/80 via-background/70 to-background/80"
         >
           <div className="max-w-3xl mt-[-80px]">
             <h1 className="hero-title text-4xl md:text-5xl font-extrabold mb-5 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
@@ -177,7 +177,7 @@ export default function Home() {
         </main>
 
         {/* Features Section - Restructured with vertical cards and text on left */}
-        <section ref={featuresRef} className="relative z-10 py-24 px-4 bg-gradient-to-b from-background to-background/95">
+        <section ref={featuresRef} className="relative z-20 py-24 px-4 bg-gradient-to-b from-background to-background/95">
           <div className="container mx-auto">
             <div className="flex flex-col lg:flex-row gap-12">
               {/* Text Container - Left side (on larger screens) */}
@@ -284,7 +284,7 @@ export default function Home() {
         </section>
         
         {/* Testimonial/CTA Section - Keep as is */}
-        <section ref={testimonialRef} className="relative z-10 py-20 px-4 bg-gradient-to-b from-background/95 to-background">
+        <section ref={testimonialRef} className="relative z-20 py-20 px-4 bg-gradient-to-b from-background/95 to-background">
           <div className="container mx-auto">
             <div className="testimonial bg-primary/5 rounded-2xl p-8 md:p-12 shadow-lg max-w-4xl mx-auto">
               <div className="flex flex-col md:flex-row gap-8 items-center">

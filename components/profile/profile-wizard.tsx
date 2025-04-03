@@ -447,6 +447,35 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       // First clean up the vector store and uploaded files
       if (vectorStoreId) {
         try { // Wrap cleanup in try/catch to ensure rest of reset runs
+          // Clean up any document file IDs if they exist
+          const docFileIds: string[] = [];
+          if (profileData.documents) {
+            // Extract all file IDs from documents structure
+            Object.entries(profileData.documents).forEach(([key, value]) => {
+              if (value && typeof value === 'object' && 'fileId' in value) {
+                docFileIds.push(value.fileId);
+              }
+            });
+          }
+          
+          // Add profile file ID if it exists
+          if (profileData.profileFileId) {
+            docFileIds.push(profileData.profileFileId);
+          }
+          
+          // Log files to be cleaned up
+          console.log("Cleaning up document file IDs:", docFileIds);
+          
+          // Delete each file individually before vector store cleanup
+          for (const fileId of docFileIds) {
+            try {
+              await fetch(`/api/vector_stores/delete_file?file_id=${fileId}`, { method: "DELETE" });
+            } catch (fileError) {
+              console.error(`Error deleting file ${fileId}:`, fileError);
+            }
+          }
+          
+          // Now clean up the whole vector store
           const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
             method: 'DELETE'
           });

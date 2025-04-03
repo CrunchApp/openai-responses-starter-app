@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    // Log document structure for debugging
+    console.log('Creating profile with documents structure:', JSON.stringify(profileData.documents || {}))
+    
     // Create Supabase client
     const supabase = await createClient()
     

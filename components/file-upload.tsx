@@ -119,9 +119,9 @@ export default function FileUpload({
       }
       console.log("Uploaded file:", uploadData);
 
-      // Notify parent that the store ID is being used
+      // Notify parent that the file has been uploaded
       if (typeof onAddStore === 'function') {
-        onAddStore(vectorStoreId);
+        onAddStore(fileId);
       }
 
       // 2. Add file to vector store

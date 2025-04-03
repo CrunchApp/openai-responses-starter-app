@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,14 +18,18 @@ import {
   // Settings,
   LogIn,
   Menu,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
+import Image from 'next/image';
+import { gsap } from 'gsap';
 
 export function Sidebar() {
   const { user, profile, loading, signOut } = useAuth();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -34,6 +38,22 @@ export function Sidebar() {
   const toggleMobileSidebar = () => {
     setIsMobileOpen(!isMobileOpen);
   };
+
+  // Add subtle animations to decorative elements
+  useEffect(() => {
+    const decorElements = document.querySelectorAll('.sidebar-decor');
+    
+    decorElements.forEach(el => {
+      gsap.to(el, {
+        y: `${Math.random() * 20 - 10}px`,
+        opacity: Math.random() * 0.3 + 0.2,
+        duration: 3 + Math.random() * 2,
+        repeat: -1,
+        yoyo: true,
+        ease: "sine.inOut",
+      });
+    });
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -57,8 +77,8 @@ export function Sidebar() {
 
   // Sidebar animations
   const sidebarVariants = {
-    expanded: { width: '16rem' },
-    collapsed: { width: '5rem' },
+    expanded: { width: '18rem' },
+    collapsed: { width: '5.5rem' },
   };
 
   const mobileSidebarVariants = {
@@ -74,34 +94,59 @@ export function Sidebar() {
   // Render the sidebar content
   const renderSidebarContent = () => (
     <>
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center">
+      {/* Decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="sidebar-decor absolute w-24 h-24 rounded-full bg-gradient-to-r from-primary/20 to-purple-500/10 blur-xl"
+             style={{ top: '15%', right: '-20px' }}></div>
+        <div className="sidebar-decor absolute w-32 h-32 rounded-full bg-gradient-to-r from-blue-500/10 to-primary/10 blur-xl"
+             style={{ bottom: '10%', left: '-40px' }}></div>
+      </div>
+    
+      <div className="flex items-center justify-between p-4 relative">
+        <Link href="/dashboard" className="flex items-center z-10">
           <motion.div
             initial={false}
             animate={isCollapsed ? 'collapsed' : 'expanded'}
             variants={contentVariants}
-            className="font-bold text-xl ml-2"
           >
-            Vista
+            <div className="p-1 bg-gradient-to-r from-primary/20 to-primary/5 rounded-xl">
+              <Image
+                src="/vista_logo.png"
+                alt="Vista Logo"
+                width={48}
+                height={48}
+                className="mr-2"
+              />
+            </div>
           </motion.div>
-        </div>
+          <motion.div
+            initial={false}
+            animate={isCollapsed ? 'collapsed' : 'expanded'}
+            variants={contentVariants}
+            className="font-bold text-xl ml-2 text-primary"
+          >
+            {/* <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
+              Vista
+            </span> */}
+          </motion.div>
+        </Link>
         <button
           onClick={toggleSidebar}
-          className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none hidden md:block"
+          className="p-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary transition-colors focus:outline-none hidden md:block"
         >
           <ChevronRight
-            className={`h-5 w-5 transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-180'}`}
+            className={`h-4 w-4 transition-transform duration-300 ${isCollapsed ? 'rotate-0' : 'rotate-180'}`}
           />
         </button>
         <button
           onClick={toggleMobileSidebar}
-          className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none md:hidden"
+          className="p-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary transition-colors focus:outline-none md:hidden"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="px-4 py-2">
+      <div className="px-4 py-4 relative z-10">
         {loading ? (
           <div className="flex items-center space-x-4 p-2">
             <Skeleton className="h-10 w-10 rounded-full" />
@@ -111,10 +156,13 @@ export function Sidebar() {
             </div>
           </div>
         ) : user ? (
-          <div className="flex items-center space-x-4 p-2">
-            <Avatar>
-              <AvatarImage src={user?.user_metadata?.avatar_url || ''} alt={profile?.first_name || 'User'} />
-              <AvatarFallback>
+          <div className="flex items-center space-x-3 p-2">
+            <Avatar className="border-2 border-primary/20">
+              <AvatarImage 
+                src={user?.user_metadata?.avatar_url || ''} 
+                alt={profile?.first_name || 'User'} 
+              />
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary">
                 {profile?.first_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
                 {profile?.last_name?.charAt(0) || ''}
               </AvatarFallback>
@@ -124,63 +172,101 @@ export function Sidebar() {
               animate={isCollapsed ? 'collapsed' : 'expanded'}
               variants={contentVariants}
             >
-              <p className="font-medium line-clamp-1">
+              <p className="font-medium line-clamp-1 text-foreground">
                 {profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}` : user.email}
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{user.email}</p>
+              <p className="text-xs text-foreground/60 line-clamp-1">{user.email}</p>
             </motion.div>
           </div>
         ) : (
-          <div className="flex items-center space-x-4 p-2">
-            <Avatar>
-              <AvatarFallback>?</AvatarFallback>
+          <div className="flex items-center space-x-3 p-2">
+            <Avatar className="border-2 border-primary/20">
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary">?</AvatarFallback>
             </Avatar>
             <motion.div
               initial={false}
               animate={isCollapsed ? 'collapsed' : 'expanded'}
               variants={contentVariants}
             >
-              <p className="font-medium">Guest</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Not signed in</p>
+              <p className="font-medium text-foreground">Guest</p>
+              <p className="text-xs text-foreground/60">Not signed in</p>
             </motion.div>
           </div>
         )}
       </div>
 
-      <div className="p-2 flex-1">
-        <nav className="space-y-1">
-          {navItems.map((item) => (
-            <Link key={item.href} href={item.href}>
-              <div
-                className={`flex items-center py-2 px-3 rounded-lg transition-colors ${
-                  isActive(item.href)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <item.icon className="h-5 w-5" />
-                <motion.span
-                  initial={false}
-                  animate={isCollapsed ? 'collapsed' : 'expanded'}
-                  variants={contentVariants}
-                  className="ml-3"
+      <div className="p-3 flex-1 relative z-10">
+        <nav className="space-y-1.5">
+          {navItems.map((item) => {
+            const active = isActive(item.href);
+            const isHovered = hoveredItem === item.href;
+            
+            return (
+              <Link key={item.href} href={item.href}>
+                <div
+                  className={`flex items-center py-2.5 px-3 rounded-lg transition-all duration-300 relative overflow-hidden
+                    ${active
+                      ? 'text-primary-foreground'
+                      : 'text-foreground hover:text-primary'
+                    }
+                  `}
+                  onMouseEnter={() => setHoveredItem(item.href)}
+                  onMouseLeave={() => setHoveredItem(null)}
                 >
-                  {item.label}
-                </motion.span>
-              </div>
-            </Link>
-          ))}
+                  {/* Background that animates on hover or when active */}
+                  <motion.div 
+                    className={`absolute inset-0 rounded-lg z-0 ${
+                      active 
+                        ? 'bg-gradient-to-r from-primary to-primary/90'
+                        : 'bg-primary/10'
+                    }`}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ 
+                      opacity: active || isHovered ? 1 : 0,
+                      scale: active || isHovered ? 1 : 0.9,
+                    }}
+                    transition={{ duration: 0.2 }}
+                  />
+                  
+                  {/* Icon wrapper with subtle animation */}
+                  <div className="relative z-10">
+                    <item.icon className={`h-5 w-5 transition-transform duration-300 ${active || isHovered ? 'scale-110' : 'scale-100'}`} />
+                  </div>
+                  
+                  <motion.span
+                    initial={false}
+                    animate={isCollapsed ? 'collapsed' : 'expanded'}
+                    variants={contentVariants}
+                    className="ml-3 font-medium relative z-10"
+                  >
+                    {item.label}
+                  </motion.span>
+                  
+                  {/* Show a sparkle on active item */}
+                  {active && !isCollapsed && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="ml-auto relative z-10"
+                    >
+                      <Sparkles className="h-4 w-4 text-primary-foreground opacity-70" />
+                    </motion.div>
+                  )}
+                </div>
+              </Link>
+            )
+          })}
         </nav>
       </div>
 
-      <div className="p-4 mt-auto">
+      <div className="p-4 mt-auto relative z-10">
         {user ? (
           <Button
             variant="outline"
-            className="w-full flex items-center justify-center"
+            className="w-full flex items-center justify-center border-primary/20 hover:bg-primary/10 group"
             onClick={handleSignOut}
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-4 w-4 text-primary group-hover:text-primary-foreground group-hover:scale-110 transition-transform duration-300" />
             <motion.span
               initial={false}
               animate={isCollapsed ? 'collapsed' : 'expanded'}
@@ -192,8 +278,11 @@ export function Sidebar() {
           </Button>
         ) : (
           <Link href="/auth/login">
-            <Button className="w-full flex items-center justify-center" variant="default">
-              <LogIn className="h-4 w-4" />
+            <Button 
+              className="w-full flex items-center justify-center bg-gradient-to-r from-primary to-primary/90 group"
+              variant="default"
+            >
+              <LogIn className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
               <motion.span
                 initial={false}
                 animate={isCollapsed ? 'collapsed' : 'expanded'}
@@ -214,7 +303,11 @@ export function Sidebar() {
     <>
       {/* Mobile menu button */}
       <div className="fixed top-4 left-4 z-50 md:hidden">
-        <Button variant="outline" size="icon" onClick={toggleMobileSidebar}>
+        <Button 
+          size="icon" 
+          className="bg-gradient-to-r from-primary/90 to-primary text-white shadow-md hover:shadow-lg hover:from-primary hover:to-primary"
+          onClick={toggleMobileSidebar}
+        >
           <Menu className="h-5 w-5" />
         </Button>
       </div>
@@ -224,8 +317,8 @@ export function Sidebar() {
         initial="expanded"
         animate={isCollapsed ? 'collapsed' : 'expanded'}
         variants={sidebarVariants}
-        className="hidden md:flex h-screen flex-col border-r bg-background sticky top-0 left-0"
-        transition={{ duration: 0.3 }}
+        className="hidden md:flex h-screen flex-col border-r border-primary/10 bg-gradient-to-b from-background to-background/90 backdrop-blur-sm sticky top-0 left-0 z-20"
+        transition={{ duration: 0.3, ease: "easeInOut" }}
       >
         {renderSidebarContent()}
       </motion.div>
@@ -251,8 +344,8 @@ export function Sidebar() {
             animate="open"
             exit="closed"
             variants={mobileSidebarVariants}
-            className="fixed top-0 left-0 z-50 md:hidden h-screen w-64 bg-background"
-            transition={{ duration: 0.3 }}
+            className="fixed top-0 left-0 z-50 md:hidden h-screen w-72 bg-gradient-to-b from-background to-background/95 backdrop-blur-sm shadow-xl"
+            transition={{ duration: 0.3, ease: "easeOut" }}
           >
             {renderSidebarContent()}
           </motion.div>

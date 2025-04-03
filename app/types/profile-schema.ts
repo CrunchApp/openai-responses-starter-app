@@ -37,12 +37,20 @@ const PreferencesSchema = z.object({
   }),
 });
 
+// Define document file schema
+const DocumentFileSchema = z.object({
+  fileId: z.string(),
+  vectorStoreId: z.string().optional(),
+  uploadedAt: z.string().optional(),
+  status: z.string().optional()
+});
+
 // Define documents schema
 const DocumentsSchema = z.object({
-  resume: z.string().nullable().optional(),
-  transcripts: z.string().nullable().optional(),
-  statementOfPurpose: z.string().nullable().optional(),
-  otherDocuments: z.array(z.string()).nullable().optional(),
+  resume: DocumentFileSchema.nullable().optional(),
+  transcripts: DocumentFileSchema.nullable().optional(),
+  statementOfPurpose: DocumentFileSchema.nullable().optional(),
+  otherDocuments: z.array(DocumentFileSchema).nullable().optional(),
 }).optional();
 
 // Define complete unified profile schema

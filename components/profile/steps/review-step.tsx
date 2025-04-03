@@ -489,7 +489,7 @@ export default function ReviewStep({
                       </div>
                       <div>
                         <p className="font-medium text-gray-800">Resume/CV</p>
-                        <p className="text-xs text-gray-500">Your professional experience</p>
+                        <p className="text-xs text-gray-500">Your educational and professional experience</p>
                       </div>
                     </div>
                     <div>

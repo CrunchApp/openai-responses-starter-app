@@ -49,9 +49,9 @@ export default function ImportOptionsStep({
     transcripts: boolean;
     statementOfPurpose: boolean;
   }>({
-    resume: !!profileData.documents.resume,
-    transcripts: !!profileData.documents.transcripts,
-    statementOfPurpose: !!profileData.documents.statementOfPurpose,
+    resume: !!profileData.documents.resume?.fileId,
+    transcripts: !!profileData.documents.transcripts?.fileId,
+    statementOfPurpose: !!profileData.documents.statementOfPurpose?.fileId,
   });
   
   const { loginWithPopup, getAccessTokenSilently } = useAuth0();
@@ -208,7 +208,12 @@ export default function ImportOptionsStep({
       ...prevData,
       documents: {
         ...prevData.documents,
-        [type]: fileId,
+        [type]: {
+          fileId: fileId,
+          vectorStoreId: storeVectorStoreId,
+          uploadedAt: new Date().toISOString(),
+          status: 'uploaded'
+        },
       },
     }));
 
@@ -253,11 +258,25 @@ export default function ImportOptionsStep({
         // Collect document IDs
         const documentIds = Object.entries(profileData.documents)
           .filter(([key, value]) => !!value && key !== 'otherDocuments')
-          .map(([, value]) => value as string);
+          .map(([, value]) => {
+            // Check if value is the new document object structure with fileId property
+            if (typeof value === 'object' && value !== null && 'fileId' in value) {
+              return value.fileId;
+            }
+            // For backward compatibility, if value is directly a string (old format)
+            if (typeof value === 'string') {
+              return value;
+            }
+            return null;
+          })
+          .filter((id): id is string => id !== null);
         
         if (documentIds.length === 0) {
           throw new Error("No document IDs found.");
         }
+        
+        // Log the document IDs we're using
+        console.log("Extracting profile from document IDs:", documentIds);
         
         // Progress to the next stage
         setExtractionStage(1);

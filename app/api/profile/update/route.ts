@@ -19,6 +19,9 @@ export async function POST(request: NextRequest) {
     // Get profile data from request
     const profileData: Partial<UserProfile> = await request.json() // Expect partial or full profile
 
+    // Log document structure for debugging
+    console.log('Update request received with documents:', JSON.stringify(profileData.documents || {}));
+
     // Optional: Validate incoming data against a partial schema if needed
     // try {
     //   PartialProfileSchema.parse(profileData); 
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest) {
       career_goals: profileData.careerGoals,
       skills: profileData.skills,
       preferences: profileData.preferences,
-      // documents: profileData.documents, // Skip documents for now
+      documents: profileData.documents, // Include documents for updating
       updated_at: new Date().toISOString()
     };
 

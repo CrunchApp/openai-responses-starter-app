@@ -1,10 +1,11 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft, Loader2, Save, X, Plus, Trash2 } from "lucide-react";
+import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft, Loader2, Save, X, Plus, Trash2, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
+import { gsap } from 'gsap';
 import {
   Accordion,
   AccordionContent,
@@ -29,6 +30,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { z } from 'zod';
 import { useAuth } from "@/app/components/auth/AuthContext"; // Import useAuth
+import DocumentUpload from "@/components/document-upload";
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -62,6 +64,9 @@ const syncProfileToVectorStore = async (profileData: UserProfile, vectorStoreId:
       lastName: profileData.lastName,
       // Include limited personal info for privacy
     });
+    
+    // Log document structure for debugging
+    console.log("Documents structure:", JSON.stringify(profileData.documents || {}));
 
     // Get existing profile file ID from the profile data
     const existingProfileFileId = profileData.profileFileId;
@@ -122,6 +127,23 @@ const syncProfileToVectorStore = async (profileData: UserProfile, vectorStoreId:
   }
 };
 
+// Helper function to get document fileId from either format
+const getDocumentFileId = (doc: any): string | undefined => {
+  if (!doc) return undefined;
+  
+  // New format: {fileId: "file-123", vectorStoreId: "...", ...}
+  if (typeof doc === 'object' && doc !== null && 'fileId' in doc) {
+    return doc.fileId;
+  }
+  
+  // Old format: "file-123" or "vs_123..."
+  if (typeof doc === 'string') {
+    return doc;
+  }
+  
+  return undefined;
+};
+
 export default function ProfileDashboard() {
   const [expandedSection, setExpandedSection] = useState("personal");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -140,17 +162,25 @@ export default function ProfileDashboard() {
   const [isAddEducationModalOpen, setIsAddEducationModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const router = useRouter();
-  const { user, loading: authLoading, vectorStoreId: authVectorStoreId } = useAuth(); // Get vectorStoreId from auth
+  const { user, loading: authLoading, vectorStoreId: authVectorStoreId } = useAuth();
   
-  // Add effect to check auth state
+  // Add animation for decorative elements
   useEffect(() => {
-    if (!authLoading && !user) {
-      // If auth is loaded and there's no user, redirect away
-      console.log("ProfileDashboard: No user found, redirecting to login.");
-      router.replace('/login'); // Or '/' or '/signup'
+    if (typeof window !== 'undefined') {
+      const decorElements = document.querySelectorAll('.profile-decor');
+      
+      decorElements.forEach(el => {
+        gsap.to(el, {
+          y: `${Math.random() * 30 - 15}px`,
+          rotation: Math.random() * 10 - 5,
+          duration: 3 + Math.random() * 2,
+          repeat: -1,
+          yoyo: true,
+          ease: "sine.inOut",
+        });
+      });
     }
-    // If user exists, proceed with fetching profile data (existing useEffect)
-  }, [authLoading, user]);
+  }, []);
 
   // Fetch user profile from Supabase (only if user is potentially logged in)
   useEffect(() => {
@@ -437,16 +467,148 @@ export default function ProfileDashboard() {
     if (userProfile.preferences?.budgetRange?.max > 0) completed++;
     total += 4;
     
-    // Documents
-    if (userProfile.documents?.resume) completed++;
-    if (userProfile.documents?.transcripts) completed++;
-    if (userProfile.documents?.statementOfPurpose) completed++;
+    // Documents - handle both formats
+    if (getDocumentFileId(userProfile.documents?.resume)) completed++;
+    if (getDocumentFileId(userProfile.documents?.transcripts)) completed++;
+    if (getDocumentFileId(userProfile.documents?.statementOfPurpose)) completed++;
     total += 3;
     
     return Math.round((completed / total) * 100);
   };
   
   const completionPercentage = calculateCompletion();
+
+  // Update handleDocumentUpdate for type safety
+  const handleDocumentUpdate = async (docType: 'resume' | 'transcripts' | 'statementOfPurpose', fileId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Check if we need to delete an existing document
+      const existingDoc = userProfile?.documents?.[docType];
+      const existingDocFileId = getDocumentFileId(existingDoc);
+      
+      if (existingDocFileId) {
+        console.log(`Deleting existing ${docType} file:`, existingDocFileId);
+        try {
+          // Delete the existing file from OpenAI
+          const deleteResponse = await fetch(`/api/vector_stores/delete_file?file_id=${existingDocFileId}`, {
+            method: 'DELETE'
+          });
+          
+          if (!deleteResponse.ok) {
+            console.warn(`Warning: Failed to delete previous file. Status: ${deleteResponse.status}`);
+          } else {
+            console.log(`Successfully deleted previous ${docType} file.`);
+          }
+        } catch (deleteError) {
+          console.error(`Error deleting previous ${docType} file:`, deleteError);
+          // Continue despite error - we'll update the document anyway
+        }
+      }
+      
+      // Create the updated document object with fileId and metadata
+      const updatedDoc = {
+        fileId: fileId,
+        vectorStoreId: userProfile?.vectorStoreId || '',
+        uploadedAt: new Date().toISOString(),
+        status: 'uploaded'
+      };
+      
+      // Create a new documents object by updating the existing one
+      // This preserves any other documents in their original format
+      const updatedDocuments = { ...userProfile!.documents };
+      
+      // Update just this document with our new format
+      updatedDocuments[docType] = updatedDoc;
+      
+      // Create a new profile with the updated documents
+      const updatedProfile: UserProfile = {
+        ...userProfile!,
+        documents: updatedDocuments
+      };
+      
+      // Debug log to check structure
+      console.log(`Updating ${docType} document:`, {
+        before: JSON.stringify(userProfile!.documents?.[docType]),
+        after: JSON.stringify(updatedDoc)
+      });
+      
+      // Get vectorStoreId from auth context or userProfile
+      const vsId = authVectorStoreId || userProfile?.vectorStoreId;
+      
+      if (!vsId) {
+        console.error("No vector store ID available for synchronization");
+        throw new Error("Profile is not properly initialized with a vector store.");
+      }
+      
+      try {
+        // First, sync the updated profile to Vector Store to ensure AI has latest information
+        console.log("Syncing updated profile with new document to Vector Store...");
+        const newFileId = await syncProfileToVectorStore(updatedProfile, vsId);
+        
+        // Update the profile with both new document and the new profile file ID
+        const finalUpdatedProfile = {
+          ...updatedProfile,
+          profileFileId: newFileId
+        };
+        
+        // Now, update the profile in the database with both new document and profile file ID
+        const response = await fetch('/api/profile/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(finalUpdatedProfile),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update document');
+        }
+        
+        // Update the local state with the new document and profile file ID
+        setUserProfile(finalUpdatedProfile);
+        
+        console.log(`Profile successfully updated with new ${docType} document and synced to Vector Store`);
+        
+        // Show success message
+        alert(`Your ${docType} has been successfully updated.`);
+      } catch (syncError) {
+        console.error("Error syncing profile with new document to Vector Store:", syncError);
+        
+        // Even if sync fails, still try to update just the document in Supabase
+        console.log("Falling back to database-only update...");
+        
+        const response = await fetch('/api/profile/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedProfile),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update document');
+        }
+        
+        // Update the local state with the new document
+        setUserProfile(updatedProfile);
+        
+        // Show warning message
+        alert(`Your ${docType} has been updated but could not be synced with the AI system. Some features may show outdated information.`);
+      }
+    } catch (error) {
+      console.error('Error updating document:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update document. Please try again.');
+      
+      // Show error alert
+      alert(`Failed to update document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Handle profile deletion
   const handleDeleteProfile = async () => {
@@ -505,11 +667,16 @@ export default function ProfileDashboard() {
   };
 
   // Show loading state
-  if (authLoading || (isLoading && user)) { // Show loading if auth is loading OR if auth is done, user exists, but profile is still loading
+  if (authLoading || (isLoading && user)) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6">
-        <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
-        <p className="mt-4 text-lg text-gray-600">Loading...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gradient-to-b from-background to-background/95">
+        <div className="w-20 h-20 relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 rounded-full blur-lg animate-pulse"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="h-10 w-10 text-primary animate-spin" />
+          </div>
+        </div>
+        <p className="mt-6 text-lg text-foreground/70 animate-pulse">Loading your profile...</p>
       </div>
     );
   }
@@ -871,151 +1038,187 @@ export default function ProfileDashboard() {
   // --- End Render Functions for Education ---
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="text-2xl font-bold"
-          >
-            Your Profile Dashboard
-          </motion.h1>
-          <p className="text-gray-600">
-            View and manage your education profile information
-          </p>
-        </div>
+    <div className="relative min-h-screen pb-10">
+      {/* Decorative Elements - Similar to landing page */}
+      <div className="fixed inset-0 w-full h-screen pointer-events-none overflow-hidden z-0">
+        <div 
+          className="profile-decor absolute w-40 h-40 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 blur-xl"
+          style={{ top: '15%', right: '10%' }}
+        ></div>
+        <div 
+          className="profile-decor absolute w-32 h-32 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 blur-lg"
+          style={{ top: '60%', left: '5%' }}
+        ></div>
+        <div 
+          className="profile-decor absolute w-48 h-48 rounded-full bg-gradient-to-r from-purple-500/5 to-blue-500/10 blur-xl"
+          style={{ bottom: '10%', right: '15%' }}
+        ></div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="mb-8 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 shadow-sm"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-blue-800">Profile Completion</h3>
-          <span className="text-sm font-semibold text-blue-700">{completionPercentage}%</span>
-        </div>
-        
-        <div className="w-full h-3 bg-white rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${completionPercentage}%` }}
-            transition={{ duration: 1, ease: "easeOut" }}
-            className={`h-full rounded-full ${
-              completionPercentage < 50 
-                ? "bg-amber-500" 
-                : completionPercentage < 80 
-                ? "bg-blue-500" 
-                : "bg-green-500"
-            }`}
-          />
-        </div>
-        
-        <div className="mt-4 text-sm text-blue-600">
-          {completionPercentage === 100 ? (
-            <div className="flex items-center">
-              <Check className="mr-2 h-4 w-4 text-green-500" />
-              Your profile is complete!
-            </div>
-          ) : (
-            <div className="flex items-center">
-              <Check className="mr-2 h-4 w-4 text-amber-500" />
-              Your profile is {completionPercentage}% complete. Consider adding more details for better recommendations.
-            </div>
-          )}
-        </div>
-      </motion.div>
-
-      <Accordion type="single" collapsible className="w-full" defaultValue="personal" value={expandedSection} onValueChange={setExpandedSection}>
-        {/* Personal Information */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
+      <div className="space-y-8 max-w-4xl mx-auto p-6 relative z-10">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="flex justify-between items-center mb-6"
         >
-          <AccordionItem value="personal" className="border border-blue-100 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-            <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-blue-50 to-white data-[state=open]:bg-blue-100 transition-all duration-300">
-              <div className="flex items-center gap-3 w-full">
-                <div className="p-2 rounded-full bg-blue-100 text-blue-600">
-                  <User className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium text-base">Personal Information</span>
-                  <p className="text-xs text-zinc-500 mt-0.5">Your basic information and contact details</p>
-                </div>
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md">
+                <User className="h-5 w-5 text-white" />
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 py-4 bg-white">
-              {editSection === 'personal' ? (
-                renderPersonalInfoEdit()
-              ) : (
-              <div className="pl-10 space-y-4 py-2">
-                  <div className="flex justify-end">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleEditToggle('personal')}
-                      className="text-blue-600 hover:bg-blue-50"
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit
-                    </Button>
-                  </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-xs text-zinc-500">First Name</p>
-                    <p className="font-medium">{userProfile.firstName || "Not provided"}</p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-xs text-zinc-500">Last Name</p>
-                    <p className="font-medium">{userProfile.lastName || "Not provided"}</p>
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Email</p>
-                  <p className="font-medium">{userProfile.email || "Not provided"}</p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Phone</p>
-                  <p className="font-medium">{userProfile.phone || "Not provided"}</p>
-                </div>
-              </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
+              <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
+                Your Profile
+              </h1>
+            </div>
+            <p className="text-foreground/70 text-lg">
+              Manage your educational details to receive personalized recommendations
+            </p>
+          </div>
         </motion.div>
 
-        {/* Education */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="mb-10 p-6 bg-gradient-to-br from-background via-primary/5 to-background rounded-xl border border-primary/20 shadow-sm"
         >
-          <AccordionItem value="education" className="border border-blue-100 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-            <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-purple-50 to-white data-[state=open]:bg-purple-100 transition-all duration-300">
-              <div className="flex items-center gap-3 w-full">
-                <div className="p-2 rounded-full bg-purple-100 text-purple-600">
-                  <BookOpen className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium text-base">Education History</span>
-                  <p className="text-xs text-zinc-500 mt-0.5">Your academic background and qualifications</p>
-                </div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary" />
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 py-4 bg-white">
-              {editSection === 'education' ? (
-              <div className="pl-10 space-y-4 py-2">
-                   {editedProfile?.education?.map((edu, index) => 
-                       editingEducationIndex === index 
-                           ? renderEducationEditItem(edu, index) 
-                           : renderEducationDisplayItem(edu, index)
-                   )}
+              <h3 className="font-semibold text-xl text-primary">Profile Completion</h3>
+            </div>
+            <motion.div 
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.5, type: "spring" }}
+              className="w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-background to-background/50 border border-primary/30 shadow-inner"
+            >
+              <span className="text-sm font-semibold text-primary">{completionPercentage}%</span>
+            </motion.div>
+          </div>
+          
+          <div className="w-full h-3 bg-background/80 rounded-full overflow-hidden shadow-inner">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${completionPercentage}%` }}
+              transition={{ duration: 1, ease: "easeOut", delay: 0.5 }}
+              className={`h-full rounded-full ${
+                completionPercentage < 50 
+                  ? "bg-gradient-to-r from-amber-400 to-amber-500" 
+                  : completionPercentage < 80 
+                  ? "bg-gradient-to-r from-blue-400 to-primary" 
+                  : "bg-gradient-to-r from-green-400 to-green-500"
+              }`}
+            />
+          </div>
+          
+          <div className="mt-4 text-foreground/80">
+            {completionPercentage === 100 ? (
+              <div className="flex items-center">
+                <Check className="mr-2 h-4 w-4 text-green-500" />
+                <span>Your profile is complete!</span>
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <div className="mr-2 h-4 w-4 text-amber-500 flex-shrink-0">
+                  {completionPercentage >= 50 ? <Check /> : '!'}
+                </div>
+                <span>Your profile is {completionPercentage}% complete. Adding more details will help us provide better recommendations.</span>
+              </div>
+            )}
+          </div>
+        </motion.div>
 
-                   <Dialog open={isAddEducationModalOpen} onOpenChange={setIsAddEducationModalOpen}>
+        <Accordion type="single" collapsible className="w-full" defaultValue="personal" value={expandedSection} onValueChange={setExpandedSection}>
+          {/* Personal Information */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+          >
+            <AccordionItem value="personal" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-blue-50/50 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-blue-100/50 data-[state=open]:to-blue-50/30 transition-all duration-300">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-blue-100 to-background border border-blue-200/50 text-blue-600 shadow-sm">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-lg text-blue-800">Personal Information</span>
+                    <p className="text-xs text-blue-600/70 mt-0.5">Your basic information and contact details</p>
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-blue-50/30">
+                {editSection === 'personal' ? (
+                  renderPersonalInfoEdit()
+                ) : (
+                  <div className="pl-10 space-y-4 py-2">
+                    <div className="flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditToggle('personal')}
+                        className="text-blue-600 hover:bg-blue-50"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-zinc-500">First Name</p>
+                        <p className="font-medium">{userProfile.firstName || "Not provided"}</p>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-zinc-500">Last Name</p>
+                        <p className="font-medium">{userProfile.lastName || "Not provided"}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Email</p>
+                      <p className="font-medium">{userProfile.email || "Not provided"}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Phone</p>
+                      <p className="font-medium">{userProfile.phone || "Not provided"}</p>
+                    </div>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </motion.div>
+
+          {/* Education */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+          >
+            <AccordionItem value="education" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-purple-50/50 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-purple-100/50 data-[state=open]:to-purple-50/30 transition-all duration-300">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-purple-100 to-background border border-purple-200/50 text-purple-600 shadow-sm">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-lg text-purple-800">Education History</span>
+                    <p className="text-xs text-purple-600/70 mt-0.5">Your academic background and qualifications</p>
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-purple-50/30">
+                {editSection === 'education' ? (
+                  <div className="pl-10 space-y-4 py-2">
+                    {editedProfile?.education?.map((edu, index) => 
+                        editingEducationIndex === index 
+                            ? renderEducationEditItem(edu, index) 
+                            : renderEducationDisplayItem(edu, index)
+                    )}
+
+                    <Dialog open={isAddEducationModalOpen} onOpenChange={setIsAddEducationModalOpen}>
                       <DialogTrigger asChild>
                          <Button
                             type="button"
@@ -1047,26 +1250,26 @@ export default function ProfileDashboard() {
                                          <SelectItem value="Other">Other</SelectItem>
                                      </SelectContent>
                                  </Select>
-                    </div>
+                             </div>
                              <div className="space-y-2">
                                  <Label htmlFor="new-institution">Institution</Label>
                                  <Input id="new-institution" value={newEducationEntry.institution} onChange={(e) => handleNewEducationEntryChange("institution", e.target.value)} />
-                        </div>
+                             </div>
                              <div className="space-y-2">
                                  <Label htmlFor="new-fieldOfStudy">Field of Study</Label>
                                  <Input id="new-fieldOfStudy" value={newEducationEntry.fieldOfStudy} onChange={(e) => handleNewEducationEntryChange("fieldOfStudy", e.target.value)} />
-                        </div>
+                             </div>
                              <div className="grid grid-cols-2 gap-4">
                                  <div className="space-y-2">
                                      <Label htmlFor="new-graduationYear">Graduation Year</Label>
                                      <Input id="new-graduationYear" value={newEducationEntry.graduationYear} onChange={(e) => handleNewEducationEntryChange("graduationYear", e.target.value)} />
-                      </div>
+                                 </div>
                                  <div className="space-y-2">
                                      <Label htmlFor="new-gpa">GPA (Optional)</Label>
                                      <Input id="new-gpa" value={newEducationEntry.gpa || ""} onChange={(e) => handleNewEducationEntryChange("gpa", e.target.value)} />
-                      </div>
-                        </div>
-                        </div>
+                                 </div>
+                             </div>
+                         </div>
                          <DialogFooter>
                             <DialogClose asChild>
                                <Button variant="outline">Cancel</Button>
@@ -1074,352 +1277,453 @@ export default function ProfileDashboard() {
                             <Button onClick={handleAddNewEducation}>Add Entry</Button>
                          </DialogFooter>
                       </DialogContent>
-                   </Dialog>
+                    </Dialog>
 
-                   <div className="flex justify-end gap-2 mt-6 border-t pt-4">
-                     <Button variant="outline" onClick={handleCancelEdit}>
-                       <X className="h-4 w-4 mr-2" />
-                       Cancel Section Edit
-                     </Button>
-                     <Button onClick={handleSaveChanges} disabled={isLoading}>
-                       {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                       Save All Education Changes
-                     </Button>
+                    <div className="flex justify-end gap-2 mt-6 border-t pt-4">
+                      <Button variant="outline" onClick={handleCancelEdit}>
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel Section Edit
+                      </Button>
+                      <Button onClick={handleSaveChanges} disabled={isLoading}>
+                        {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                        Save All Education Changes
+                      </Button>
+                   </div>
+                  </div>
+                ) : (
+                  <div className="pl-10 space-y-4 py-2">
+                    <div className="flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditToggle('education')}
+                        className="text-purple-600 hover:bg-purple-50"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Education Section
+                      </Button>
+                    </div>
+                    {userProfile?.education?.length > 0 ? (
+                       userProfile.education.map(renderEducationDisplayItem)
+                    ) : (
+                       <p className="text-sm text-zinc-500 italic">No education history provided.</p>
+                    )}
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </motion.div>
+
+          {/* Career Goals */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.4 }}
+          >
+            <AccordionItem value="career" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-primary/10 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-primary/20 data-[state=open]:to-primary/5 transition-all duration-300">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-background border border-primary/30 text-primary shadow-sm">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-lg text-primary-foreground">Career Goals</span>
+                    <p className="text-xs text-primary/70 mt-0.5">Your professional aspirations and objectives</p>
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-primary/5">
+                {editSection === 'career' ? (
+                  renderCareerGoalsEdit()
+                ) : (
+                  <div className="pl-10 space-y-4 py-2">
+                    <div className="flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditToggle('career')}
+                        className="text-blue-600 hover:bg-blue-50"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Short-term Goals</p>
+                      <p className="font-medium whitespace-pre-wrap">
+                        {userProfile.careerGoals?.shortTerm || "Not provided"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Long-term Goals</p>
+                      <p className="font-medium whitespace-pre-wrap">
+                        {userProfile.careerGoals?.longTerm || "Not provided"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500 mb-2">Skills</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {userProfile.skills?.length > 0 ? (
+                          userProfile.skills.map((skill, index) => (
+                              <Badge key={index} variant="secondary">{skill}</Badge>
+                          ))
+                        ) : (
+                            <span className="text-zinc-500 text-sm">No skills provided</span>
+                        )}
                       </div>
                     </div>
-              ) : (
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500 mb-2">Desired Industries</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {userProfile.careerGoals?.desiredIndustry?.length > 0 ? (
+                          userProfile.careerGoals.desiredIndustry.map(
+                            (industry, index) => (
+                                <Badge key={index} variant="outline" className="bg-green-50 border-green-200 text-green-800">{industry}</Badge>
+                            )
+                          )
+                        ) : (
+                            <span className="text-zinc-500 text-sm">
+                            No desired industries provided
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500 mb-2">Desired Roles</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {userProfile.careerGoals?.desiredRoles?.length > 0 ? (
+                          userProfile.careerGoals.desiredRoles.map((role, index) => (
+                              <Badge key={index} variant="outline" className="bg-purple-50 border-purple-200 text-purple-800">{role}</Badge>
+                          ))
+                        ) : (
+                            <span className="text-zinc-500 text-sm">
+                            No desired roles provided
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </motion.div>
+
+          {/* Preferences */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.5 }}
+          >
+            <AccordionItem value="preferences" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-green-50/50 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-green-100/50 data-[state=open]:to-green-50/30 transition-all duration-300">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-green-100 to-background border border-green-200/50 text-green-600 shadow-sm">
+                    <Settings className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-lg text-green-800">Preferences</span>
+                    <p className="text-xs text-green-600/70 mt-0.5">Your preferences for educational programs</p>
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-green-50/30">
+                {editSection === 'preferences' ? (
+                  renderPreferencesEdit()
+                ) : (
+                  <div className="pl-10 space-y-4 py-2">
+                    <div className="flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditToggle('preferences')}
+                        className="text-green-600 hover:bg-green-50"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500 mb-2">Preferred Locations</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {userProfile.preferences?.preferredLocations?.length > 0 ? (
+                          userProfile.preferences.preferredLocations.map(
+                            (location, index) => (
+                                <Badge key={index} variant="outline" className="bg-blue-50 border-blue-200 text-blue-800">{location}</Badge>
+                            )
+                          )
+                        ) : (
+                            <span className="text-zinc-500 text-sm">
+                            No preferred locations provided
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Study Mode</p>
+                      <p className="font-medium">
+                        {userProfile.preferences?.studyMode || "Not provided"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Preferred Start Date</p>
+                      <p className="font-medium">
+                        {userProfile.preferences?.startDate
+                            ? new Date(userProfile.preferences.startDate + 'T00:00:00').toLocaleDateString(
+                              "en-US",
+                              { year: "numeric", month: "long" }
+                            )
+                          : "Not provided"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Budget Range</p>
+                      <p className="font-medium">
+                        ${userProfile.preferences?.budgetRange?.min?.toLocaleString() || 0} - $
+                          {userProfile.preferences?.budgetRange?.max?.toLocaleString() || 'Any'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </motion.div>
+
+          {/* Documents */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.6 }}
+          >
+            <AccordionItem value="documents" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-amber-50/50 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-amber-100/50 data-[state=open]:to-amber-50/30 transition-all duration-300">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-amber-100 to-background border border-amber-200/50 text-amber-600 shadow-sm">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-lg text-amber-800">Documents</span>
+                    <p className="text-xs text-amber-600/70 mt-0.5">Uploaded files that enhance your recommendations</p>
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-amber-50/30">
                 <div className="pl-10 space-y-4 py-2">
-                  <div className="flex justify-end">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleEditToggle('education')}
-                      className="text-purple-600 hover:bg-purple-50"
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Education Section
-                    </Button>
-              </div>
-                  {userProfile?.education?.length > 0 ? (
-                     userProfile.education.map(renderEducationDisplayItem)
-                  ) : (
-                     <p className="text-sm text-zinc-500 italic">No education history provided.</p>
-                  )}
+                  <div className="space-y-3">
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <FileText size={20} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Resume/CV</p>
+                          <p className="text-xs text-gray-500">Your educational and professional experience</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getDocumentFileId(userProfile.documents?.resume) ? (
+                          <>
+                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                              <Check size={14} className="mr-1" />
+                              Uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc']}
+                              className="h-8"
+                              vectorStoreId={userProfile.vectorStoreId || ''}
+                              disabled={!userProfile.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
+                                  <Edit size={14} className="mr-1" /> Replace
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                              Not uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc']}
+                              className="h-8"
+                              vectorStoreId={userProfile.vectorStoreId || ''}
+                              disabled={!userProfile.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="outline" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
+                                  <Plus size={14} className="mr-1" /> Upload
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <FileText size={20} className="text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Transcripts</p>
+                          <p className="text-xs text-gray-500">Your academic records</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getDocumentFileId(userProfile.documents?.transcripts) ? (
+                          <>
+                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                              <Check size={14} className="mr-1" />
+                              Uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
+                              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
+                              className="h-8"
+                              vectorStoreId={userProfile.vectorStoreId || ''}
+                              disabled={!userProfile.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="ghost" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
+                                  <Edit size={14} className="mr-1" /> Replace
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                              Not uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
+                              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
+                              className="h-8"
+                              vectorStoreId={userProfile.vectorStoreId || ''}
+                              disabled={!userProfile.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="outline" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
+                                  <Plus size={14} className="mr-1" /> Upload
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <FileText size={20} className="text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Statement of Purpose</p>
+                          <p className="text-xs text-gray-500">Your educational goals</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getDocumentFileId(userProfile.documents?.statementOfPurpose) ? (
+                          <>
+                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                              <Check size={14} className="mr-1" />
+                              Uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
+                              className="h-8"
+                              vectorStoreId={userProfile.vectorStoreId || ''}
+                              disabled={!userProfile.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="ghost" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
+                                  <Edit size={14} className="mr-1" /> Replace
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                              Not uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
+                              className="h-8"
+                              vectorStoreId={userProfile.vectorStoreId || ''}
+                              disabled={!userProfile.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="outline" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
+                                  <Plus size={14} className="mr-1" /> Upload
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-        </motion.div>
+              </AccordionContent>
+            </AccordionItem>
+          </motion.div>
+        </Accordion>
 
-        {/* Career Goals */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
+        {/* Delete Profile Button and Dialog */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.4 }}
+          transition={{ duration: 0.4, delay: 0.7 }}
+          className="mt-8 border-t border-primary/20 pt-6"
         >
-          <AccordionItem value="career" className="border border-blue-100 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-            <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-blue-50 to-white data-[state=open]:bg-blue-100 transition-all duration-300">
-              <div className="flex items-center gap-3 w-full">
-                <div className="p-2 rounded-full bg-blue-100 text-blue-600">
-                  <Briefcase className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium text-base">Career Goals</span>
-                  <p className="text-xs text-zinc-500 mt-0.5">Your professional aspirations and objectives</p>
-                </div>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 py-4 bg-white">
-              {editSection === 'career' ? (
-                renderCareerGoalsEdit()
-              ) : (
-              <div className="pl-10 space-y-4 py-2">
-                   <div className="flex justify-end">
-                     <Button 
-                       variant="ghost" 
-                       size="sm" 
-                       onClick={() => handleEditToggle('career')}
-                       className="text-blue-600 hover:bg-blue-50"
-                     >
-                       <Edit className="h-4 w-4 mr-2" />
-                       Edit
-                     </Button>
-                   </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Short-term Goals</p>
-                    <p className="font-medium whitespace-pre-wrap"> {/* Preserve line breaks */}
-                    {userProfile.careerGoals?.shortTerm || "Not provided"}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Long-term Goals</p>
-                    <p className="font-medium whitespace-pre-wrap"> {/* Preserve line breaks */}
-                    {userProfile.careerGoals?.longTerm || "Not provided"}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500 mb-2">Skills</p>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {userProfile.skills?.length > 0 ? (
-                      userProfile.skills.map((skill, index) => (
-                          <Badge key={index} variant="secondary">{skill}</Badge>
-                      ))
-                    ) : (
-                        <span className="text-zinc-500 text-sm">No skills provided</span>
-                    )}
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500 mb-2">Desired Industries</p>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {userProfile.careerGoals?.desiredIndustry?.length > 0 ? (
-                      userProfile.careerGoals.desiredIndustry.map(
-                        (industry, index) => (
-                            <Badge key={index} variant="outline" className="bg-green-50 border-green-200 text-green-800">{industry}</Badge>
-                        )
-                      )
-                    ) : (
-                        <span className="text-zinc-500 text-sm">
-                        No desired industries provided
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500 mb-2">Desired Roles</p>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {userProfile.careerGoals?.desiredRoles?.length > 0 ? (
-                      userProfile.careerGoals.desiredRoles.map((role, index) => (
-                          <Badge key={index} variant="outline" className="bg-purple-50 border-purple-200 text-purple-800">{role}</Badge>
-                      ))
-                    ) : (
-                        <span className="text-zinc-500 text-sm">
-                        No desired roles provided
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
+          <Button 
+            variant="destructive" 
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-sm hover:shadow-md transition-all duration-300"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Profile
+          </Button>
         </motion.div>
 
-        {/* Preferences */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.5 }}
-        >
-          <AccordionItem value="preferences" className="border border-blue-100 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-            <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-green-50 to-white data-[state=open]:bg-green-100 transition-all duration-300">
-              <div className="flex items-center gap-3 w-full">
-                <div className="p-2 rounded-full bg-green-100 text-green-600">
-                  <Settings className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium text-base">Preferences</span>
-                  <p className="text-xs text-zinc-500 mt-0.5">Your preferences for educational programs</p>
-                </div>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 py-4 bg-white">
-               {editSection === 'preferences' ? (
-                 renderPreferencesEdit()
-               ) : (
-              <div className="pl-10 space-y-4 py-2">
-                   <div className="flex justify-end">
-                     <Button 
-                       variant="ghost" 
-                       size="sm" 
-                       onClick={() => handleEditToggle('preferences')}
-                       className="text-green-600 hover:bg-green-50"
-                     >
-                       <Edit className="h-4 w-4 mr-2" />
-                       Edit
-                     </Button>
-                   </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500 mb-2">Preferred Locations</p>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {userProfile.preferences?.preferredLocations?.length > 0 ? (
-                      userProfile.preferences.preferredLocations.map(
-                        (location, index) => (
-                            <Badge key={index} variant="outline" className="bg-blue-50 border-blue-200 text-blue-800">{location}</Badge>
-                        )
-                      )
-                    ) : (
-                        <span className="text-zinc-500 text-sm">
-                        No preferred locations provided
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Study Mode</p>
-                  <p className="font-medium">
-                    {userProfile.preferences?.studyMode || "Not provided"}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Preferred Start Date</p>
-                  <p className="font-medium">
-                    {userProfile.preferences?.startDate
-                        ? new Date(userProfile.preferences.startDate + 'T00:00:00').toLocaleDateString( // Ensure correct date parsing
-                          "en-US",
-                          { year: "numeric", month: "long" }
-                        )
-                      : "Not provided"}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Budget Range</p>
-                  <p className="font-medium">
-                    ${userProfile.preferences?.budgetRange?.min?.toLocaleString() || 0} - $
-                      {userProfile.preferences?.budgetRange?.max?.toLocaleString() || 'Any'}
-                  </p>
-                </div>
-              </div>
-               )}
-            </AccordionContent>
-          </AccordionItem>
-        </motion.div>
-
-        {/* Documents */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.6 }}
-        >
-          <AccordionItem value="documents" className="border border-blue-100 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-            <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-amber-50 to-white data-[state=open]:bg-amber-100 transition-all duration-300">
-              <div className="flex items-center gap-3 w-full">
-                <div className="p-2 rounded-full bg-amber-100 text-amber-600">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium text-base">Documents</span>
-                  <p className="text-xs text-zinc-500 mt-0.5">Uploaded files that enhance your recommendations</p>
-                </div>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 py-4 bg-white">
-              <div className="pl-10 space-y-4 py-2">
-                <div className="space-y-3">
-                  <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-md border border-gray-200">
-                        <FileText size={20} className="text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-800">Resume/CV</p>
-                        <p className="text-xs text-gray-500">Your professional experience</p>
-                      </div>
-                    </div>
-                    <div>
-                      {userProfile.documents?.resume ? (
-                        <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                          <Check size={14} className="mr-1" />
-                          Uploaded
-                        </span>
-                      ) : (
-                        <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                          Not uploaded
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-md border border-gray-200">
-                        <FileText size={20} className="text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-800">Transcripts</p>
-                        <p className="text-xs text-gray-500">Your academic records</p>
-                      </div>
-                    </div>
-                    <div>
-                      {userProfile.documents?.transcripts ? (
-                        <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                          <Check size={14} className="mr-1" />
-                          Uploaded
-                        </span>
-                      ) : (
-                        <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                          Not uploaded
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-md border border-gray-200">
-                        <FileText size={20} className="text-amber-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-800">Statement of Purpose</p>
-                        <p className="text-xs text-gray-500">Your educational goals</p>
-                      </div>
-                    </div>
-                    <div>
-                      {userProfile.documents?.statementOfPurpose ? (
-                        <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                          <Check size={14} className="mr-1" />
-                          Uploaded
-                        </span>
-                      ) : (
-                        <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                          Not uploaded
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </motion.div>
-      </Accordion>
-
-      {/* Delete Profile Button and Dialog */}
-      <div className="mt-8 border-t pt-6">
-        <Button 
-          variant="destructive" 
-          onClick={() => setIsDeleteDialogOpen(true)}
-          className="w-full"
-        >
-          <Trash2 className="h-4 w-4 mr-2" />
-          Delete Profile
-        </Button>
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="bg-gradient-to-b from-background to-background/95 border border-primary/20 shadow-lg">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 text-xl">Delete Profile</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-foreground/80 mb-3">
+                Are you sure you want to delete your profile? This action cannot be undone.
+              </p>
+              <p className="text-foreground/70">
+                All your profile data, recommendations, and uploaded documents will be permanently removed.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteProfile} 
+                disabled={isLoading}
+                className="bg-gradient-to-r from-red-500 to-red-600"
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Delete Profile
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-red-600">Delete Profile</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-gray-700">
-              Are you sure you want to delete your profile? This action cannot be undone.
-            </p>
-            <p className="text-gray-700 mt-2">
-              All your profile data, recommendations, and uploaded documents will be permanently removed.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteProfile} disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Delete Profile
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 } 

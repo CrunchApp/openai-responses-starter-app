@@ -18,7 +18,6 @@ interface ConversationState {
   activeConversationId: string | null;
   isLoading: boolean;
   error: string | null;
-  hydrated: boolean;
   fetchingConversations: boolean; // Add a separate flag for conversation fetching
   
   // Items displayed in the chat
@@ -59,7 +58,6 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   activeConversationId: null,
   isLoading: false,
   error: null,
-  hydrated: true,
   fetchingConversations: false, // Initialize the fetching flag
   
   chatMessages: [

@@ -258,35 +258,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // This prevents the loading spinner from getting stuck
       setLoading(false);
       
-      // Then clear stores - do this asynchronously without blocking
-      setTimeout(async () => {
-        try {
-          // Import and clear profile store
-          const useProfileStore = (await import('@/stores/useProfileStore')).default;
-          useProfileStore.getState().clearStore();
-          
-          // Import and clear conversation store
-          try {
-            const useConversationStore = (await import('@/stores/useConversationStore')).default;
-            useConversationStore.getState().resetState();
-            useConversationStore.getState().setAuthState(false, null);
-          } catch (e) {
-            console.error('Error clearing conversation store:', e);
-          }
-          
-          // Import and clear recommendations store
-          try {
-            const useRecommendationsStore = (await import('@/stores/useRecommendationsStore')).default;
-            useRecommendationsStore.getState().clearStore();
-            useRecommendationsStore.getState().setAuthState(false, null);
-          } catch (e) {
-            console.error('Error clearing recommendations store:', e);
-          }
-        } catch (e) {
-          console.error('Error clearing stores:', e);
-        }
-      }, 0);
-      
       // Handle sign out from Supabase - do this asynchronously without blocking the UI
       setTimeout(async () => {
         try {

@@ -17,66 +17,30 @@ export default function AuthSynchronizer() {
   
   // Add state to track syncing status to prevent redundant operations
   const [isSyncing, setIsSyncing] = useState(false);
-  // Track if we've already marked stores as hydrated
-  const [hydratedStores, setHydratedStores] = useState(false);
 
   // Get actions and states from Zustand stores
   const {
     setAuthState: setRecAuthState,
-    syncWithSupabase: syncRecsWithSupabase,
     clearStore: clearRecommendationsStore,
-    hydrated: recStoreHydrated,
-    setHydrated: setRecHydrated
+    syncWithSupabase: syncRecsWithSupabase
   } = useRecommendationsStore();
 
   const {
     clearStore: clearProfileStore,
-    hydrated: profileStoreHydrated,
     setVectorStoreId: setProfileVectorStoreId,
-    setProfileData: setProfileStoreData,
-    setHydrated: setProfileHydrated
+    setProfileData: setProfileStoreData
   } = useProfileStore();
 
   // Get Tools Store state
   const {
-    setVectorStore,
-    vectorStore
+    setVectorStore
   } = useToolsStore();
 
   const {
     setAuthState: setConvAuthState,
     resetState: clearConversationState,
-    hydrated: conversationStoreHydrated,
-    fetchConversations,
-    resetState: resetConversationState,
-    isLoading: conversationLoading
+    resetState: resetConversationState
   } = useConversationStore();
-
-  // Ensure stores are properly marked as hydrated
-  useEffect(() => {
-    if (hydratedStores) return;
-    
-    // Mark all stores as hydrated to avoid unnecessary loading screens
-    if (!profileStoreHydrated) {
-      setProfileHydrated(true);
-    }
-    
-    if (!recStoreHydrated) {
-      setRecHydrated(true);
-    }
-    
-    // Note: Conversation store doesn't have setHydrated, it initializes as hydrated=true
-    
-    setHydratedStores(true);
-    console.log('[AuthSynchronizer] Marked all stores as hydrated');
-  }, [
-    profileStoreHydrated, 
-    recStoreHydrated, 
-    conversationStoreHydrated, 
-    setProfileHydrated, 
-    setRecHydrated,
-    hydratedStores
-  ]);
 
   // Track previous user state to detect login/logout transitions
   const prevUserRef = useRef(user);
@@ -110,18 +74,12 @@ export default function AuthSynchronizer() {
           // Set auth state in stores
           setRecAuthState(true, currentUser.id);
           setConvAuthState(true, currentUser.id);
-
-          // Trigger data fetching/syncing for the logged-in user
+          
+          // Explicitly call syncRecsWithSupabase to ensure recommendations are fetched
           try {
             await syncRecsWithSupabase(currentUser.id);
           } catch (e) {
             console.error("Rec sync error on login:", e);
-          }
-          
-          try {
-            await fetchConversations();
-          } catch (e) {
-            console.error("Conversation fetch error on login:", e);
           }
         }
         // User Logged Out
@@ -160,9 +118,8 @@ export default function AuthSynchronizer() {
     authLoading, 
     isSyncing,
     setRecAuthState, 
-    setConvAuthState, 
-    syncRecsWithSupabase, 
-    fetchConversations, 
+    setConvAuthState,
+    syncRecsWithSupabase,
     clearRecommendationsStore, 
     clearProfileStore, 
     clearConversationState, 

@@ -42,90 +42,123 @@ export default function Home() {
     
     window.addEventListener('scroll', handleScroll);
     
-    // Create a GSAP context for proper cleanup
-    const ctx = gsap.context(() => {
-      // Hero section entrance animation with timeline
-      const tl = gsap.timeline({ delay: 0.5 });
-      
-      // Animate hero elements in sequence
-      tl.from(".hero-title", { 
-        opacity: 0, 
-        y: 30, 
-        duration: 0.8,
-        ease: "power3.out" 
-      })
-      .from(".hero-description", { 
-        opacity: 0, 
-        y: 30, 
-        duration: 0.8,
-        ease: "power3.out" 
-      }, "-=0.6")
-      .from(".hero-buttons", { 
-        opacity: 0, 
-        y: 30, 
-        duration: 0.8,
-        ease: "power3.out" 
-      }, "-=0.6")
-      .from(".scroll-prompt", { 
-        opacity: 0, 
-        y: 20, 
-        duration: 0.6,
-        ease: "power3.out",
-        repeat: -1,
-        yoyo: true
-      }, "-=0.2");
-      
-      // Features section animation on scroll
-      if (featuresRef.current) {
-        gsap.from(".features-text", { 
-          opacity: 0,
-          x: -30,
-          duration: 0.8,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: featuresRef.current,
-            start: "top 80%",
-            toggleActions: "play none none none"
-          }
-        });
+    // Wait for DOM elements to be available before applying animations
+    // Using a small delay to ensure elements are rendered
+    const animationTimeout = setTimeout(() => {
+      try {
+        // Check if hero elements exist before creating context
+        const heroTitleExists = document.querySelector('.hero-title');
+        const heroDescriptionExists = document.querySelector('.hero-description');
+        const heroButtonsExists = document.querySelector('.hero-buttons');
         
-        gsap.from(".feature-card", { 
-          opacity: 0,
-          x: 30,
-          stagger: 0.15,
-          duration: 0.8,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: featuresRef.current,
-            start: "top 80%",
-            toggleActions: "play none none none"
+        if (!heroTitleExists || !heroDescriptionExists || !heroButtonsExists) {
+          console.log('Hero elements not found, skipping animations');
+          return;
+        }
+        
+        // Create a GSAP context for proper cleanup
+        const ctx = gsap.context(() => {
+          // Hero section entrance animation with timeline
+          const tl = gsap.timeline({ delay: 0.5 });
+          
+          // Animate hero elements in sequence
+          tl.from(".hero-title", { 
+            opacity: 0, 
+            y: 30, 
+            duration: 0.8,
+            ease: "power3.out" 
+          })
+          .from(".hero-description", { 
+            opacity: 0, 
+            y: 30, 
+            duration: 0.8,
+            ease: "power3.out" 
+          }, "-=0.6")
+          .from(".hero-buttons", { 
+            opacity: 0, 
+            y: 30, 
+            duration: 0.8,
+            ease: "power3.out" 
+          }, "-=0.6");
+          
+          // Only animate scroll prompt if it exists
+          const scrollPrompt = document.querySelector('.scroll-prompt');
+          if (scrollPrompt) {
+            tl.from(".scroll-prompt", { 
+              opacity: 0, 
+              y: 20, 
+              duration: 0.6,
+              ease: "power3.out",
+              repeat: -1,
+              yoyo: true
+            }, "-=0.2");
           }
-        });
-      }
-      
-      // Testimonial animation on scroll
-      if (testimonialRef.current) {
-        gsap.from(".testimonial", { 
-          opacity: 0,
-          scale: 0.9,
-          duration: 0.8,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: testimonialRef.current,
-            start: "top 80%",
-            toggleActions: "play none none none"
+          
+          // Features section animation on scroll - only if element exists
+          if (featuresRef.current && document.querySelector('.features-text')) {
+            gsap.from(".features-text", { 
+              opacity: 0,
+              x: -30,
+              duration: 0.8,
+              ease: "power3.out",
+              scrollTrigger: {
+                trigger: featuresRef.current,
+                start: "top 80%",
+                toggleActions: "play none none none"
+              }
+            });
+            
+            // Check if feature cards exist
+            if (document.querySelector('.feature-card')) {
+              gsap.from(".feature-card", { 
+                opacity: 0,
+                x: 30,
+                stagger: 0.15,
+                duration: 0.8,
+                ease: "power3.out",
+                scrollTrigger: {
+                  trigger: featuresRef.current,
+                  start: "top 80%",
+                  toggleActions: "play none none none"
+                }
+              });
+            }
           }
-        });
+          
+          // Testimonial animation on scroll - only if element exists
+          if (testimonialRef.current && document.querySelector('.testimonial')) {
+            gsap.from(".testimonial", { 
+              opacity: 0,
+              scale: 0.9,
+              duration: 0.8,
+              ease: "power3.out",
+              scrollTrigger: {
+                trigger: testimonialRef.current,
+                start: "top 80%",
+                toggleActions: "play none none none"
+              }
+            });
+          }
+        }, heroRef); // Scope the context to our heroRef container
+        
+        // Store context in ref for cleanup
+        return () => {
+          // Clear all animations and ScrollTrigger instances
+          ctx.revert(); // This kills all GSAP animations created in this context
+        };
+      } catch (error) {
+        // Gracefully handle GSAP errors
+        console.error('Error initializing animations:', error);
       }
-    }, heroRef); // Scope the context to our heroRef container
+    }, 500); // 500ms delay to ensure DOM is fully loaded
     
     // Proper cleanup function
     return () => {
       // Remove scroll event listener
       window.removeEventListener('scroll', handleScroll);
       
-      // Clear all animations and ScrollTrigger instances
-      ctx.revert(); // This kills all GSAP animations created in this context
+      // Clear the animation timeout
+      clearTimeout(animationTimeout);
     };
   }, []);  // Empty dependency array means this runs once on mount
 

@@ -140,21 +140,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`Auth state changed: ${event}`)
+      console.log(`Auth state changed: ${event}`);
       
       if (session?.user) {
-        if (isMounted) setUser(session.user)
+        if (isMounted) setUser(session.user);
         
-        const profileData = await fetchProfile(session.user.id)
-        if (isMounted) setProfile(profileData)
+        // Fetch user profile
+        const profileData = await fetchProfile(session.user.id);
+        
+        // Make sure profile data is set before setting loading to false
+        if (isMounted) {
+          setProfile(profileData);
+          // Explicitly set loading to false after user and profile are set
+          setLoading(false);
+        }
       } else {
         if (isMounted) {
-          setUser(null)
-          setProfile(null)
+          setUser(null);
+          setProfile(null);
+          // Always ensure loading is set to false, even for non-auth state
+          setLoading(false);
         }
       }
-      
-      if (isMounted) setLoading(false)
     })
 
     return () => {

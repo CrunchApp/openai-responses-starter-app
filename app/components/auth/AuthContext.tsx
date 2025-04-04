@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Fetch user profile
         const profileData = await fetchProfile(session.user.id);
         
-        // Make sure profile data is set before setting loading to false
+        // Make sure profile data is set
         if (isMounted) {
           setProfile(profileData);
         }

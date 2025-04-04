@@ -151,15 +151,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Make sure profile data is set before setting loading to false
         if (isMounted) {
           setProfile(profileData);
-          // Explicitly set loading to false after user and profile are set
-          setLoading(false);
         }
       } else {
         if (isMounted) {
           setUser(null);
           setProfile(null);
-          // Always ensure loading is set to false, even for non-auth state
-          setLoading(false);
         }
       }
     })

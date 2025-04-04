@@ -75,10 +75,7 @@ export function PageWrapper({
   // But only show the loading spinner initially, not when user is already authenticated and stores are hydrated
   const isHomePage = pathname === '/';
   const showLoadingSpinner = !isHomePage && (
-    // For auth loading, we now have two conditions:
-    // 1. Never show loading spinner on homepage, even during auth loading
-    // 2. Don't show spinner if auth is loading but user state is already determined (either user or null)
-    (authLoading && user === undefined) || 
+    authLoading || // Important: Always wait for auth to complete before deciding on layout
     (isStoreLoading && requiredStoresHydrated) || 
     (!requiredStoresHydrated && !user) // Only show spinner for not hydrated stores if user is not yet authenticated
   );
@@ -97,6 +94,16 @@ export function PageWrapper({
   
   console.log(`[PageWrapper] Rendering content for ${pathname}`);
 
+  // IMPORTANT: Don't make layout decisions until auth is done loading
+  if (authLoading) {
+    console.log(`[PageWrapper] Auth still loading, using temporary container for ${pathname}`);
+    return (
+      <div className="min-h-screen">
+        {wrappedContent}
+      </div>
+    );
+  }
+  
   // Handle auth-required routes
   if (requireAuth && !user) {
     console.log(`[PageWrapper] Redirecting to login from ${pathname}`);

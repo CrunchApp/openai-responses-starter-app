@@ -17,20 +17,24 @@ export default function AuthSynchronizer() {
   
   // Add state to track syncing status to prevent redundant operations
   const [isSyncing, setIsSyncing] = useState(false);
+  // Track if we've already marked stores as hydrated
+  const [hydratedStores, setHydratedStores] = useState(false);
 
   // Get actions and states from Zustand stores
   const {
     setAuthState: setRecAuthState,
     syncWithSupabase: syncRecsWithSupabase,
     clearStore: clearRecommendationsStore,
-    hydrated: recStoreHydrated
+    hydrated: recStoreHydrated,
+    setHydrated: setRecHydrated
   } = useRecommendationsStore();
 
   const {
     clearStore: clearProfileStore,
     hydrated: profileStoreHydrated,
     setVectorStoreId: setProfileVectorStoreId,
-    setProfileData: setProfileStoreData
+    setProfileData: setProfileStoreData,
+    setHydrated: setProfileHydrated
   } = useProfileStore();
 
   // Get Tools Store state
@@ -47,6 +51,32 @@ export default function AuthSynchronizer() {
     resetState: resetConversationState,
     isLoading: conversationLoading
   } = useConversationStore();
+
+  // Ensure stores are properly marked as hydrated
+  useEffect(() => {
+    if (hydratedStores) return;
+    
+    // Mark all stores as hydrated to avoid unnecessary loading screens
+    if (!profileStoreHydrated) {
+      setProfileHydrated(true);
+    }
+    
+    if (!recStoreHydrated) {
+      setRecHydrated(true);
+    }
+    
+    // Note: Conversation store doesn't have setHydrated, it initializes as hydrated=true
+    
+    setHydratedStores(true);
+    console.log('[AuthSynchronizer] Marked all stores as hydrated');
+  }, [
+    profileStoreHydrated, 
+    recStoreHydrated, 
+    conversationStoreHydrated, 
+    setProfileHydrated, 
+    setRecHydrated,
+    hydratedStores
+  ]);
 
   // Track previous user state to detect login/logout transitions
   const prevUserRef = useRef(user);

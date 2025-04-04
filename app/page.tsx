@@ -28,10 +28,10 @@ export default function Home() {
 
   // Handle entrance animations
   useEffect(() => {
-    // Safety check for window existence (SSR)
+    // Only run on the client side
     if (typeof window === 'undefined') return;
     
-    // Hide scroll prompt on scroll
+    // Handle scroll prompt visibility
     const handleScroll = () => {
       if (window.scrollY > 100) {
         setScrollPromptVisible(false);
@@ -42,8 +42,9 @@ export default function Home() {
     
     window.addEventListener('scroll', handleScroll);
     
-    // Hero section entrance animation with timeline
-    if (heroRef.current) {
+    // Create a GSAP context for proper cleanup
+    const ctx = gsap.context(() => {
+      // Hero section entrance animation with timeline
       const tl = gsap.timeline({ delay: 0.5 });
       
       // Animate hero elements in sequence
@@ -73,55 +74,60 @@ export default function Home() {
         repeat: -1,
         yoyo: true
       }, "-=0.2");
-    }
-    
-    // Features section animation on scroll
-    if (featuresRef.current) {
-      gsap.from(".features-text", { 
-        opacity: 0,
-        x: -30,
-        duration: 0.8,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: featuresRef.current,
-          start: "top 80%",
-          toggleActions: "play none none none"
-        }
-      });
       
-      gsap.from(".feature-card", { 
-        opacity: 0,
-        x: 30,
-        stagger: 0.15,
-        duration: 0.8,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: featuresRef.current,
-          start: "top 80%",
-          toggleActions: "play none none none"
-        }
-      });
-    }
+      // Features section animation on scroll
+      if (featuresRef.current) {
+        gsap.from(".features-text", { 
+          opacity: 0,
+          x: -30,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: featuresRef.current,
+            start: "top 80%",
+            toggleActions: "play none none none"
+          }
+        });
+        
+        gsap.from(".feature-card", { 
+          opacity: 0,
+          x: 30,
+          stagger: 0.15,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: featuresRef.current,
+            start: "top 80%",
+            toggleActions: "play none none none"
+          }
+        });
+      }
+      
+      // Testimonial animation on scroll
+      if (testimonialRef.current) {
+        gsap.from(".testimonial", { 
+          opacity: 0,
+          scale: 0.9,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: testimonialRef.current,
+            start: "top 80%",
+            toggleActions: "play none none none"
+          }
+        });
+      }
+    }, heroRef); // Scope the context to our heroRef container
     
-    // Testimonial animation on scroll
-    if (testimonialRef.current) {
-      gsap.from(".testimonial", { 
-        opacity: 0,
-        scale: 0.9,
-        duration: 0.8,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: testimonialRef.current,
-          start: "top 80%",
-          toggleActions: "play none none none"
-        }
-      });
-    }
-    
+    // Proper cleanup function
     return () => {
+      // Remove scroll event listener
       window.removeEventListener('scroll', handleScroll);
+      
+      // Clear all animations and ScrollTrigger instances
+      ctx.revert(); // This kills all GSAP animations created in this context
     };
-  }, []);
+  }, []);  // Empty dependency array means this runs once on mount
 
   return (
     <PageWrapper allowGuest={true}>

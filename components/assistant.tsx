@@ -22,12 +22,13 @@ export default function Assistant() {
   } = useConversationStore();
   
   const [isInitialized, setIsInitialized] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
-  // Check authentication status
+  // Check authentication status - only run this once
   useEffect(() => {
+    if (authChecked) return;
+    
     const checkAuth = async () => {
-      if (isInitialized) return;
-      
       try {
         const supabase = createClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -39,9 +40,6 @@ export default function Assistant() {
           console.log('User authenticated:', user.id);
           // Set authentication state but don't create a conversation automatically
           setAuthState(true, user.id);
-          
-          // If there's an active conversation in session/local storage, we can load it here
-          // This will be handled by the conversation selector component
         } else {
           console.log('No authenticated user');
           setAuthState(false, null);
@@ -51,16 +49,18 @@ export default function Assistant() {
         console.error('Error checking authentication:', error);
       } finally {
         setIsInitialized(true);
+        setAuthChecked(true);
       }
     };
     
     checkAuth();
-  }, [isInitialized, setAuthState, setActiveConversation]);
+  }, [setAuthState, setActiveConversation, authChecked]);
 
-  // Listen for auth state changes
+  // Listen for auth state changes - but only set up the listener once
   useEffect(() => {
-    const supabase = createClient();
+    if (!isInitialized) return;
     
+    const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event);
@@ -68,9 +68,6 @@ export default function Assistant() {
         if (event === 'SIGNED_IN' && session?.user) {
           // Just update auth state, don't create a new conversation automatically
           setAuthState(true, session.user.id);
-          
-          // Don't load a conversation here - wait for user action
-          // or let conversation selector handle this
         } else if (event === 'SIGNED_OUT') {
           setAuthState(false, null);
           setActiveConversation(null);
@@ -81,7 +78,7 @@ export default function Assistant() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [setAuthState, setActiveConversation]);
+  }, [isInitialized, setAuthState, setActiveConversation]);
 
   // Simplified version of handleSendMessage that doesn't create automatic conversation
   const handleSendMessage = useCallback(async (message: string) => {

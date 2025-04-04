@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [vectorStoreId, setVectorStoreId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   async function fetchProfile(userId: string) {
     try {
@@ -237,36 +238,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign out
   async function signOut() {
     try {
-      setLoading(true)
-      setError(null)
+      // First set loading to true to indicate the operation is in progress
+      setLoading(true);
+      setError(null);
       
-      // Use zustand store's clearStore method to clean up guest profile data
-      const useProfileStore = (await import('@/stores/useProfileStore')).default;
-      useProfileStore.getState().clearStore();
+      // Clear local auth state first - this is most important for the UI
+      setUser(null);
+      setProfile(null);
+      setVectorStoreId(null);
       
-      // Use Supabase client directly instead of API route for logout
-      const { error } = await supabase.auth.signOut()
+      // IMPORTANT: Set loading to false immediately after clearing user
+      // This prevents the loading spinner from getting stuck
+      setLoading(false);
       
-      if (error) {
-        throw error
-      }
+      // Then clear stores - do this asynchronously without blocking
+      setTimeout(async () => {
+        try {
+          // Import and clear profile store
+          const useProfileStore = (await import('@/stores/useProfileStore')).default;
+          useProfileStore.getState().clearStore();
+          
+          // Import and clear conversation store
+          try {
+            const useConversationStore = (await import('@/stores/useConversationStore')).default;
+            useConversationStore.getState().resetState();
+            useConversationStore.getState().setAuthState(false, null);
+          } catch (e) {
+            console.error('Error clearing conversation store:', e);
+          }
+          
+          // Import and clear recommendations store
+          try {
+            const useRecommendationsStore = (await import('@/stores/useRecommendationsStore')).default;
+            useRecommendationsStore.getState().clearStore();
+            useRecommendationsStore.getState().setAuthState(false, null);
+          } catch (e) {
+            console.error('Error clearing recommendations store:', e);
+          }
+        } catch (e) {
+          console.error('Error clearing stores:', e);
+        }
+      }, 0);
       
-      setUser(null)
-      setProfile(null)
-      setVectorStoreId(null)
-      
-      // Redirect to homepage after logout
-      router.push('/')
+      // Handle sign out from Supabase - do this asynchronously without blocking the UI
+      setTimeout(async () => {
+        try {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            console.error('Supabase sign out error:', error);
+          }
+          
+          // Navigate as the final step
+          router.push('/');
+        } catch (error) {
+          console.error('Error during Supabase sign out:', error);
+        }
+      }, 50);
     } catch (error) {
-      console.error('Error signing out:', error)
-      if (error instanceof Error) {
-        setError(error.message)
-      } else {
-        setError('An unexpected error occurred during logout')
-      }
-      throw error
-    } finally {
-      setLoading(false)
+      console.error('Error signing out:', error);
+      setError(typeof error === 'string' ? error : 'An unexpected error occurred during logout');
+      // Ensure loading is set to false in case of error
+      setLoading(false);
     }
   }
 

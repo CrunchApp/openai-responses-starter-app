@@ -221,8 +221,8 @@ Provide 3 distinct educational pathways as a JSON array. Each pathway should be 
       "subfields": ["Specialization 1", "Specialization 2"],
       "targetRegions": ["Region 1", "Region 2"],
       "budgetRange": {
-        "min": minimum annual cost in USD,
-        "max": maximum annual cost in USD
+        "min": minimum annual cost in GBP,
+        "max": maximum annual cost in GBP
       },
       "duration": {
         "min": minimum duration in months,
@@ -381,6 +381,8 @@ function constructDetailedQuery(pathway: any, userProfile: UserProfile): string 
   
   // Create a structured query based on the pathway and user profile
   const query = `
+
+${pathway.queryString || ''}
 Find 5 specific ${pathway.qualificationType} programs in ${pathway.fieldOfStudy} 
 ${pathway.subfields ? `with specializations like ${pathway.subfields.join(', ')}` : ''}
 in ${pathway.targetRegions.join(', ')}. 
@@ -392,8 +394,6 @@ USER PREFERENCES:
 - Preferred locations: ${preferredLocations}
 - Study mode preference: ${userProfile.preferences.studyMode}
 - Target start date: ${userProfile.preferences.startDate}
-
-${pathway.queryString || ''}
 
 Format each program as a structured entry with: 
 - Name of program

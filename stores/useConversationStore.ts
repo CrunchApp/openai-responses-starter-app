@@ -19,6 +19,7 @@ interface ConversationState {
   isLoading: boolean;
   error: string | null;
   hydrated: boolean;
+  fetchingConversations: boolean; // Add a separate flag for conversation fetching
   
   // Items displayed in the chat
   chatMessages: Item[];
@@ -59,6 +60,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   isLoading: false,
   error: null,
   hydrated: true,
+  fetchingConversations: false, // Initialize the fetching flag
   
   chatMessages: [
     {
@@ -74,7 +76,13 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   setAuthState: (isAuthenticated, userId) => {
     set({ isAuthenticated, userId });
     if (isAuthenticated && userId) {
-      get().fetchConversations(); // Fetch conversations on auth
+      // Don't immediately fetch - use a debounced fetch to prevent cascading effects
+      setTimeout(() => {
+        // Only fetch if we're still authenticated (could have changed)
+        if (get().isAuthenticated && get().userId === userId) {
+          get().fetchConversations();
+        }
+      }, 100);
     } else {
       set({ conversations: [], activeConversationId: null }); // Clear on sign out
     }
@@ -87,22 +95,33 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   
   // Method to fetch conversations
   fetchConversations: async () => {
-    const { isAuthenticated, userId } = get();
-    if (!isAuthenticated || !userId) return;
+    const { isAuthenticated, userId, fetchingConversations } = get();
+    if (!isAuthenticated || !userId || fetchingConversations) return;
 
     try {
-      set({ isLoading: true, error: null });
+      // Set fetchingConversations to true, but don't change isLoading 
+      // to avoid triggering unnecessary re-renders in PageWrapper
+      set({ fetchingConversations: true, error: null });
+      
       const response = await fetch('/api/conversations');
       if (!response.ok) {
         throw new Error('Failed to fetch conversations');
       }
       const data = await response.json();
+      
+      // First, check if we're still in the same auth state before updating
+      const currentUserId = get().userId;
+      if (currentUserId !== userId) {
+        console.log('User changed during fetch, discarding results');
+        return;
+      }
+      
       set({ conversations: data.conversations || [] });
     } catch (error) {
       console.error('Error fetching conversations:', error);
       set({ error: 'Failed to load conversations' });
     } finally {
-      set({ isLoading: false });
+      set({ fetchingConversations: false });
     }
   },
   
@@ -154,7 +173,10 @@ const useConversationStore = create<ConversationState>((set, get) => ({
       });
 
       // 3. Fetch updated conversation list to include the new one with placeholder
-      await fetchConversations();
+      // Use setTimeout to avoid re-render cascade
+      setTimeout(() => {
+        fetchConversations();
+      }, 0);
 
       // 4. Asynchronously generate and update the title if first message exists
       if (firstMessageContent) {
@@ -479,12 +501,12 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   rawSet: set,
 }));
 
-// Fetch initial conversations when the store is initialized and user is authenticated
-useConversationStore.subscribe((state, prevState) => {
-  if (state.isAuthenticated && !prevState.isAuthenticated && state.userId) {
-    console.log("User authenticated, fetching initial conversations...");
-    state.fetchConversations();
-  }
-});
+// Remove the automatic subscribe handler that was causing cascading renders
+// useConversationStore.subscribe((state, prevState) => {
+//   if (state.isAuthenticated && !prevState.isAuthenticated && state.userId) {
+//     console.log("User authenticated, fetching initial conversations...");
+//     state.fetchConversations();
+//   }
+// });
 
 export default useConversationStore;

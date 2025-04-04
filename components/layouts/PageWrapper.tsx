@@ -72,8 +72,14 @@ export function PageWrapper({
   }
   
   // Show loading spinner if auth is loading or required stores are loading/not hydrated
+  // But only show the loading spinner initially, not when user is already authenticated and stores are hydrated
   const isHomePage = pathname === '/';
-  const showLoadingSpinner = !isHomePage && (authLoading || isStoreLoading || !requiredStoresHydrated);
+  const showLoadingSpinner = !isHomePage && (
+    // Don't show spinner if auth is loading but user is already null (during sign out)
+    (authLoading && user !== null) || 
+    (isStoreLoading && requiredStoresHydrated) || 
+    (!requiredStoresHydrated && !user) // Only show spinner for not hydrated stores if user is not yet authenticated
+  );
 
   // Wrap the content with ProtectedRoute for auth handling
   const wrappedContent = <ProtectedRoute>{children}</ProtectedRoute>;

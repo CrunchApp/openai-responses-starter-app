@@ -30,6 +30,7 @@ export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -56,10 +57,16 @@ export function Sidebar() {
   }, []);
 
   const handleSignOut = async () => {
+    // Prevent multiple sign-out clicks
+    if (isSigningOut) return;
+    
     try {
+      setIsSigningOut(true);
       await signOut();
     } catch (error) {
       console.error('Error signing out:', error);
+      // Reset the sign-out state to allow retry
+      setIsSigningOut(false);
     }
   };
 
@@ -265,16 +272,32 @@ export function Sidebar() {
             variant="outline"
             className="w-full flex items-center justify-center border-primary/20 hover:bg-primary/10 group"
             onClick={handleSignOut}
+            disabled={isSigningOut}
           >
-            <LogOut className="h-4 w-4 text-primary group-hover:text-primary-foreground group-hover:scale-110 transition-transform duration-300" />
-            <motion.span
-              initial={false}
-              animate={isCollapsed ? 'collapsed' : 'expanded'}
-              variants={contentVariants}
-              className="ml-2"
-            >
-              Sign Out
-            </motion.span>
+            {isSigningOut ? (
+              <>
+                <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <motion.span
+                  initial={false}
+                  animate={isCollapsed ? 'collapsed' : 'expanded'}
+                  variants={contentVariants}
+                >
+                  Signing Out...
+                </motion.span>
+              </>
+            ) : (
+              <>
+                <LogOut className="h-4 w-4 text-primary group-hover:text-primary-foreground group-hover:scale-110 transition-transform duration-300" />
+                <motion.span
+                  initial={false}
+                  animate={isCollapsed ? 'collapsed' : 'expanded'}
+                  variants={contentVariants}
+                  className="ml-2"
+                >
+                  Sign Out
+                </motion.span>
+              </>
+            )}
           </Button>
         ) : (
           <Link href="/auth/login">

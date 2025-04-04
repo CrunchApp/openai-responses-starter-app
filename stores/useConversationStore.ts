@@ -98,6 +98,12 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     const { isAuthenticated, userId, fetchingConversations } = get();
     if (!isAuthenticated || !userId || fetchingConversations) return;
 
+    // Safety timeout to ensure loading states are cleared
+    const safetyTimeout = setTimeout(() => {
+      console.log('[ConvStore] Safety timeout triggered in fetchConversations');
+      set({ fetchingConversations: false, isLoading: false });
+    }, 5000); // 5 seconds
+
     try {
       // Set fetchingConversations to true, but don't change isLoading 
       // to avoid triggering unnecessary re-renders in PageWrapper
@@ -121,7 +127,19 @@ const useConversationStore = create<ConversationState>((set, get) => ({
       console.error('Error fetching conversations:', error);
       set({ error: 'Failed to load conversations' });
     } finally {
+      clearTimeout(safetyTimeout);
       set({ fetchingConversations: false });
+      
+      // Additional safety to ensure loading state is cleared
+      setTimeout(() => {
+        set(state => {
+          if (state.isLoading || state.fetchingConversations) {
+            console.log('[ConvStore] Forcing loading states to false in finally block');
+            return { isLoading: false, fetchingConversations: false };
+          }
+          return {};
+        });
+      }, 500);
     }
   },
   
@@ -242,6 +260,12 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   },
   
   loadConversation: async (conversationId) => {
+    // Safety timeout to ensure loading state is cleared
+    const safetyTimeout = setTimeout(() => {
+      console.log('[ConvStore] Safety timeout triggered in loadConversation');
+      set({ isLoading: false });
+    }, 10000); // 10 seconds
+
     try {
       set({ isLoading: true, error: null });
       
@@ -404,6 +428,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
       set({ error: errorMessage });
       return false;
     } finally {
+      clearTimeout(safetyTimeout);
       set({ isLoading: false });
     }
   },

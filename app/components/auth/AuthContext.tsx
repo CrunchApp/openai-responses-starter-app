@@ -109,40 +109,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     async function getInitialSession() {
       try {
+        // Begin with loading true
+        console.log("[AuthContext] Starting initial session check");
+        if (isMounted) setLoading(true);
+        
         // Get current session
-        const { data: { session }, error } = await supabase.auth.getSession()
+        const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('Session error:', error)
+          console.error('[AuthContext] Session error:', error);
           if (isMounted) {
-            setError('Failed to load user session')
-            setLoading(false)
+            setError('Failed to load user session');
+            setLoading(false);
           }
-          return
+          return;
         }
         
         if (session?.user) {
-          if (isMounted) setUser(session.user)
+          console.log('[AuthContext] Initial session found:', session.user.id);
+          if (isMounted) setUser(session.user);
           
           // Fetch user profile
-          const profileData = await fetchProfile(session.user.id)
-          if (isMounted) setProfile(profileData)
+          const profileData = await fetchProfile(session.user.id);
+          if (isMounted) {
+            setProfile(profileData);
+            console.log('[AuthContext] Profile set, setting loading to false');
+            setLoading(false);
+          }
+        } else {
+          console.log('[AuthContext] No initial session found');
+          if (isMounted) {
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+          }
         }
       } catch (error) {
-        console.error('Error getting initial session:', error)
-        if (isMounted) setError('Failed to load user session')
+        console.error('[AuthContext] Error getting initial session:', error);
+        if (isMounted) {
+          setError('Failed to load user session');
+          setLoading(false);
+        }
       } finally {
-        if (isMounted) setLoading(false)
+        if (isMounted) {
+          // Force loading to false no matter what happened above
+          console.log('[AuthContext] Finally setting loading to false');
+          setLoading(false);
+        }
       }
     }
 
-    getInitialSession()
+    getInitialSession();
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`Auth state changed: ${event}`);
+      console.log(`[AuthContext] Auth state changed: ${event}`);
+      
+      // Force loading to true at the start of any auth change
+      if (isMounted) setLoading(true);
       
       if (session?.user) {
+        console.log(`[AuthContext] User authenticated in state change: ${session.user.id}`);
         if (isMounted) setUser(session.user);
         
         // Fetch user profile
@@ -152,9 +179,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isMounted) {
           setProfile(profileData);
           // Explicitly set loading to false after user and profile are set
+          console.log('[AuthContext] Setting loading to false after profile fetch');
           setLoading(false);
         }
       } else {
+        console.log('[AuthContext] No user in auth state change');
         if (isMounted) {
           setUser(null);
           setProfile(null);
@@ -162,14 +191,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       }
-    })
+      
+      // Always force loading to false at the end of auth change
+      if (isMounted) {
+        setTimeout(() => {
+          console.log('[AuthContext] Additional forced loading state reset');
+          if (isMounted) setLoading(false);
+        }, 300);
+      }
+    });
 
     return () => {
       isMounted = false;
       // Clean up subscription
-      authListener.subscription.unsubscribe()
-    }
-  }, [])
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   // Sign up with email and password
   async function signUp(email: string, password: string, firstName: string, lastName: string) {

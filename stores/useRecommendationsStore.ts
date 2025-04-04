@@ -251,6 +251,12 @@ const useRecommendationsStore = create<RecommendationsState>()(
         
         console.log(`[RecStore] >>> ENTER syncWithSupabase for user: ${userId}`);
 
+        // Set a safety timeout to ensure loading state is cleared
+        const safetyTimeout = setTimeout(() => {
+          console.warn('[RecStore] Safety timeout triggered - forcing loading state to false');
+          set({ isLoading: false });
+        }, 5000); // 5 second timeout
+
         try {
           set({ isLoading: true, error: null });
           console.log(`[RecStore] State set to isLoading=true`);
@@ -294,6 +300,18 @@ const useRecommendationsStore = create<RecommendationsState>()(
             error: 'Failed to sync recommendations with server',
             isLoading: false
           });
+        } finally {
+          clearTimeout(safetyTimeout);
+          // Force loading to false after a short delay
+          setTimeout(() => {
+            set(state => {
+              if (state.isLoading) {
+                console.log('[RecStore] Forcing loading state to false in finally block');
+                return { isLoading: false };
+              }
+              return {};
+            });
+          }, 500);
         }
       },
       

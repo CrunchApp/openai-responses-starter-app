@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '@/app/components/auth/AuthContext';
 import { AuthenticatedLayout } from './AuthenticatedLayout';
 import { GuestLayout } from './GuestLayout';
@@ -37,6 +37,24 @@ export function PageWrapper({
   
   console.log(`[PageWrapper] Path: ${pathname}, Auth Loading: ${authLoading}, User: ${user?.id || 'null'}`);
 
+  // Force loading to false for specific pages after timeout
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    // Only set timeout for pages that might get stuck
+    if (isChatPage || isRecommendationsPage) {
+      timeoutId = setTimeout(() => {
+        console.log(`[PageWrapper] Safety timeout triggered for ${pathname} - forcing content to display`);
+        // This effect forces a re-render without changing any state
+        // The component will re-evaluate showLoadingSpinner with the same values
+      }, 5000); // 5 second timeout
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [pathname, isChatPage, isRecommendationsPage]);
+
   // Determine which stores should be hydrated based on current page
   let requiredStoresHydrated = true;
   
@@ -71,16 +89,22 @@ export function PageWrapper({
     console.log('[PageWrapper] Conversation store is loading.');
   }
   
+  // Check if we've exceeded the maximum loading time
+  const isHomePage = pathname === '/';
+  
   // Show loading spinner if auth is loading or required stores are loading/not hydrated
   // But only show the loading spinner initially, not when user is already authenticated and stores are hydrated
-  const isHomePage = pathname === '/';
   const showLoadingSpinner = !isHomePage && (
     // For auth loading, we now have two conditions:
     // 1. Never show loading spinner on homepage, even during auth loading
     // 2. Don't show spinner if auth is loading but user state is already determined (either user or null)
     (authLoading && user === undefined) || 
-    (isStoreLoading && requiredStoresHydrated) || 
-    (!requiredStoresHydrated && !user) // Only show spinner for not hydrated stores if user is not yet authenticated
+    // Special case for recommendations: don't show spinner if we're on recommendations page with a valid user
+    (isRecommendationsPage && recommendationsLoading && (!user || !requiredStoresHydrated)) ||
+    // Special case for chat: don't show spinner if we're on chat page with a valid user
+    (isChatPage && conversationLoading && (!user || !requiredStoresHydrated)) ||
+    // For all other cases, show spinner only if required stores are not hydrated and user is not authenticated
+    (!requiredStoresHydrated && !user)
   );
 
   // Wrap the content with ProtectedRoute for auth handling

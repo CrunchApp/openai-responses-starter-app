@@ -168,14 +168,9 @@ export default function Assistant() {
         </div> */}
       </div>
       
-      {isLoading ? (
-        <div className="flex justify-center items-center h-[calc(100%-4rem)]">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      ) : (
-        <Chat items={chatMessages} onSendMessage={handleSendMessage} />
-      )}
-      
+      {/* Always render Chat, loading is handled inside */}
+      <Chat items={chatMessages} onSendMessage={handleSendMessage} />
+            
       {error && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded shadow-lg">
           {error}

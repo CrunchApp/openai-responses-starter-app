@@ -9,6 +9,7 @@ import { ArrowRight, Sparkles, Brain, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import useProfileStore from "@/stores/useProfileStore";
 import useToolsStore from "@/stores/useToolsStore";
+import AnimatedLogo from "@/components/ui/AnimatedLogo";
 
 export default function WelcomeStep({
   profileData,
@@ -101,7 +102,9 @@ export default function WelcomeStep({
       >
         <div className="flex justify-center">
           <div className="p-4 bg-purple-100 rounded-full inline-block">
-            <Sparkles className="h-10 w-10 text-purple-600" />
+            <div style={{ position: 'relative', left: '-15px' }}>
+              <AnimatedLogo className="h-10 w-10 text-purple-600" />
+            </div>
           </div>
         </div>
         <h2 className="text-3xl font-bold text-gray-900">Welcome to Vista</h2>

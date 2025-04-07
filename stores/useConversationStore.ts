@@ -412,7 +412,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   setConversationItems: (messages) => set({ conversationItems: messages }),
   
   addChatMessage: async (item, skipAddToChat = false) => {
-    const { activeConversationId, isAuthenticated, userId, chatMessages } = get();
+    const { activeConversationId, isAuthenticated, userId, chatMessages, conversations, updateConversationTitleInState } = get();
     
     // Update local state immediately if not skipped
     if (!skipAddToChat) {
@@ -435,6 +435,52 @@ const useConversationStore = create<ConversationState>((set, get) => ({
             // For user messages, get the text from input_text
             if (messageItem.role === 'user' && messageItem.content[0].type === 'input_text') {
               messageContent = messageItem.content[0].text || '';
+              
+              // Check if this is the first user message in a conversation with a placeholder title
+              const currentConversation = conversations.find((conv) => conv.id === activeConversationId);
+              if (currentConversation && currentConversation.title === "Generating title..." && chatMessages.length <= 2) {
+                // This is the first message in a conversation created with the Plus button
+                // Trigger title generation
+                console.log(`Generating title for conversation ${activeConversationId} after first message...`);
+                
+                // Generate title asynchronously in the background
+                (async () => {
+                  try {
+                    const titleResponse = await fetch('/api/generate-title', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ messageContent: messageContent }),
+                    });
+
+                    if (!titleResponse.ok) {
+                      console.error('Failed to generate title:', await titleResponse.text());
+                      return;
+                    }
+
+                    const { title: generatedTitle } = await titleResponse.json();
+                    console.log(`Generated title for ${activeConversationId}: "${generatedTitle}"`);
+
+                    // Update the conversation title in the database
+                    const updateResponse = await fetch(`/api/conversations/${activeConversationId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ title: generatedTitle }),
+                    });
+
+                    if (!updateResponse.ok) {
+                      console.error('Failed to update conversation title in DB:', await updateResponse.text());
+                      return;
+                    }
+
+                    console.log(`Successfully updated title for ${activeConversationId} in DB.`);
+
+                    // Update the title in the local state for immediate UI reflection
+                    updateConversationTitleInState(activeConversationId, generatedTitle);
+                  } catch (err) {
+                    console.error(`Error during title generation/update for ${activeConversationId}:`, err);
+                  }
+                })();
+              }
             } 
             // For assistant messages, get the text from output_text
             else if (messageItem.role === 'assistant' && messageItem.content[0].type === 'output_text') {

@@ -120,8 +120,8 @@ export function Sidebar() {
               <Image
                 src="/vista_logo.png"
                 alt="Vista Logo"
-                width={48}
-                height={48}
+                width={96}
+                height={96}
                 className="mr-2"
               />
             </div>

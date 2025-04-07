@@ -57,9 +57,9 @@ function ProfileContent() {
   // Render wizard ONLY for guests (isEditMode might be true or false for guests)
   return (
     <div className="container mx-auto py-8 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">
+      {/* <h1 className="text-3xl font-bold mb-6">
         {isEditMode ? "Edit Your Profile" : "Education Profile Setup"}
-      </h1>
+      </h1> */}
       <ProfileWizard isEditMode={isEditMode} />
     </div>
   );

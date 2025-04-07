@@ -18,7 +18,6 @@ import {
   User,
   AlertCircle,
   Trash2,
-  Loader2,
   Lock,
   Shield,
   CheckCircle2
@@ -70,6 +69,7 @@ import GuestLimitMonitor from "@/components/GuestLimitMonitor";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import { PageWrapper } from "@/components/layouts/PageWrapper";
 import { RecommendationProgressModal, RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
+import AnimatedLogo from "@/components/ui/AnimatedLogo";
 
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
@@ -685,7 +685,10 @@ export default function RecommendationsPage() {
 
   // If still initializing, show loading indicator
   if (isInitializing || !hydrated || authLoading) {
-    return <HydrationLoading />;
+    return <HydrationLoading isHydrated={hydrated} onReadyToUnmount={() => {
+      // This will be called when the loading component is ready to unmount (after 3 seconds)
+      console.log("Hydration loading complete with minimum display time");
+    }} />;
   }
 
   // Add the Modal
@@ -750,7 +753,7 @@ export default function RecommendationsPage() {
                     >
                       {isResetting ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <AnimatedLogo size={20} className="mr-2" />
                           Deleting...
                         </>
                       ) : (
@@ -792,7 +795,7 @@ export default function RecommendationsPage() {
                 >
                   {isModalOpen ? (
                     <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      <AnimatedLogo size={25} className="mr-2" />
                       Generating...
                     </>
                   ) : (
@@ -823,7 +826,7 @@ export default function RecommendationsPage() {
             
             {isModalOpen && isAppending && (
               <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md mb-6 flex items-start">
-                <Loader2 className="h-5 w-5 mr-2 mt-0.5 text-blue-500 animate-spin" />
+                <AnimatedLogo size={25} className="mr-2 mt-0.5" />
                 <div>
                   <p className="font-medium">Finding more recommendations</p>
                   <p className="text-sm">
@@ -913,7 +916,7 @@ export default function RecommendationsPage() {
                             >
                               {isModalOpen ? (
                                 <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  <AnimatedLogo size={25} className="mr-2" />
                                   Generating...
                                 </>
                               ) : (
@@ -937,7 +940,7 @@ export default function RecommendationsPage() {
                                 >
                                   {isResettingRecommendations ? (
                                     <>
-                                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                      <AnimatedLogo size={20} className="mr-2" />
                                       Resetting...
                                     </>
                                   ) : (
@@ -965,7 +968,7 @@ export default function RecommendationsPage() {
                                   >
                                     {isResettingRecommendations ? (
                                       <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        <AnimatedLogo size={20} className="mr-2" />
                                         Resetting...
                                       </>
                                     ) : (
@@ -1247,7 +1250,7 @@ export default function RecommendationsPage() {
                     >
                       {isModalOpen ? (
                         <>
-                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          <AnimatedLogo size={25} className="mr-2" />
                           Generating...
                         </>
                       ) : (

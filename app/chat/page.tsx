@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import useConversationStore from "@/stores/useConversationStore";
 import Assistant from "@/components/assistant";
 import ToolsPanel from "@/components/tools-panel";
 import ConversationSelector from "@/components/conversation-selector";
@@ -8,9 +9,11 @@ import { motion } from "framer-motion";
 import { gsap } from 'gsap';
 import { PageWrapper } from "@/components/layouts/PageWrapper";
 import { Button } from "@/components/ui/button";
+import AnimatedLogo from "@/components/ui/AnimatedLogo";
 
 export default function ChatPage() {
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
+  const { isLoading } = useConversationStore();
   
   // Add subtle animations to decorative elements
   useEffect(() => {
@@ -75,6 +78,18 @@ export default function ChatPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="w-full md:w-[70%] relative bg-gradient-to-b from-background to-background/95"
           >
+            {/* Loading Overlay */}
+            {isLoading && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute inset-0 bg-background/70 backdrop-blur-sm flex justify-center items-center z-20"
+              >
+                <AnimatedLogo size={160} />
+              </motion.div>
+            )}
             <Assistant />
           </motion.div>
           

@@ -208,7 +208,7 @@ export default function Home() {
           
           {/* Move the scroll prompt up */}
           {scrollPromptVisible && (
-            <div className="scroll-prompt absolute bottom-32 left-1/2 transform -translate-x-1/2 flex flex-col items-center cursor-pointer" onClick={() => window.scrollTo({ top: window.innerHeight - 100, behavior: 'smooth' })}>
+            <div className="scroll-prompt absolute bottom-32 left-1/2 transform -translate-x-1/2 flex flex-col items-center cursor-pointer" onClick={() => window.scrollTo({ top: window.innerHeight + 190, behavior: 'smooth' })}>
               <span className="text-sm text-foreground/70 mb-2">Discover More</span>
               <ChevronDown className="h-6 w-6 text-primary animate-bounce" />
             </div>

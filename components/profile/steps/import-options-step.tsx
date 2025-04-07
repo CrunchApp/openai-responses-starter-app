@@ -4,11 +4,9 @@ import { ImportOptionsStepProps } from "../profile-wizard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth0 } from "@auth0/auth0-react";
 import DocumentUpload from "@/components/document-upload";
 import { 
   ArrowRight, 
-  Linkedin, 
   Upload, 
   FileText, 
   AlertCircle, 
@@ -28,8 +26,7 @@ export default function ImportOptionsStep({
   setProfileData,
   onComplete,
 }: ImportOptionsStepProps) {
-  const [activeTab, setActiveTab] = useState("linkedin");
-  const [importStatus, setImportStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [activeTab, setActiveTab] = useState("documents");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showTip, setShowTip] = useState(true);
   const [extractingInfo, setExtractingInfo] = useState(false);
@@ -54,8 +51,6 @@ export default function ImportOptionsStep({
     statementOfPurpose: !!profileData.documents.statementOfPurpose?.fileId,
   });
   
-  const { loginWithPopup, getAccessTokenSilently } = useAuth0();
-
   // Get vectorStoreId AND hydration state from store
   const { vectorStoreId: storeVectorStoreId, hydrated } = useProfileStore();
 
@@ -131,77 +126,6 @@ export default function ImportOptionsStep({
     };
   }, [extractingInfo]);
 
-  const handleLinkedInImport = async () => {
-    setImportStatus("loading");
-    setErrorMessage(null);
-    
-    try {
-      await loginWithPopup({
-        authorizationParams: {
-          connection: 'linkedin',
-          scope: 'openid profile email',
-        }
-      });
-      
-      // Get the access token
-      const accessToken = await getAccessTokenSilently({
-        authorizationParams: {
-          audience: 'https://api.linkedin.com/',
-          scope: 'openid profile email r_emailaddress r_liteprofile r_basicprofile',
-        },
-      });
-      
-      // Fetch LinkedIn profile data
-      const response = await fetch('/api/auth/linkedin-profile', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch LinkedIn profile data');
-      }
-      
-      const linkedInData = await response.json();
-      
-      // Update profile data with LinkedIn information
-      setProfileData(prevData => ({
-        ...prevData,
-        firstName: linkedInData.firstName || prevData.firstName,
-        lastName: linkedInData.lastName || prevData.lastName,
-        email: linkedInData.email || prevData.email,
-        phone: linkedInData.phone || prevData.phone,
-        linkedInProfile: linkedInData.profileUrl,
-        // Map education data if available
-        ...(linkedInData.education && {
-          education: linkedInData.education.map((edu: any) => ({
-            degreeLevel: edu.degree || "",
-            institution: edu.schoolName || "",
-            fieldOfStudy: edu.fieldOfStudy || "",
-            graduationYear: edu.endDate?.year?.toString() || "",
-          })),
-        }),
-        // Map career and skills data if available
-        ...(linkedInData.positions && {
-          careerGoals: {
-            ...prevData.careerGoals,
-            desiredIndustry: 
-              linkedInData.positions.map((pos: any) => pos.industry || "").filter(Boolean),
-            desiredRoles: 
-              linkedInData.positions.map((pos: any) => pos.title || "").filter(Boolean),
-          },
-          skills: linkedInData.skills?.map((skill: any) => skill.name || "").filter(Boolean) || [],
-        }),
-      }));
-      
-      setImportStatus("success");
-    } catch (error) {
-      console.error("LinkedIn import error:", error);
-      setImportStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "Failed to import LinkedIn profile");
-    }
-  };
-
   // Handle when a file is added to the vector store
   const handleFileUploaded = (fileId: string, type: string) => {
     setProfileData((prevData) => ({
@@ -228,8 +152,8 @@ export default function ImportOptionsStep({
     // Check if any documents have been uploaded
     const hasUploadedDocuments = Object.values(uploadedFiles).some(Boolean);
     
-    // If no documents or LinkedIn data, just proceed to the next step
-    if (!hasUploadedDocuments && importStatus !== "success") {
+    // If no documents, just proceed to the next step
+    if (!hasUploadedDocuments) {
       onComplete();
       return;
     }
@@ -400,8 +324,7 @@ export default function ImportOptionsStep({
 
   // Calculate the number of uploaded documents
   const uploadedCount = Object.values(uploadedFiles).filter(Boolean).length;
-  const linkedInImported = importStatus === "success";
-  const hasImportedData = linkedInImported || uploadedCount > 0;
+  const hasImportedData = uploadedCount > 0;
 
   // Determine if document upload should be enabled
   const isDocumentUploadEnabled = hydrated && !!storeVectorStoreId;
@@ -522,7 +445,7 @@ export default function ImportOptionsStep({
       <div className="text-center space-y-2 mb-4">
         <h2 className="text-2xl font-semibold">Tell Vista About Yourself</h2>
         <p className="text-zinc-500 max-w-md mx-auto">
-          Import your professional profile or upload documents to help Vista understand your background.
+          Upload documents to help Vista understand your background.
         </p>
       </div>
 
@@ -547,8 +470,8 @@ export default function ImportOptionsStep({
               <div>
                 <p className="text-sm text-blue-800 font-medium">Save time with imports</p>
                 <p className="text-xs text-blue-600 mt-1">
-                  You can import from LinkedIn and upload documents to automatically fill parts of your profile.
-                  This step is optional—you can also enter all information manually in the next steps.
+                  You can upload documents to automatically fill parts of your profile.
+                  This step is optional. You can also enter all information manually in the next steps.
                 </p>
               </div>
             </div>
@@ -557,17 +480,7 @@ export default function ImportOptionsStep({
       </AnimatePresence>
 
       <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-2 mb-6">
-          <TabsTrigger 
-            value="linkedin" 
-            className="flex items-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-          >
-            <Linkedin size={16} />
-            LinkedIn Import
-            {linkedInImported && (
-              <CheckCircle2 size={16} className="text-green-500 data-[state=active]:text-white" />
-            )}
-          </TabsTrigger>
+        <TabsList className="hidden mb-6">
           <TabsTrigger 
             value="documents" 
             className="flex items-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
@@ -581,48 +494,6 @@ export default function ImportOptionsStep({
             )}
           </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="linkedin" className="space-y-4">
-          <Card className="p-6 border-2 border-dashed border-blue-200 bg-blue-50">
-            <div className="flex flex-col items-center space-y-4">
-              <Linkedin className="h-12 w-12 text-blue-700" />
-              <h3 className="text-xl font-medium text-center">Import from LinkedIn</h3>
-              <p className="text-sm text-center text-zinc-600 max-w-md">
-                Automatically fill your profile details with information from your LinkedIn account.
-                We'll only access the data you authorize.
-              </p>
-              
-              {importStatus === "success" && (
-                <div className="flex items-center space-x-2 text-green-600 bg-green-50 p-3 rounded-md w-full">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <span>Successfully imported your LinkedIn profile!</span>
-                </div>
-              )}
-              
-              {importStatus === "error" && (
-                <div className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-md w-full">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>{errorMessage || "Failed to import LinkedIn profile. Please try again."}</span>
-                </div>
-              )}
-              
-              <Button 
-                onClick={handleLinkedInImport}
-                disabled={importStatus === "loading"}
-                className={`w-full ${importStatus === "success" 
-                  ? "bg-green-600 hover:bg-green-700" 
-                  : "bg-blue-700 hover:bg-blue-800"} text-white`}
-                size="lg"
-              >
-                {importStatus === "loading" 
-                  ? "Importing..." 
-                  : importStatus === "success" 
-                    ? "Successfully Imported" 
-                    : "Import from LinkedIn"}
-              </Button>
-            </div>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="documents" className="p-0 border-none">
           <div className="text-sm text-zinc-700 mb-4">

@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { z } from 'zod';
 import { useAuth } from "@/app/components/auth/AuthContext"; // Import useAuth
 import DocumentUpload from "@/components/document-upload";
+import AnimatedLogo from '@/components/ui/AnimatedLogo';
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -670,13 +671,10 @@ export default function ProfileDashboard() {
   if (authLoading || (isLoading && user)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gradient-to-b from-background to-background/95">
-        <div className="w-20 h-20 relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 rounded-full blur-lg animate-pulse"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="h-10 w-10 text-primary animate-spin" />
-          </div>
+        <div className="flex justify-center w-full">
+          <AnimatedLogo size={100} />
         </div>
-        <p className="mt-6 text-lg text-foreground/70 animate-pulse">Loading your profile...</p>
+        <p className="mt-6 text-lg text-foreground/70">Loading your profile...</p>
       </div>
     );
   }

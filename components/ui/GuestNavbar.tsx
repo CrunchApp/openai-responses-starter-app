@@ -23,8 +23,8 @@ export function GuestNavbar() {
               <Image
                 src="/vista_logo.png"
                 alt="Vista Logo"
-                width={64}
-                height={64}
+                width={96}
+                height={96}
                 className="mr-2"
               />
             </Link>

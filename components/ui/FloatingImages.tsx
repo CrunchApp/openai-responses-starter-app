@@ -13,12 +13,12 @@ if (typeof window !== 'undefined') {
 const initialImages = [
   {
     src: '/images/-post-ai-image-1089.png.webp',
-    top: '15vh', left: '17vw', width: '14vw', height: 'auto',
+    top: '17vh', left: '17vw', width: '14vw', height: 'auto',
     speed: -0.2
   },
   {
     src: '/images/b5523e19642d4d5ba21db1b3494f0666.jpg',
-    top: '10vh', left: '50vw', width: '18vw', height: 'auto',
+    top: '17vh', left: '55vw', width: '18vw', height: 'auto',
     speed: 0.3
   },
   {
@@ -28,7 +28,7 @@ const initialImages = [
   },
   {
     src: '/images/11062b_a5f0c551c3bf4fefbd09cf3ad35aace7~mv2.jpeg',
-    top: '70vh', left: '70vw', width: '16vw', height: 'auto',
+    top: '70vh', left: '65vw', width: '16vw', height: 'auto',
     speed: 0.2
   },
   {

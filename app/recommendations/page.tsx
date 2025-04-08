@@ -712,11 +712,8 @@ export default function RecommendationsPage() {
                 transition={{ duration: 0.5 }}
               >
                 <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                  Hi {userProfile.firstName}, welcome to your education dashboard
+                  Hi {userProfile.firstName ? `${userProfile.firstName}, ` : ''}welcome to your education dashboard
                 </h1>
-                {/* <p className="text-zinc-600">
-                  Exploring {userProfile.goal} programs in {userProfile.desiredField} based on your profile
-                </p> */}
                 
                 {/* Account status indicator */}
                 {!isAuthenticated && (
@@ -729,41 +726,55 @@ export default function RecommendationsPage() {
                 )}
               </motion.div>
               
-              {(!isAuthenticated) && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Start Over
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={handleReset} 
-                      className="bg-red-500 hover:bg-red-600"
-                      disabled={isResetting}
-                    >
-                      {isResetting ? (
-                        <>
-                          <AnimatedLogo size={20} className="mr-2" />
-                          Deleting...
-                        </>
-                      ) : (
-                        "Reset Everything"
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-              )}
+              {/* Container for buttons on the right */}
+              <div className="flex gap-2">
+                {/* Edit Profile Button - Always visible */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => router.push(isAuthenticated ? "/profile" : "/profile-wizard?edit=true")}
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit Profile
+                </Button>
+
+                {/* Start Over Button - Only for guests */}
+                {!isAuthenticated && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Start Over
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={handleReset} 
+                          className="bg-red-500 hover:bg-red-600"
+                          disabled={isResetting}
+                        >
+                          {isResetting ? (
+                            <>
+                              <AnimatedLogo size={20} className="mr-2" />
+                              Deleting...
+                            </>
+                          ) : (
+                            "Reset Everything"
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
             </div>
             
             {/* Guest limit warning */}
@@ -896,14 +907,7 @@ export default function RecommendationsPage() {
                         </div>
                         
                         <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => router.push("/profile?edit=true")}
-                          >
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit Profile
-                          </Button>
+                          {/* Edit Profile button removed from here */}
                           
                           {/* Only show generate more recommendations button for authenticated users 
                               or guests who haven't reached their limit */}

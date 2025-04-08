@@ -39,7 +39,9 @@ export default function HydrationLoading({
         className="flex flex-col items-center bg-white/50 backdrop-blur-sm p-8 rounded-lg shadow-sm"
       >
         <div className="flex justify-center w-full">
+        <div style={{ position: 'relative', left: '-20px' }}>
           <AnimatedLogo size={120} className="mb-4" />
+        </div>
         </div>
         <p className="text-base font-medium text-primary mb-1">Loading your data</p>
         <p className="text-sm text-muted-foreground">Please wait while we restore your session...</p>

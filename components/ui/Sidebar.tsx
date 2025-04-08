@@ -122,7 +122,7 @@ export function Sidebar() {
                 alt="Vista Logo"
                 width={96}
                 height={96}
-                className="mr-2"
+                className="mr"
               />
             </div>
           </motion.div>

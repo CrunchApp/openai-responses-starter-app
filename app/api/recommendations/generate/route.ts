@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
 async function generateEducationPathways(userProfile: UserProfile): Promise<any> {
   try {
     const prompt = `
-You are an expert career and education pathway planner with deep knowledge of global educational systems, career trajectories, and non-traditional pathways. Your task is to analyze a user's profile and generate creative, tailored education pathway suggestions.
+Your task is to analyze a user's profile and generate creative, tailored education pathway suggestions.
 
 SPECIFIC DETAILS TO CONSIDER:
 1. Educational Background:
@@ -242,7 +242,7 @@ Think carefully about each suggestion and ensure they truly fit the user's uniqu
     const completion = await openai.chat.completions.create({
       model: "o3-mini-2025-01-31", 
       messages: [
-        { role: "system", content: "You are an expert career and education pathway planner with decades of experience." },
+        { role: "system", content: "You are an expert career and education pathway planner with decades of experience and deep knowledge of global educational systems, career opportunities, and non-traditional trajectories." },
         { role: "user", content: prompt }
       ],
 
@@ -353,7 +353,7 @@ async function researchSpecificPrograms(pathways: any, userProfile: UserProfile)
     // Sort by match score before returning
     return successfulResults
       .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, 15); // Limit to top 10 recommendations
+      .slice(0, 15); // Limit to top 15 recommendations
   } catch (error: any) {
     console.error('Error researching specific programs:', {
       message: error.message, 

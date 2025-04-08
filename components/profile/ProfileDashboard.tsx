@@ -672,7 +672,9 @@ export default function ProfileDashboard() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gradient-to-b from-background to-background/95">
         <div className="flex justify-center w-full">
+          <div style={{ position: 'relative', left: '-20px' }}>
           <AnimatedLogo size={100} />
+          </div>
         </div>
         <p className="mt-6 text-lg text-foreground/70">Loading your profile...</p>
       </div>

@@ -58,7 +58,9 @@ export function PageWrapper({
   if ((authLoading || showLoader) && !isHomePage) {
     return (
       <div className="flex items-center justify-center min-h-screen absolute inset-0 bg-background z-50">
-        <AnimatedLogo size={300} />
+        <div style={{ position: 'relative', left: '-55px' }}>
+          <AnimatedLogo size={300} />
+        </div>
       </div>
     );
   }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/components/auth/AuthContext';
-import useRecommendationsStore from '@/stores/useRecommendationsStore';
+import usePathwayStore from '@/stores/usePathwayStore';
 import useProfileStore from '@/stores/useProfileStore';
 import useToolsStore from '@/stores/useToolsStore';
 import useConversationStore from '@/stores/useConversationStore';
@@ -13,22 +13,21 @@ import useConversationStore from '@/stores/useConversationStore';
  */
 export default function AuthSynchronizer() {
   // Get state from AuthContext
-  const { user, profile, vectorStoreId: authVectorStoreId, loading: authLoading } = useAuth();
+  const { user, profile, vectorStoreId: authVectorStoreId, loading: authLoading, error: authError } = useAuth();
   
   // Add state to track syncing status to prevent redundant operations
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Get actions and states from Zustand stores
   const {
-    setAuthState: setRecAuthState,
-    clearStore: clearRecommendationsStore,
-    syncWithSupabase: syncRecsWithSupabase
-  } = useRecommendationsStore();
+    setAuthState: setPathwayAuthState,
+    clearStore: clearPathwayStore,
+    syncWithSupabase: syncPathwaysWithSupabase
+  } = usePathwayStore();
 
   const {
     clearStore: clearProfileStore,
     setVectorStoreId: setProfileVectorStoreId,
-    setProfileData: setProfileStoreData
   } = useProfileStore();
 
   // Get Tools Store state
@@ -39,7 +38,6 @@ export default function AuthSynchronizer() {
   const {
     setAuthState: setConvAuthState,
     resetState: clearConversationState,
-    resetState: resetConversationState
   } = useConversationStore();
 
   // Track previous user state to detect login/logout transitions
@@ -48,65 +46,60 @@ export default function AuthSynchronizer() {
 
   // Effect to handle User Login/Logout Transitions
   useEffect(() => {
-    // Only proceed if auth is no longer loading and we're not already syncing
     if (authLoading || isSyncing) return;
 
     const currentUser = user;
     const previousUser = prevUserRef.current;
     
-    // Only take action if there's an actual change
-    if (
-      (currentUser?.id === previousUser?.id) && 
-      ((!currentUser && !previousUser) || (currentUser && previousUser))
-    ) {
-      return;
+    const userIdChanged = currentUser?.id !== previousUser?.id;
+    const loginStatusChanged = !!currentUser !== !!previousUser;
+
+    if (!userIdChanged && !loginStatusChanged) {
+      return; // No relevant change
     }
 
-    // Mark that we're starting a sync operation
     setIsSyncing(true);
 
     const syncStores = async () => {
       try {
-        // User Logged In
-        if (currentUser && !previousUser) {
-          console.log(`[AuthSynchronizer] User logged in: ${currentUser.id}`);
-          
-          // Set auth state in stores
-          setRecAuthState(true, currentUser.id);
+        // User Logged In or Changed
+        if (currentUser && (userIdChanged || loginStatusChanged)) {
+          console.log(`[AuthSynchronizer] User logged in or changed: ${currentUser.id}`);
+          setPathwayAuthState(true, currentUser.id);
           setConvAuthState(true, currentUser.id);
           
-          // Explicitly call syncRecsWithSupabase to ensure recommendations are fetched
           try {
-            await syncRecsWithSupabase(currentUser.id);
+            // Sync pathways only if the user ID actually changed or they logged in
+            if (userIdChanged || loginStatusChanged) {
+                await syncPathwaysWithSupabase(currentUser.id);
+            }
           } catch (e) {
-            console.error("Rec sync error on login:", e);
+            console.error("Pathway sync error on login/change:", e);
           }
         }
         // User Logged Out
         else if (!currentUser && previousUser) {
           console.log(`[AuthSynchronizer] User logged out`);
-          
-          // Set auth state to false in stores
-          setRecAuthState(false, null);
+          setPathwayAuthState(false, null);
           setConvAuthState(false, null);
 
-          // Clear user-specific data from stores
-          clearRecommendationsStore();
+          clearPathwayStore();
           clearProfileStore();
-          clearConversationState();
-
-          // Reset conversation state to initial message for guest view
-          resetConversationState();
+          clearConversationState(); 
         }
-        // No user session - ensure stores are in logged-out state
-        else if (!currentUser && !previousUser && !authLoading) {
-          setRecAuthState(false, null);
-          setConvAuthState(false, null);
+        // Initial Load or No Change (after loading finishes)
+        else if (!authLoading) {
+           // Ensure auth state reflects reality even if no major transition occurred
+           setPathwayAuthState(!!currentUser, currentUser?.id || null);
+           setConvAuthState(!!currentUser, currentUser?.id || null);
+        }
+
+        if (authError) {
+           console.error("[AuthSynchronizer] Auth Error:", authError);
         }
       } catch (error) {
-        console.error("[AuthSynchronizer] Error synchronizing stores:", error);
+        console.error("[AuthSynchronizer] Error synchronizing stores on auth change:", error);
       } finally {
-        // Update previous user reference and end syncing
         prevUserRef.current = currentUser;
         setIsSyncing(false);
       }
@@ -117,35 +110,29 @@ export default function AuthSynchronizer() {
     user, 
     authLoading, 
     isSyncing,
-    setRecAuthState, 
+    setPathwayAuthState,
     setConvAuthState,
-    syncRecsWithSupabase,
-    clearRecommendationsStore, 
+    syncPathwaysWithSupabase,
+    clearPathwayStore,
     clearProfileStore, 
     clearConversationState, 
-    resetConversationState
+    authError
   ]);
 
   // Effect to Sync Vector Store ID
   useEffect(() => {
-    // Only proceed if auth is no longer loading
     if (authLoading || isSyncing) return;
 
     const currentVectorStoreId = authVectorStoreId;
     const previousVectorStoreId = prevAuthVectorStoreIdRef.current;
 
-    // Skip if no change
     if (currentVectorStoreId === previousVectorStoreId) return;
 
+    setIsSyncing(true); 
     try {
-      // Only sync if the ID exists and has changed or wasn't set before
       if (currentVectorStoreId && currentVectorStoreId !== previousVectorStoreId) {
         console.log(`[AuthSynchronizer] Updating vector store ID: ${currentVectorStoreId}`);
-        
-        // Update Profile Store
         setProfileVectorStoreId(currentVectorStoreId);
-        
-        // Update Tools Store if user is present
         if (user) {
           setVectorStore({
             id: currentVectorStoreId,
@@ -154,8 +141,6 @@ export default function AuthSynchronizer() {
         }
       } else if (!currentVectorStoreId && previousVectorStoreId) {
         console.log(`[AuthSynchronizer] Clearing vector store ID`);
-        
-        // Clear vector store ID in relevant stores
         setProfileVectorStoreId(null);
         setVectorStore({
           id: '',
@@ -165,8 +150,8 @@ export default function AuthSynchronizer() {
     } catch (error) {
       console.error("[AuthSynchronizer] Error updating vector store:", error);
     } finally {
-      // Update previous vector store ID reference
       prevAuthVectorStoreIdRef.current = currentVectorStoreId;
+      setIsSyncing(false);
     }
   }, [
     authVectorStoreId, 

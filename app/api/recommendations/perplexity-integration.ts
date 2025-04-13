@@ -454,7 +454,7 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
         alignmentBonus += 3;
       }
       
-      // Final match score
+      // Final match score - make sure it's never null by providing a default of 70
       const matchScore = Math.min(98, baseScore + alignmentBonus);
       
       // Calculate match rationale components
@@ -463,21 +463,40 @@ export async function parsePerplexityResponse(response: string, pathway: any): P
       const locationMatchScore = Math.min(95, Math.floor(88 + Math.random() * 7));
       const academicFitScore = Math.min(98, Math.floor(matchScore + Math.random() * 3));
       
+      // Ensure all match scores are valid integers
       return {
         id: `${crypto.randomUUID()}`,
         ...sanitizedProgram,
-        matchScore,
+        matchScore: Math.round(matchScore) || 70, // Ensure it's an integer and never null
         matchRationale: {
-          careerAlignment: careerAlignmentScore,
-          budgetFit: budgetFitScore,
-          locationMatch: locationMatchScore,
-          academicFit: academicFitScore
+          careerAlignment: Math.round(careerAlignmentScore) || 70,
+          budgetFit: Math.round(budgetFitScore) || 70,
+          locationMatch: Math.round(locationMatchScore) || 70,
+          academicFit: Math.round(academicFitScore) || 70
         }
       };
     });
     
-    console.log(`Returning ${enrichedPrograms.length} enriched programs with match scores`);
-    return enrichedPrograms;
+    // Final validation to ensure no program has null matchScore
+    const validatedPrograms = enrichedPrograms.map(program => {
+      if (program.matchScore === null || program.matchScore === undefined) {
+        console.warn(`Found program with null matchScore, setting default score: ${program.name}`);
+        return {
+          ...program,
+          matchScore: 70, // Default fallback
+          matchRationale: program.matchRationale || {
+            careerAlignment: 70,
+            budgetFit: 70,
+            locationMatch: 70,
+            academicFit: 70
+          }
+        };
+      }
+      return program;
+    });
+    
+    console.log(`Returning ${validatedPrograms.length} enriched programs with match scores`);
+    return validatedPrograms;
   } catch (error: any) {
     console.error('Error parsing Perplexity response:', error.message);
     throw error;

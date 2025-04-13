@@ -2,7 +2,15 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { RecommendationProgram } from './types';
-import { syncRecommendationsToVectorStore, syncSingleRecommendationToVectorStore } from './vector-store-helpers';
+import { 
+  syncRecommendationsToVectorStore, 
+  syncSingleRecommendationToVectorStore, 
+  deleteRecommendationFromVectorStore,
+  syncProgramsToVectorStore
+} from './vector-store-helpers';
+
+// Export the syncProgramsToVectorStore function for use in pathway-actions.ts
+export { syncProgramsToVectorStore };
 
 /**
  * Save a recommendation to Supabase
@@ -233,10 +241,10 @@ export async function toggleRecommendationFavorite(
       };
     }
     
-    // First get the basic recommendation data
+    // First get the basic recommendation data, including pathway_id
     const { data: recommendationData, error: recError } = await supabase
       .from('recommendations')
-      .select('id, match_score, is_favorite, match_rationale, program_id')
+      .select('id, match_score, is_favorite, match_rationale, program_id, pathway_id')
       .eq('id', recommendationId)
       .eq('user_id', userId)
       .single();
@@ -296,6 +304,7 @@ export async function toggleRecommendationFavorite(
       matchScore: recommendationData.match_score || 0,
       matchRationale: recommendationData.match_rationale || {},
       isFavorite: recommendationData.is_favorite || false,
+      pathway_id: recommendationData.pathway_id,
       // Get scholarships if available (would require a separate query if needed)
       scholarships: []
     };
@@ -346,13 +355,15 @@ export async function toggleRecommendationFavorite(
 }
 
 /**
- * Save multiple recommendations to Supabase
+ * Save a batch of recommendation programs to Supabase
+ * @deprecated Use the saveProgramsForPathway function from pathway-actions.ts instead
  */
 export async function saveRecommendationsBatch(
   userId: string,
   recommendations: RecommendationProgram[],
   vectorStoreId: string
 ): Promise<{ success: boolean; error?: string; savedCount?: number }> {
+  console.warn('DEPRECATED: saveRecommendationsBatch is deprecated. Use saveProgramsForPathway from pathway-actions.ts instead.');
   try {
     if (!vectorStoreId) {
       throw new Error('Vector store ID is required for saving recommendations');
@@ -432,8 +443,8 @@ export async function saveRecommendationsBatch(
     if (savedRecommendations.length > 0) {
       try {
         console.log(`Syncing ${savedRecommendations.length} recommendations to Vector Store...`);
-        // Sync the saved recommendations to the Vector Store
-        const syncResult = await syncRecommendationsToVectorStore(
+        // Sync the saved recommendations to the Vector Store using pathway-aware function
+        const syncResult = await syncProgramsToVectorStore(
           userId,
           savedRecommendations,
           vectorStoreId
@@ -649,7 +660,7 @@ export async function submitRecommendationFeedback(
     // Check if the recommendation exists and belongs to the user
     const { data: recommendation, error: fetchError } = await supabase
       .from('recommendations')
-      .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id')
+      .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id, pathway_id')
       .eq('id', recommendationId)
       .eq('user_id', userId)
       .single();
@@ -715,6 +726,7 @@ export async function submitRecommendationFeedback(
           matchScore: recommendation.match_score || 0,
           matchRationale: recommendation.match_rationale || {},
           isFavorite: recommendation.is_favorite || false,
+          pathway_id: recommendation.pathway_id,
           // Include feedback data
           feedbackNegative: true,
           feedbackReason: reason,

@@ -24,20 +24,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import useToolsStore from "@/stores/useToolsStore";
-import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import useProfileStore from "@/stores/useProfileStore";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { 
-  Accordion, 
-  AccordionContent, 
-  AccordionItem, 
-  AccordionTrigger 
-} from "@/components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,230 +39,166 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { 
-  generateRecommendations, 
-  fetchUserRecommendations, 
-  toggleRecommendationFavorite,
-  resetRecommendations as resetRecommendationsAction 
-} from "./actions";
-import { RecommendationProgram } from "@/app/recommendations/types";
 import HydrationLoading from "@/components/ui/hydration-loading";
-import GuestLimitMonitor from "@/components/GuestLimitMonitor";
+import { GuestLimitMonitor } from "@/components/GuestLimitMonitor";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import { PageWrapper } from "@/components/layouts/PageWrapper";
-import { RecommendationProgressModal, RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
 import AnimatedLogo from "@/components/ui/AnimatedLogo";
+import { PathwayExplorer } from "./PathwayExplorer";
+import usePathwayStore from "@/stores/usePathwayStore";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { SavedProgramsView } from "./SavedProgramsView";
+import { RecommendationProgressModal, RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
+
+// Add interface for Supabase profile to fix type issues
+interface SupabaseProfile {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  vector_store_id: string | null;
+  // Explicitly type important structured fields
+  career_goals?: {
+    shortTerm: string;
+    longTerm: string;
+    desiredIndustry: string[];
+    desiredRoles: string[];
+  };
+  education?: Array<{
+    degreeLevel: string;
+    institution: string;
+    fieldOfStudy: string;
+    graduationYear: string;
+    gpa?: string | null;
+  }>;
+  skills?: string[];
+  preferences?: {
+    preferredLocations?: string[];
+    studyMode?: string;
+    startDate?: string;
+    budgetRange?: {
+      min: number;
+      max: number;
+    };
+  };
+  documents?: any;
+  profile_file_id?: string | null;
+  // Allow other properties
+  [key: string]: any;
+}
 
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
-  const { isProfileComplete, vectorStoreId, setProfileComplete, setVectorStoreId } = useProfileStore();
+  const { isProfileComplete, vectorStoreId, setProfileComplete, setVectorStoreId, resetProfile } = useProfileStore();
+  const { resetAllPathways, isActionLoading, actionError } = usePathwayStore();
   const router = useRouter();
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile: authProfile, loading: authLoading } = useAuth();
   
-  // Get state from our recommendations store
-  const { 
-    recommendations, 
-    userProfile, 
-    isLoading, 
-    error: errorMessage, 
-    favoritesIds,
-    isAuthenticated,
-    userId,
-    hasReachedGuestLimit,
-    generationCount,
-    setRecommendations,
-    setUserProfile,
-    setLoading,
-    setError,
-    toggleFavorite,
-    hydrated,
-    appendRecommendations,
-    clearRecommendations,
-    submitFeedback
-  } = useRecommendationsStore();
-    
-  // Local UI state
-  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  // Type assertion for authProfile
+  const typedProfile = authProfile as SupabaseProfile | null;
+  
   const [selectedTab, setSelectedTab] = useState("recommendations");
-  const [feedbackProgram, setFeedbackProgram] = useState<string | null>(null);
-  const [isAppending, setIsAppending] = useState(false);
-  
-  // For initialization and loading state
   const [isInitializing, setIsInitializing] = useState(true);
-  const [newRecommendationIds, setNewRecommendationIds] = useState<string[]>([]); 
+  const [pageError, setPageError] = useState<string | null>(null);
   
-  // Refs to track initialization status
-  const initializedRef = useRef(false);
-  const fetchingRef = useRef(false);
   const profileCheckedRef = useRef(false);
-  const newRecommendationsRef = useRef<HTMLDivElement>(null);
-
-  // Destructure the reset functions from the stores
-  const { 
-    resetProfile, 
-  } = useProfileStore();
   
-  const { 
-    resetState: resetRecommendations 
-  } = useRecommendationsStore();
-
-  // Add reset loading state
-  const [isResetting, setIsResetting] = useState(false);
-
-  // Add reset-related state
-  const [isResettingRecommendations, setIsResettingRecommendations] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState<{success: boolean; message: string} | null>(null);
-
-  // Memoize the fetchRecommendations function to use in useEffect
-  const fetchRecommendationsCallback = useCallback(fetchRecommendations, [
-    vectorStore, 
-    favoritesIds, 
-    setRecommendations, 
-    setUserProfile, 
-    setLoading, 
-    setError, 
-    userProfile, 
-    isAuthenticated,
-    RECOMMENDATION_STAGES_ENHANCED.length // Add length as dependency
-  ]);
-
-  // Add new state variables
+  // State for recommendation progress modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [isGenerationComplete, setIsGenerationComplete] = useState(false); 
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const progressTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
-  // Add state for tracking the selected feedback reason
-  const [selectedFeedbackReason, setSelectedFeedbackReason] = useState<string>("interest");
+  const [isGuestResetting, setIsGuestResetting] = useState(false);
+  const [isAuthResetting, setIsAuthResetting] = useState(false);
 
-  // Add state for filtering
-  const [filterOption, setFilterOption] = useState<string>("all");
-  
-  // Calculate counts for different types of recommendations
-  const feedbackCount = useMemo(() => 
-    recommendations.filter(rec => rec.feedbackNegative).length, 
-    [recommendations]
-  );
-  
-  const favoritesCount = useMemo(() => 
-    recommendations.filter(rec => rec.isFavorite).length, 
-    [recommendations]
-  );
-  
-  // Filter recommendations based on the selected option
-  const getFilteredRecommendations = useCallback(() => {
-    if (!recommendations || recommendations.length === 0) return [];
-    
-    switch (filterOption) {
-      case "favorites":
-        return recommendations.filter(rec => rec.isFavorite);
-      case "feedback":
-        return recommendations.filter(rec => rec.feedbackNegative);
-      case "all":
-      default:
-        return recommendations;
-    }
-  }, [recommendations, filterOption]);
-  
-  const filteredRecommendations = getFilteredRecommendations();
-
-  // *** Add useEffect to monitor recommendations state changes ***
   useEffect(() => {
-    console.log(`[RecPage] Recommendations state updated. Count: ${recommendations?.length || 0}`);
-    // Optional: Log the actual recommendations if needed for debugging, but be mindful of large objects
-    // if (recommendations && recommendations.length > 0) {
-    //   console.log('[RecPage] First recommendation:', recommendations[0]);
-    // }
-  }, [recommendations]);
-
-  // Wait for hydration and auth state before proceeding
-  useEffect(() => {
-    if (!hydrated || authLoading) {
-      console.log("Waiting for hydration or auth loading...");
-      return; // Wait for store to hydrate and auth to load
+    if (authLoading) {
+      console.log("[RecPage] Waiting for auth loading...");
+      setIsInitializing(true);
+      return; 
     }
-    
-    // Get auth state from context and sync with store if needed
-    const authFromContext = Boolean(user);
-    const authUserId = user?.id || null;
-    
-    console.log("Auth state:", { 
-      contextAuth: authFromContext, 
-      storeAuth: isAuthenticated,
-      contextUserId: authUserId,
-      storeUserId: userId,
-      authLoading 
-    });
-    
-    // Check if we need to fetch the user's profile from the database
-    const checkProfile = async () => {
-      if (profileCheckedRef.current) return;
+  
+    console.log("[RecPage] Auth loaded. User:", user ? user.id : 'null', "Profile from context:", typedProfile ? 'exists' : 'null');
+  
+    if (!user) {
+      console.log("[RecPage] User not logged in (guest). Initialization considered complete.");
+      setIsInitializing(false);
+      return;
+    }
+  
+    if (!profileCheckedRef.current) {
       profileCheckedRef.current = true;
       
-      console.log("Checking profile...");
-      
-      try {
-        // IMPORTANT: Check authentication state from the AuthContext
-        if (user) {
-          console.log("User is authenticated via AuthContext");
-          // For authenticated users, check if their profile exists in the database
-          const response = await fetch(`/api/profile/${user.id}`);
-          
-          if (response.status === 404) {
-            // Profile doesn't exist, redirect to profile wizard
-            console.log("Profile not found, redirecting to wizard");
-            setIsInitializing(false);
-            router.push('/profile-wizard');
-            return;
-          }
-          
-          if (!response.ok) {
-            throw new Error('Failed to fetch user profile');
-          }
-          
-          const data = await response.json();
-          
-          if (data.profile) {
-            console.log("Profile found:", data.profile);
-            // Update state with the profile data
-            setUserProfile(data.profile);
-            
-            if (data.profile.vectorStoreId) {
-              setVectorStoreId(data.profile.vectorStoreId);
-            }
-            
-            setProfileComplete(true);
-          }
+      if (!typedProfile) {
+        console.log("[RecPage] User logged in, but profile not yet available in AuthContext. Redirecting to wizard.");
+        router.push('/profile-wizard'); 
+      } else {
+        console.log("[RecPage] User logged in, profile exists in AuthContext.");
+        if (!isProfileComplete && typedProfile.vector_store_id) {
+          setVectorStoreId(typedProfile.vector_store_id);
+          setProfileComplete(true); 
+          console.log("[RecPage] Synced profile store state.");
         }
-        
-        // Enable file search if vector store exists
-        if (vectorStore && vectorStore.id && !fileSearchEnabled) {
+        if (typedProfile.vector_store_id && !fileSearchEnabled) {
           setFileSearchEnabled(true);
+           console.log("[RecPage] File search enabled.");
         }
-        
-        // Initialization complete
-        console.log("Initialization complete");
-        setIsInitializing(false);
-      } catch (error) {
-        console.error('Error checking profile:', error);
-        setError('Failed to load profile data');
         setIsInitializing(false);
       }
-    };
-    
-    checkProfile();
-  }, [hydrated, authLoading, user, isProfileComplete, vectorStoreId, router, setUserProfile, setProfileComplete, setVectorStoreId, setFileSearchEnabled, vectorStore, fileSearchEnabled, setError, isAuthenticated, userId]);
+    } else if (!typedProfile && user) {
+        console.log("[RecPage] Re-render check: User logged in, profile still not available. Waiting for redirect.");
+    } else {
+        setIsInitializing(false);
+    }
   
-  // Updated function to manage progress simulation with more stages and refined timing
+  }, [authLoading, user, typedProfile, router, isProfileComplete, setVectorStoreId, setProfileComplete, vectorStoreId, fileSearchEnabled, setFileSearchEnabled]);
+
+  const handleGuestReset = async () => {
+    if (user) {
+       console.warn("Authenticated user attempting guest 'Start Over'. Action unclear.");
+       alert("Please manage your profile and data from the settings page.");
+       return; 
+    }
+
+    try {
+      setIsGuestResetting(true);
+      
+      const { setVectorStore } = useToolsStore.getState();
+      setVectorStore({ id: "", name: "" }); 
+      resetProfile();
+      
+      // Use clearGuestData instead of clearStore to specifically clean guest data
+      const { clearGuestData } = await import("@/stores/usePathwayStore").then(mod => mod.default.getState());
+      clearGuestData(); 
+
+      setVectorStoreId(null);
+      setProfileComplete(false);
+      
+      console.log("[RecPage] Guest reset complete. Redirecting to wizard.");
+      router.push('/profile-wizard');
+    } catch (error) {
+      console.error('Error resetting guest profile:', error);
+      setPageError("Failed to reset profile. Please try again.");
+    } finally {
+      setIsGuestResetting(false);
+    }
+  };
+
+  const handleAuthReset = async () => {
+    if (!user) return;
+
+    setIsAuthResetting(true);
+    try {
+      await resetAllPathways();
+    } catch (error) {
+      console.error("Unexpected error during authenticated reset:", error);
+    } finally {
+      setIsAuthResetting(false);
+    }
+  };
+
+  // Functions to control the progress modal simulation
   const startProgressSimulation = () => {
     setCurrentStageIndex(0);
     setIsGenerationComplete(false);
@@ -282,47 +208,29 @@ export default function RecommendationsPage() {
     progressTimeoutsRef.current.forEach(clearTimeout);
     progressTimeoutsRef.current = [];
     
-    // Refined stage timing in milliseconds for ENHANCED stages
+    // Using the same timings as the old version
     const stageTiming = [
       1000, // Analyzing profile: 1s
       3500, // Generating pathways (start): 3.5s (AI call)
        500, // Generating pathways (complete): 0.5s
-      // Pathway 1 Research Loop
-      1000, // Init research 1: 1s
-      5000, // Query Perplexity 1: 5s (API call)
-      3000, // Process Results 1: 3s (AI call)
-      // Pathway 2 Research Loop
-      1000, // Init research 2: 1s
-      5000, // Query Perplexity 2: 5s (API call)
-      3000, // Process Results 2: 3s (AI call)
-      // Pathway 3 Research Loop
-      1000, // Init research 3: 1s
-      5000, // Query Perplexity 3: 5s (API call)
-      3000, // Process Results 3: 3s (AI call)
-      // Final Stages
-      1500, // Calculating match scores: 1.5s
-      1000  // Preparing recommendations: 1s
+      // Subsequent stages removed as generation happens in one step now
+      1000, // Placeholder for saving/processing
+       500  // Placeholder for preparing
     ];
 
-    // Ensure timing array matches the number of stages
-    if (stageTiming.length !== RECOMMENDATION_STAGES_ENHANCED.length) {
-      console.error("Mismatch between stage timings and number of stages!");
-      // Use default timing or handle error appropriately
-      // For now, we'll log the error and proceed, which might look odd
-    }
-    
+    // Use only the relevant number of stages
+    const relevantStages = RECOMMENDATION_STAGES_ENHANCED.slice(0, stageTiming.length);
+
     let cumulativeTime = 0;
     
-    RECOMMENDATION_STAGES_ENHANCED.forEach((_stage, index: number) => {
-      // Use the timing for the current stage, default to 1s if mismatch
-      const currentStageDuration = stageTiming[index] ?? 1000;
+    relevantStages.forEach((_stage, index: number) => {
+      const currentStageDuration = stageTiming[index];
       
       if (index === 0) {
         setCurrentStageIndex(0); // Start immediately
       } else {
         const timeout = setTimeout(() => {
-          // Ensure we don't exceed the bounds of the stages array
-          if (index < RECOMMENDATION_STAGES_ENHANCED.length) {
+          if (index < relevantStages.length) {
              setCurrentStageIndex(index);
           }
         }, cumulativeTime);
@@ -332,252 +240,27 @@ export default function RecommendationsPage() {
     });
   };
 
-  const stopProgressSimulation = (showComplete: boolean = true) => {
+  const stopProgressSimulation = (success: boolean) => {
     progressTimeoutsRef.current.forEach(clearTimeout);
     progressTimeoutsRef.current = [];
     if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
 
-    // Set to the last *actual* stage index before closing/completing
-    const finalStageIndex = RECOMMENDATION_STAGES_ENHANCED.length - 1;
-    setCurrentStageIndex(finalStageIndex); 
-    
-    if (showComplete) {
-      setIsGenerationComplete(true);
-      // Keep modal open slightly longer to show final checkmark
-      setTimeout(() => {
-        setIsModalOpen(false);
-        // Reset completion state after modal closes
-        setTimeout(() => setIsGenerationComplete(false), 300); 
-      }, 1200); // Increased delay for final stage view
+    if (success) {
+       const finalStageIndex = RECOMMENDATION_STAGES_ENHANCED.slice(0, 5).length - 1; // Adjust based on used stages
+       setCurrentStageIndex(finalStageIndex); 
+       setIsGenerationComplete(true);
+       setTimeout(() => {
+         setIsModalOpen(false);
+         setTimeout(() => setIsGenerationComplete(false), 300); 
+       }, 1200); 
     } else {
+      // If failed, close modal immediately without showing completion
       setIsModalOpen(false);
       setIsGenerationComplete(false);
+      // Optionally show an error message here or rely on the store's error state
     }
   };
 
-  // Fetch recommendations from the API
-  async function fetchRecommendations(isAppending = false) {
-    if (!hydrated) {
-      console.log("Store not hydrated yet, cannot fetch recommendations");
-      setError("Please wait for application to initialize");
-      return;
-    }
-
-    if (authLoading) {
-      console.log("Auth still loading, cannot fetch recommendations");
-      setError("Please wait for authentication to complete");
-      return;
-    }
-
-    // Start loading state and progress animation
-    setLoading(true);
-    startProgressSimulation();
-    setIsAppending(isAppending);
-
-    const authFromContext = Boolean(user);
-    const isGuest = !authFromContext;
-    const authUserId = user?.id || userId;
-
-    console.log("Fetching recommendations with auth state:", {
-      authFromContext,
-      storeAuth: isAuthenticated,
-      userId: authUserId,
-      isGuest,
-      isAppending
-    });
-
-    if (vectorStore && vectorStore.id) {
-      try {
-        setError(null);
-
-        let cachedUserProfile = null;
-        try {
-          const profileDataString = localStorage.getItem('userProfileData');
-          if (profileDataString) {
-            cachedUserProfile = JSON.parse(profileDataString);
-          }
-        } catch (error) {
-          console.error('Error parsing cached profile data:', error);
-        }
-
-        const profileToUse = userProfile || cachedUserProfile;
-
-        // Make the API call
-        const result = await generateRecommendations(
-          vectorStore.id,
-          profileToUse,
-          isGuest
-        );
-
-        // Process results FIRST
-        processRecommendationResults(result, isAppending); 
-        // Then stop simulation (shows completion if successful)
-        stopProgressSimulation(true); 
-
-      } catch (error) {
-        console.error('Error fetching recommendations:', error);
-        setError(error instanceof Error ? error.message : 'An unexpected error occurred');
-        stopProgressSimulation(false); // Stop simulation immediately on error
-        // setLoading(false); // Handled by processRecommendationResults or here in catch
-        // fetchingRef.current = false;
-        // setIsAppending(false);
-      } finally {
-         // Ensure loading states are reset even if processing fails before stopSimulation
-         setLoading(false); 
-         fetchingRef.current = false;
-         setIsAppending(false);
-      }
-    } else {
-      // Handle case where vectorStore is missing
-      setError("User profile vector store not found. Please ensure profile setup is complete.");
-      stopProgressSimulation(false);
-      setLoading(false);
-      fetchingRef.current = false;
-      setIsAppending(false);
-    }
-  }
-
-  // Helper function to process recommendation results
-  function processRecommendationResults(result: {
-    recommendations: RecommendationProgram[];
-    error?: string;
-    dbSaveError?: string;
-    partialSave?: boolean;
-    savedCount?: number;
-  }, isAppending = false) {
-    // Remove loading state updates from here
-    // setLoading(false); // Now handled in fetchRecommendations
-    // fetchingRef.current = false; // Now handled in fetchRecommendations
-    // setIsAppending(false); // Now handled in fetchRecommendations
-
-    if (result.error) {
-      setError(result.error);
-      // Modal stopping is handled in fetchRecommendations
-    } else if (result.recommendations && result.recommendations.length > 0) {
-      const recommendationsWithFavorites = result.recommendations.map((rec: RecommendationProgram) => ({
-        ...rec,
-        isFavorite: favoritesIds.includes(rec.id)
-      }));
-
-      const newIds = recommendationsWithFavorites.map((rec: RecommendationProgram) => rec.id);
-      setNewRecommendationIds(newIds);
-
-      if (isAppending) {
-        console.log(`Appending ${recommendationsWithFavorites.length} new recommendations`);
-        appendRecommendations(recommendationsWithFavorites);
-
-        setTimeout(() => {
-          if (newRecommendationsRef.current) {
-            newRecommendationsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }, 100);
-      } else {
-        console.log(`Setting ${recommendationsWithFavorites.length} new recommendations`);
-        setRecommendations(recommendationsWithFavorites);
-      }
-
-      if (result.dbSaveError) {
-        console.warn("Recommendations generated but not saved properly to database:", result.dbSaveError);
-        const saveErrorMsg = result.partialSave
-          ? `${isAppending ? "New recommendations" : "Recommendations"} could not be fully saved (${result.savedCount}/${result.recommendations.length} saved). Error: ${result.dbSaveError}`
-          : `${isAppending ? "New recommendations" : "Recommendations"} generated but couldn't be saved: ${result.dbSaveError}`;
-          
-        if (typeof setError === 'function') {
-          const prevError = errorMessage || '';
-          setError(prevError ? `${prevError}\n${saveErrorMsg}` : saveErrorMsg);
-        }
-      }
-
-      setTimeout(() => {
-        setNewRecommendationIds([]);
-      }, 10000);
-    } else {
-      setError(isAppending ? "No additional recommendations found that match your profile" : "No recommendations found that match your profile");
-    }
-  }
-
-  const handleGoToAssistant = () => {
-    // Save current state to enable file search in the chat
-    setFileSearchEnabled(true);
-    // Navigate to the chat page
-    router.push("/chat");
-  };
-
-  const handleToggleFavorite = (recommendationId: string) => {
-    // Check for auth first - verify user is authenticated before proceeding
-    if (!isAuthenticated || !userId) {
-      // Either show an authentication modal or redirect to login
-      const wantsToSignUp = window.confirm(
-        'You need to sign in to save favorites. Would you like to create an account now?'
-      );
-      
-      if (wantsToSignUp) {
-        router.push('/auth/signup');
-        return;
-      }
-      return;
-    }
-    
-    // If guest has reached limit and tries to favorite, prompt for sign up  
-    if (!isAuthenticated && hasReachedGuestLimit) {
-      const wantsToSignUp = window.confirm(
-        'You need to sign up to save more than one set of recommendations. Would you like to create an account now?'
-      );
-      
-      if (wantsToSignUp) {
-        router.push('/auth/signup');
-        return;
-      }
-    }
-    
-    try {
-      // Only proceed with toggling if we're authenticated or still within guest limits
-      toggleFavorite(recommendationId);
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-      // Display error message to user
-      alert('Failed to update favorite status. Please try again later.');
-    }
-  };
-
-  const handleFeedbackSubmit = (id: string, reason: string) => {
-    // Close feedback dialog
-    setFeedbackProgram(null);
-    
-    // Validate input
-    if (!reason) {
-      console.error('No feedback reason provided');
-      setError('Please select a reason for your feedback');
-      return;
-    }
-    
-    // Check if user is authenticated
-    if (!isAuthenticated) {
-      const wantsToSignUp = window.confirm(
-        'To save your feedback, you need to create an account. Would you like to sign up now?'
-      );
-      
-      if (wantsToSignUp) {
-        router.push('/auth/signup');
-        return;
-      }
-    }
-    
-    try {
-      // Submit negative feedback using the store method
-      submitFeedback(id, reason);
-      
-      // Show a success notification
-      // This could be implemented with a toast notification library
-      // For now, just log to console
-      console.log(`Negative feedback submitted for ${id}: ${reason}`);
-    } catch (error) {
-      console.error('Error submitting feedback:', error);
-      setError('Failed to submit feedback. Please try again.');
-    }
-  };
-  
-  // Variants for animations
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { 
@@ -597,113 +280,27 @@ export default function RecommendationsPage() {
     }
   };
 
-  // Add reset function
-  const handleReset = async () => {
-    try {
-      setIsResetting(true);
-      
-      // Get the vector store ID from ProfileStore
-      const { vectorStoreId } = useProfileStore.getState();
-      
-      // First clean up the vector store and uploaded files
-      if (vectorStoreId) {
-        const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${vectorStoreId}`, {
-          method: 'DELETE'
-        });
-        
-        if (!cleanupResponse.ok) {
-          console.error('Failed to clean up vector store:', cleanupResponse.statusText);
-        } else {
-          // Also clear the vector store from the tools store
-          const { setVectorStore } = useToolsStore.getState();
-          setVectorStore({
-            id: "",
-            name: "",
-          });
-        }
-      }
-      
-      // Reset all the stores
-      resetProfile();
-      resetRecommendations();
-      setVectorStoreId(null);
-      setProfileComplete(false);
-      
-      // Redirect to profile page
-      router.push('/profile-wizard');
-    } catch (error) {
-      console.error('Error resetting profile:', error);
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
-  // Add reset recommendations function
-  const handleResetRecommendations = async () => {
-    try {
-      setIsResettingRecommendations(true);
-      setResetSuccess(null);
-      
-      const result = await resetRecommendationsAction();
-      
-      if (result.success) {
-        console.log(`Successfully reset recommendations, deleted ${result.deletedCount} items`);
-        setResetSuccess({
-          success: true,
-          message: `Successfully deleted ${result.deletedCount} recommendations.`
-        });
-        
-        // Clear recommendations from the store
-        clearRecommendations();
-        
-        // Optional: Refresh the page or redirect to reload the component
-        // router.refresh();
-      } else {
-        console.error('Failed to reset recommendations:', result.error);
-        setResetSuccess({
-          success: false,
-          message: result.error || 'Failed to reset recommendations'
-        });
-      }
-    } catch (error) {
-      console.error('Error resetting recommendations:', error);
-      setResetSuccess({
-        success: false,
-        message: error instanceof Error ? error.message : 'An unexpected error occurred'
-      });
-    } finally {
-      setIsResettingRecommendations(false);
-    }
-  };
-
-  // Add a banner that appears when profile is loaded until first recommendations are loaded
-  useEffect(() => {
-    if (!isInitializing && userProfile && !recommendations.length && !isLoading) {
-      console.log("Profile loaded but no recommendations yet - showing banner");
-    }
-  }, [isInitializing, userProfile, recommendations.length, isLoading]);
-
-  // If still initializing, show loading indicator
-  if (isInitializing || !hydrated || authLoading) {
-    return <HydrationLoading isHydrated={hydrated} onReadyToUnmount={() => {
-      // This will be called when the loading component is ready to unmount (after 3 seconds)
-      console.log("Hydration loading complete with minimum display time");
-    }} />;
+  if (isInitializing || authLoading) {
+    return <HydrationLoading isHydrated={!isInitializing} />;
   }
 
-  // Add the Modal
+  function handleTabChange(tab: string) {
+    setSelectedTab(tab);
+  }
+  
   return (
     <PageWrapper allowGuest>
+      {/* Render the Progress Modal */}
       <RecommendationProgressModal
         isOpen={isModalOpen}
-        progressStages={RECOMMENDATION_STAGES_ENHANCED}
+        progressStages={RECOMMENDATION_STAGES_ENHANCED.slice(0, 5)} // Adjust based on used stages
         currentStageIndex={currentStageIndex}
         isComplete={isGenerationComplete}
       />
 
       <GuestLimitMonitor />
-      <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
-        {userProfile ? (
+      <TooltipProvider>
+        <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
           <>
             <div className="mb-6 flex justify-between items-center">
               <motion.div
@@ -712,34 +309,87 @@ export default function RecommendationsPage() {
                 transition={{ duration: 0.5 }}
               >
                 <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                  Hi {userProfile.firstName ? `${userProfile.firstName}, ` : ''}welcome to your education dashboard
+                  Hi {typedProfile?.first_name ? `${typedProfile.first_name}, ` : ''}welcome to your education dashboard
                 </h1>
                 
-                {/* Account status indicator */}
-                {!isAuthenticated && (
+                {!user && (
                   <div className="mt-2 text-amber-600 flex items-center text-sm">
                     <Shield className="h-4 w-4 mr-1" />
                     Guest mode - <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1" onClick={() => router.push('/signup')}>
-                      Sign up to save your recommendations
+                      Sign up to save your progress
                     </Button>
                   </div>
                 )}
+                {user && !typedProfile && (
+                   <div className="mt-2 text-zinc-500 flex items-center text-sm">
+                      <User className="h-4 w-4 mr-1" /> Loading profile...
+                   </div>
+                )}
               </motion.div>
               
-              {/* Container for buttons on the right */}
               <div className="flex gap-2">
-                {/* Edit Profile Button - Always visible */}
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => router.push(isAuthenticated ? "/profile" : "/profile-wizard?edit=true")}
+                  onClick={() => router.push(user ? "/profile" : "/profile-wizard?edit=true")}
+                  disabled={!!(user && !typedProfile && !isInitializing)}
                 >
                   <Edit className="w-4 h-4 mr-2" />
-                  Edit Profile
+                  {user ? "Edit Profile" : "Edit Guest Profile"}
                 </Button>
 
-                {/* Start Over Button - Only for guests */}
-                {!isAuthenticated && (
+                {user && (
+                  <AlertDialog>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            variant="destructive"
+                            size="sm" 
+                            className="text-white-500 hover:text-red-700 hover:bg-red-50 border border-red-500 hover:border-red-700"
+                            disabled={isActionLoading || isAuthResetting}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Reset Recommendations
+                          </Button>
+                        </AlertDialogTrigger>
+                      </TooltipTrigger>
+                      {isActionLoading || isAuthResetting ? (
+                        <TooltipContent>
+                          <p>Resetting in progress...</p>
+                        </TooltipContent>
+                      ) : null}
+                    </Tooltip>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reset Recommendations?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will mark all your current pathways and their associated program explorations as deleted. 
+                          You can then generate a fresh set of pathways. Are you sure?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isAuthResetting || isActionLoading}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={handleAuthReset} 
+                          className="bg-red-600 hover:bg-red-700"
+                          disabled={isAuthResetting || isActionLoading}
+                        >
+                          {isAuthResetting || isActionLoading ? (
+                            <>
+                              <AnimatedLogo size={20} className="mr-2" />
+                              Resetting...
+                            </>
+                          ) : (
+                            "Yes, Reset Now"
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+
+                {!user && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
@@ -749,25 +399,25 @@ export default function RecommendationsPage() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Reset Your Profile & Recommendations?</AlertDialogTitle>
+                        <AlertDialogTitle>Reset Guest Profile?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will delete all your profile data, recommendations, and saved programs. You'll need to start over from the beginning. This action cannot be undone.
+                          This will clear any profile information you entered as a guest. This action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isGuestResetting}>Cancel</AlertDialogCancel>
                         <AlertDialogAction 
-                          onClick={handleReset} 
+                          onClick={handleGuestReset} 
                           className="bg-red-500 hover:bg-red-600"
-                          disabled={isResetting}
+                          disabled={isGuestResetting}
                         >
-                          {isResetting ? (
+                          {isGuestResetting ? (
                             <>
                               <AnimatedLogo size={20} className="mr-2" />
-                              Deleting...
+                              Resetting...
                             </>
                           ) : (
-                            "Reset Everything"
+                            "Reset Profile"
                           )}
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -777,577 +427,80 @@ export default function RecommendationsPage() {
               </div>
             </div>
             
-            {/* Guest limit warning */}
-            {!isAuthenticated && generationCount > 0 && (
-              <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-md mb-6 flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-amber-500" />
+            {pageError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-6 flex items-start">
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500" />
                 <div>
-                  <p className="font-medium">Guest mode limits</p>
-                  <p className="text-sm">
-                    You've used {generationCount} of 1 available recommendation generation{generationCount > 1 ? 's' : ''}.{' '}
-                    <Button variant="link" size="sm" className="p-0 h-auto text-sm" onClick={() => router.push('/signup')}>
-                      Sign up for unlimited recommendations
-                    </Button>
-                  </p>
+                  <p className="font-medium">Page Error</p>
+                  <p className="text-sm">{pageError}</p>
                 </div>
               </div>
             )}
-            
-            {/* Add prominent Generate Recommendations button */}
-            {!recommendations.length && userProfile && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-5 rounded-md mb-6 flex flex-col items-center justify-center">
-                <h3 className="text-xl font-semibold mb-2">Ready to explore educational opportunities?</h3>
-                <p className="text-center mb-4">Click below to generate recommendations based on your profile</p>
-                <Button 
-                  size="lg"
-                  onClick={() => fetchRecommendations(false)}
-                  disabled={isModalOpen || (!isAuthenticated && hasReachedGuestLimit)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {isModalOpen ? (
-                    <>
-                      <AnimatedLogo size={25} className="mr-2" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Scroll className="w-5 h-5 mr-2" />
-                      Generate Recommendations Now
-                    </>
-                  )}
-                </Button>
-                
-                {!isAuthenticated && hasReachedGuestLimit && (
-                  <div className="mt-4 text-amber-600">
-                    <p>You've reached the guest limit. <Button variant="link" className="p-0" onClick={() => router.push('/signup')}>Sign up</Button> for unlimited recommendations.</p>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {errorMessage && (
-              <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-md mb-6 flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-amber-500" />
+
+            {actionError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-6 flex items-start">
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500" />
                 <div>
-                  <p className="font-medium">Note</p>
-                  <p className="text-sm">{errorMessage}</p>
+                  <p className="font-medium">Action Error</p>
+                  <p className="text-sm">{actionError}</p>
                 </div>
               </div>
             )}
-            
-            {isModalOpen && isAppending && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md mb-6 flex items-start">
-                <AnimatedLogo size={25} className="mr-2 mt-0.5" />
-                <div>
-                  <p className="font-medium">Finding more recommendations</p>
-                  <p className="text-sm">
-                    Analyzing your profile to discover additional educational opportunities...
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            <Tabs defaultValue="recommendations" className="w-full" onValueChange={setSelectedTab}>
+
+            <Tabs defaultValue="recommendations" className="w-full" onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-3 mb-6">
                 <TabsTrigger value="recommendations" className="text-sm md:text-base">
                   <BookOpen className="w-4 h-4 mr-2 hidden md:inline" />
-                  Recommendations
+                  Pathways
                 </TabsTrigger>
                 <TabsTrigger value="saved" className="text-sm md:text-base">
                   <Heart className="w-4 h-4 mr-2 hidden md:inline" />
                   Saved Programs
                 </TabsTrigger>
-                <TabsTrigger value="applications" className="text-sm md:text-base" disabled={!isAuthenticated}>
+                <TabsTrigger value="applications" className="text-sm md:text-base" disabled={!user}>
                   <FileText className="w-4 h-4 mr-2 hidden md:inline" />
                   Applications
-                  {!isAuthenticated && <Lock className="w-3 h-3 ml-1" />}
+                  {!user && <Lock className="w-3 h-3 ml-1" />}
                 </TabsTrigger>
               </TabsList>
               
               <TabsContent value="recommendations">
-                {recommendations.length > 0 ? (
-                  <motion.div
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-6"
-                  >
-                    {isAppending && (
-                      <div 
-                        ref={newRecommendationsRef} 
-                        className="border-t-2 border-b-2 border-blue-200 py-3 my-4 bg-blue-50 rounded-md text-center"
-                      >
-                        <p className="text-sm text-blue-600 font-medium">
-                          New recommendations will be added below
-                        </p>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center mb-4">
-                      <div>
-                        <h2 className="text-xl font-semibold">Programs matched to your profile</h2>
-                        <p className="text-sm text-zinc-500">
-                          {recommendations.length} recommendations found 
-                          {favoritesCount > 0 && ` • ${favoritesCount} favorites`}
-                          {feedbackCount > 0 && ` • ${feedbackCount} with feedback`}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center space-x-2">
-                          <Label htmlFor="filter" className="text-sm">Filter:</Label>
-                          <select 
-                            id="filter"
-                            className="text-sm rounded-md border border-zinc-200 px-2 py-1"
-                            value={filterOption}
-                            onChange={(e) => setFilterOption(e.target.value)}
-                          >
-                            <option value="all">All Programs</option>
-                            <option value="favorites">Favorites Only ({favoritesCount})</option>
-                            <option value="feedback">With Feedback ({feedbackCount})</option>
-                          </select>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          {/* Edit Profile button removed from here */}
-                          
-                          {/* Only show generate more recommendations button for authenticated users 
-                              or guests who haven't reached their limit */}
-                          {(isAuthenticated || !hasReachedGuestLimit) && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => fetchRecommendations(true)}
-                              disabled={isModalOpen}
-                            >
-                              {isModalOpen ? (
-                                <>
-                                  <AnimatedLogo size={25} className="mr-2" />
-                                  Generating...
-                                </>
-                              ) : (
-                                <>
-                                  <Scroll className="w-4 h-4 mr-2" />
-                                  Generate More
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          
-                          {/* Reset Recommendations Button - only for authenticated users */}
-                          {isAuthenticated && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                  disabled={isResettingRecommendations || recommendations.length === 0}
-                                >
-                                  {isResettingRecommendations ? (
-                                    <>
-                                      <AnimatedLogo size={20} className="mr-2" />
-                                      Resetting...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Reset All
-                                    </>
-                                  )}
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Reset All Recommendations?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This will permanently delete all your recommendations and saved programs. 
-                                    You'll need to generate new recommendations afterward. This action cannot be undone.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel disabled={isResettingRecommendations}>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction 
-                                    onClick={handleResetRecommendations} 
-                                    className="bg-red-500 hover:bg-red-600"
-                                    disabled={isResettingRecommendations}
-                                  >
-                                    {isResettingRecommendations ? (
-                                      <>
-                                        <AnimatedLogo size={20} className="mr-2" />
-                                        Resetting...
-                                      </>
-                                    ) : (
-                                      "Reset All Recommendations"
-                                    )}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                          
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">Sort By</Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem>Match Score (High to Low)</DropdownMenuItem>
-                            <DropdownMenuItem>Cost (Low to High)</DropdownMenuItem>
-                            <DropdownMenuItem>Duration (Short to Long)</DropdownMenuItem>
-                            <DropdownMenuItem>Application Deadline</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Add status message for reset action */}
-                  {resetSuccess && (
-                    <div className={`mb-4 px-4 py-3 rounded-md ${
-                      resetSuccess.success 
-                        ? 'bg-green-50 border border-green-200 text-green-800' 
-                        : 'bg-red-50 border border-red-200 text-red-800'
-                    }`}>
-                      <p className="flex items-center">
-                        {resetSuccess.success 
-                          ? <CheckCircle2 className="h-4 w-4 mr-2" /> 
-                          : <AlertCircle className="h-4 w-4 mr-2" />
-                        }
-                        {resetSuccess.message}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {filteredRecommendations.map((program: RecommendationProgram) => (
-                    <motion.div 
-                      key={program.id}
-                      variants={itemVariants}
-                      layout
-                    >
-                      <Card className={`overflow-hidden transition-all duration-300 hover:shadow-md ${
-                        program.id === expandedCardId ? 'ring-2 ring-blue-200' : ''
-                      } ${newRecommendationIds.includes(program.id) ? 'ring-2 ring-green-300 bg-green-50' : ''}`}>
-                        <CardHeader className="pb-2">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              {newRecommendationIds.includes(program.id) && (
-                                <Badge className="mb-2 bg-green-100 text-green-800 hover:bg-green-100">New</Badge>
-                              )}
-                              <CardTitle className="text-lg md:text-xl font-bold mb-1">
-                                {program.name}
-                              </CardTitle>
-                              <CardDescription className="text-base">
-                                {program.institution}
-                              </CardDescription>
-                            </div>
-                            <div className="flex flex-col items-end">
-                              <div className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm font-semibold flex items-center">
-                                <Star className="w-4 h-4 mr-1 text-yellow-500 fill-yellow-500" />
-                                {program.matchScore}% Match
-                              </div>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="mt-2" 
-                                onClick={() => handleToggleFavorite(program.id)}
-                              >
-                                <Heart 
-                                  className={`h-5 w-5 ${program.isFavorite ? 'fill-red-500 text-red-500' : 'text-zinc-400'}`} 
-                                />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pb-2">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                            <div className="flex items-center">
-                              <BanknoteIcon className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">£{(program.costPerYear ?? 0).toLocaleString()}/year</span>
-                            </div>
-                            <div className="flex items-center">
-                              <Clock className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">{program.duration ?? 0} months</span>
-                            </div>
-                            <div className="flex items-center">
-                              <Globe className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">{program.location || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center">
-                              <Calendar className="h-4 w-4 text-zinc-500 mr-2" />
-                              <span className="text-sm">{program.startDate || 'N/A'}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-3">
-                            <p className="text-sm text-zinc-700 line-clamp-2">
-                              {program.description}
-                            </p>
-                          </div>
-                        </CardContent>
-                        <CardFooter className="pt-0 flex flex-col items-stretch">
-                          <Accordion 
-                            type="single" 
-                            collapsible 
-                            onValueChange={(value) => {
-                              if (value) {
-                                setExpandedCardId(program.id);
-                              } else {
-                                setExpandedCardId(null);
-                              }
-                            }}
-                          >
-                            <AccordionItem value="details" className="border-none">
-                              <AccordionTrigger className="py-2 text-sm font-medium text-blue-600">
-                                Show program details
-                              </AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-4 pt-2">
-                                  <div>
-                                    <h4 className="text-sm font-medium mb-2">Why This Matches Your Profile</h4>
-                                    <div className="space-y-2">
-                                      <div>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span>Career Alignment</span>
-                                          <span>{program.matchRationale?.careerAlignment ?? 0}%</span>
-                                        </div>
-                                        <Progress value={program.matchRationale?.careerAlignment ?? 0} className="h-2" />
-                                      </div>
-                                      <div>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span>Budget Fit</span>
-                                          <span>{program.matchRationale?.budgetFit ?? 0}%</span>
-                                        </div>
-                                        <Progress value={program.matchRationale?.budgetFit ?? 0} className="h-2" />
-                                      </div>
-                                      <div>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span>Location Match</span>
-                                          <span>{program.matchRationale?.locationMatch ?? 0}%</span>
-                                        </div>
-                                        <Progress value={program.matchRationale?.locationMatch ?? 0} className="h-2" />
-                                      </div>
-                                      <div>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span>Academic Fit</span>
-                                          <span>{program.matchRationale?.academicFit ?? 0}%</span>
-                                        </div>
-                                        <Progress value={program.matchRationale?.academicFit ?? 0} className="h-2" />
-                                      </div>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                      <h4 className="text-sm font-medium mb-2">Program Highlights</h4>
-                                      <ul className="list-disc pl-5 text-sm space-y-1">
-                                        {program.highlights.map((highlight, index) => (
-                                          <li key={index}>{highlight}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div>
-                                      <h4 className="text-sm font-medium mb-2">Application Requirements</h4>
-                                      <ul className="list-disc pl-5 text-sm space-y-1">
-                                        {program.requirements.map((req, index) => (
-                                          <li key={index}>{req}</li>
-                                        ))}
-                                      </ul>
-                                      <p className="text-xs text-zinc-500 mt-2">
-                                        Application Deadline: <span className="font-medium">{program.applicationDeadline}</span>
-                                      </p>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="pt-2 flex flex-col md:flex-row gap-3 justify-between">
-                                    <div className="flex flex-col md:flex-row gap-2">
-                                      <Button 
-                                        variant="outline" 
-                                        size="sm"
-                                        onClick={handleGoToAssistant}
-                                      >
-                                        <MessageSquare className="w-4 h-4 mr-2" />
-                                        Ask AI About This Program
-                                      </Button>
-                                      
-                                      {/* Show feedback status or enable submitting feedback */}
-                                      {program.feedbackNegative ? (
-                                        <div className="flex items-center text-zinc-500 text-sm">
-                                          <ThumbsDown className="w-4 h-4 mr-2 text-red-500" />
-                                          <span>Feedback submitted: {program.feedbackReason}</span>
-                                        </div>
-                                      ) : (
-                                        <AlertDialog>
-                                          <AlertDialogTrigger asChild>
-                                            <Button 
-                                              variant="ghost" 
-                                              size="sm"
-                                              onClick={() => setFeedbackProgram(program.id)}
-                                            >
-                                              <Info className="w-4 h-4 mr-2" />
-                                              Give Feedback
-                                            </Button>
-                                          </AlertDialogTrigger>
-                                          <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                              <AlertDialogTitle>Program Feedback</AlertDialogTitle>
-                                              <AlertDialogDescription>
-                                                What's the reason this program doesn't match your needs?
-                                              </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <div className="flex flex-col gap-4 py-4">
-                                              <RadioGroup 
-                                                defaultValue="interest" 
-                                                value={selectedFeedbackReason}
-                                                onValueChange={setSelectedFeedbackReason}
-                                              >
-                                                <div className="flex items-center space-x-2 mb-2">
-                                                  <RadioGroupItem value="interest" id="interest" />
-                                                  <Label htmlFor="interest">Changed interest area</Label>
-                                                </div>
-                                                <div className="flex items-center space-x-2 mb-2">
-                                                  <RadioGroupItem value="cost" id="cost" />
-                                                  <Label htmlFor="cost">Too expensive</Label>
-                                                </div>
-                                                <div className="flex items-center space-x-2 mb-2">
-                                                  <RadioGroupItem value="location" id="location" />
-                                                  <Label htmlFor="location">Location not suitable</Label>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                  <RadioGroupItem value="requirements" id="requirements" />
-                                                  <Label htmlFor="requirements">Requirements too demanding</Label>
-                                                </div>
-                                              </RadioGroup>
-                                            </div>
-                                            <AlertDialogFooter>
-                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                              <AlertDialogAction 
-                                                onClick={() => handleFeedbackSubmit(program.id, selectedFeedbackReason)}
-                                              >
-                                                Submit Feedback
-                                              </AlertDialogAction>
-                                            </AlertDialogFooter>
-                                          </AlertDialogContent>
-                                        </AlertDialog>
-                                      )}
-                                    </div>
-                                    <Button
-                                    onClick={() => window.open(program.pageLink, "_blank")}>
-                                      Explore Program
-                                    </Button>
-                                  </div>
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        </CardFooter>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              ) : (
-                  <div className="text-center py-12">
-                    <h3 className="text-xl font-semibold mb-2">No recommendations yet</h3>
-                    <p className="text-zinc-600 mb-6">Generate recommendations based on your profile</p>
-                    <Button 
-                      onClick={() => fetchRecommendations(false)} 
-                      disabled={isModalOpen || (!isAuthenticated && hasReachedGuestLimit)}
-                      size="lg"
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {isModalOpen ? (
-                        <>
-                          <AnimatedLogo size={25} className="mr-2" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Scroll className="w-5 h-5 mr-2" />
-                          Generate Recommendations
-                        </>
-                      )}
-                    </Button>
-                    
-                    {!isAuthenticated && hasReachedGuestLimit && (
-                      <div className="mt-4 text-amber-600">
-                        <p>You've reached the guest limit. <Button variant="link" className="p-0" onClick={() => router.push('/signup')}>Sign up</Button> for unlimited recommendations.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <PathwayExplorer 
+                  userProfile={typedProfile} 
+                  onStartGeneration={startProgressSimulation} 
+                  onStopGeneration={stopProgressSimulation} 
+                /> 
               </TabsContent>
               
               <TabsContent value="saved">
-                {favoritesIds.length > 0 ? (
-                  <motion.div
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-6"
-                  >
-                    <h2 className="text-xl font-semibold mb-6">Your Saved Programs</h2>
-                    
-                    {recommendations.filter(rec => rec.isFavorite).map(program => (
-                      <Card key={program.id} className="flex flex-col md:flex-row overflow-hidden hover:shadow-md transition-all duration-300">
-                        <div className="md:w-3/4 p-4">
-                          <h3 className="font-semibold text-lg">{program.name}</h3>
-                          <p className="text-sm text-zinc-600">{program.institution}</p>
-                          <div className="flex gap-3 mt-2 text-sm text-zinc-700">
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {program.duration ?? 0} months
-                            </span>
-                            <span className="flex items-center">
-                              <BanknoteIcon className="h-3 w-3 mr-1" />
-                              £{(program.costPerYear ?? 0).toLocaleString()}/year
-                            </span>
-                          </div>
-                          <p className="text-xs mt-2 text-zinc-500">Saved on {new Date().toLocaleDateString()}</p>
-                        </div>
-                        <div className="md:w-1/4 bg-gray-50 p-4 flex flex-col justify-center items-center">
-                          <Badge variant="outline" className="mb-2 bg-blue-50 text-blue-700 hover:bg-blue-50">
-                            <Star className="w-3 h-3 mr-1 fill-yellow-500 text-yellow-500" />
-                            {program.matchScore}% Match
-                          </Badge>
-                          <div className="flex gap-2 mt-2">
-                            <Button size="sm" variant="ghost" onClick={() => handleToggleFavorite(program.id)}>
-                              <Heart className="h-4 w-4 fill-red-500 text-red-500" />
-                            </Button>
-                            <Button size="sm">View Details</Button>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </motion.div>
-                ) : (
-                  <div className="text-center py-12">
-                    <h3 className="text-xl font-semibold mb-2">No saved programs yet</h3>
-                    <p className="text-zinc-600 mb-6">
-                      {!isAuthenticated ? 
-                        "Create an account to save your favorite programs" : 
-                        "Save programs by clicking the heart icon"
-                      }
-                    </p>
-                    
-                    {!isAuthenticated && (
+                <div className="flex flex-col space-y-6">
+                  {user ? (
+                    <SavedProgramsView userProfile={typedProfile} />
+                  ) : (
+                    <div className="text-center py-12">
+                      <h3 className="text-xl font-semibold mb-2">Sign in to save programs</h3>
+                      <p className="text-zinc-600 mb-6">Create an account to save and track programs.</p>
                       <Button onClick={() => router.push('/signup')}>
                         Create Account
                       </Button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
               
               <TabsContent value="applications">
-                {isAuthenticated ? (
+                {user ? (
                   <div className="text-center py-12">
                     <h3 className="text-xl font-semibold mb-2">No applications yet</h3>
-                    <p className="text-zinc-600 mb-6">Track your education program applications here</p>
-                    <Button variant="outline">
+                    <p className="text-zinc-600 mb-6">Track your education program applications here.</p>
+                    <Button variant="outline" disabled> 
                       Coming Soon
                     </Button>
                   </div>
                 ) : (
                   <div className="text-center py-12">
                     <h3 className="text-xl font-semibold mb-2">Sign in to track applications</h3>
-                    <p className="text-zinc-600 mb-6">Create an account to manage your program applications</p>
+                    <p className="text-zinc-600 mb-6">Create an account to manage your program applications.</p>
                     <Button onClick={() => router.push('/signup')}>
                       Create Account
                     </Button>
@@ -1356,16 +509,8 @@ export default function RecommendationsPage() {
               </TabsContent>
             </Tabs>
           </>
-        ) : (
-          <div className="text-center py-12">
-            <h3 className="text-xl font-semibold mb-2">Profile not found</h3>
-            <p className="text-zinc-600 mb-6">Please complete your profile to get recommendations</p>
-            <Button onClick={() => router.push('/profile-wizard')}>
-              Complete Profile
-            </Button>
-          </div>
-        )}
-      </div>
+        </div>
+      </TooltipProvider>
     </PageWrapper>
   );
 } 

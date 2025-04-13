@@ -14,12 +14,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Info, Trash2, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import useProfileStore from "@/stores/useProfileStore";
-import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import HydrationLoading from "@/components/ui/hydration-loading";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import useToolsStore from "@/stores/useToolsStore";
 import { UserProfile, ProfileSchema } from "@/app/types/profile-schema";
 import { useAuth } from "@/app/components/auth/AuthContext";
+import usePathwayStore from "@/stores/usePathwayStore";
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -124,12 +124,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     hydrated
   } = useProfileStore();
   
-  // Get reset function from recommendations store
-  const { 
-    setUserProfile: setRecommendationsUserProfile,
-    clearStore: clearRecommendationsStore,
-    resetState: resetRecommendations
-  } = useRecommendationsStore();
+  const { clearStore: clearPathwayStore } = usePathwayStore();
   
   // Local state for animation and UI
   const [animationDirection, setAnimationDirection] = useState("forward");
@@ -378,17 +373,14 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
         // 5a. Clear local guest state/storage
         clearProfileWizardStore();
-        clearRecommendationsStore();
+        clearPathwayStore();
         localStorage.removeItem('userProfileData');
         console.log("Cleared local stores and storage for registered user.");
       } else {
         // --- PATH B (Guest User) ---
         console.log("Path B: Saving profile locally for guest.");
         
-        // 3b. Save profile to Recommendations Store (for guest recommendations)
-        setRecommendationsUserProfile(profileToSave);
-
-        // 4b. Save profile to Local Storage (for guest persistence)
+        // 3b. Save profile to Local Storage (for guest persistence)
         localStorage.setItem('userProfileData', JSON.stringify(profileToSave));
 
         // 5b. Update Zustand wizard store (profile is complete)
@@ -499,7 +491,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
       // Reset Zustand stores using their respective actions
       clearProfileWizardStore(); // Use the specific clear action
-      clearRecommendationsStore(); // Use the specific clear action
+      clearPathwayStore(); // Use the specific clear action
 
       // Reset local component state
       setProfileData(initialProfileData);

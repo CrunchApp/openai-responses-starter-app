@@ -65,14 +65,15 @@ async function saveRecommendationFileId(
     // Before inserting, delete any existing files for this recommendation
     await cleanupRecommendationFiles(recommendationId);
     
-    // Insert the new file ID
-    const { error } = await supabase
-      .from('recommendation_files')
-      .insert({
-        recommendation_id: recommendationId,
-        file_id: fileId,
-        file_name: fileName
-      });
+    // Use the new SECURITY DEFINER function to bypass RLS
+    const { data, error } = await supabase.rpc(
+      'save_recommendation_file',
+      {
+        p_recommendation_id: recommendationId,
+        p_file_id: fileId,
+        p_file_name: fileName
+      }
+    );
     
     if (error) {
       console.error('Error saving recommendation file ID:', error);
@@ -180,12 +181,14 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 /**
  * Synchronize all recommendations for a user to their vector store
  * This will create/update JSON files for each recommendation and add them to the vector store
+ * @deprecated Use syncProgramsToVectorStore instead, which includes pathway_id support
  */
 export async function syncRecommendationsToVectorStore(
   userId: string,
   recommendations: RecommendationProgram[],
   vectorStoreId: string
 ): Promise<{ success: boolean; fileIds: string[]; error?: string }> {
+  console.warn('DEPRECATED: syncRecommendationsToVectorStore is deprecated. Use syncProgramsToVectorStore instead.');
   if (!vectorStoreId) {
     return { 
       success: false, 
@@ -446,6 +449,7 @@ export async function syncSingleRecommendationToVectorStore(
       feedbackReason: recommendation.feedbackReason || null,
       feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
       scholarships: recommendation.scholarships || [],
+      pathway_id: recommendation.pathway_id, // Include pathway_id
       userId: userId,
       syncedAt: new Date().toISOString(),
       updateNote: `Updated at ${new Date().toISOString()}`
@@ -454,8 +458,8 @@ export async function syncSingleRecommendationToVectorStore(
     // Convert JSON string directly to base64 (Node.js compatible)
     const base64Content = stringToBase64(recommendationJson);
     
-    // Use a consistent naming pattern for recommendation files
-    const fileName = `recommendation_${userId}_${recommendation.id}.json`;
+    // Use a consistent naming pattern for recommendation files, including pathway_id
+    const fileName = `program_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendation.id}.json`;
     
     const fileObject = { name: fileName, content: base64Content };
     
@@ -561,6 +565,220 @@ export async function deleteRecommendationFromVectorStore(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error during recommendation deletion"
+    };
+  }
+}
+
+/**
+ * Synchronize all program recommendations for a user to their vector store
+ * This will create/update JSON files for each program and add them to the vector store
+ * Similar to syncRecommendationsToVectorStore but includes pathway_id
+ */
+export async function syncProgramsToVectorStore(
+  userId: string,
+  recommendations: RecommendationProgram[],
+  vectorStoreId: string
+): Promise<{ success: boolean; fileIds: string[]; error?: string }> {
+  if (!vectorStoreId) {
+    return { 
+      success: false, 
+      fileIds: [],
+      error: "No vector store ID provided. Cannot sync programs."
+    };
+  }
+
+  try {
+    console.log(`Syncing ${recommendations.length} programs to Vector Store with ID: ${vectorStoreId}`);
+    
+    // Get base URL for absolute API paths
+    const baseUrl = getBaseUrl();
+    console.log(`Using base URL: ${baseUrl}`);
+    
+    // Get auth headers for requests
+    const headers = await getAuthHeaders();
+    console.log('Auth headers included:', Object.keys(headers).join(', '));
+    
+    // Create new files for each recommendation
+    const fileIds: string[] = [];
+    
+    for (const recommendation of recommendations) {
+      if (!recommendation.id) {
+        console.error('Program is missing ID, skipping:', recommendation.name);
+        continue;
+      }
+      
+      console.log(`Processing program: ${recommendation.id} (${recommendation.name})`);
+      
+      // First, check if this recommendation already has files associated with it
+      await cleanupRecommendationFiles(recommendation.id, true);
+      
+      // Create a rich JSON representation of the recommendation/program
+      const recommendationJson = JSON.stringify({
+        id: recommendation.id,
+        name: recommendation.name,
+        institution: recommendation.institution,
+        degreeType: recommendation.degreeType,
+        fieldOfStudy: recommendation.fieldOfStudy,
+        description: recommendation.description,
+        costPerYear: recommendation.costPerYear,
+        duration: recommendation.duration,
+        location: recommendation.location,
+        startDate: recommendation.startDate,
+        applicationDeadline: recommendation.applicationDeadline,
+        requirements: recommendation.requirements || [],
+        highlights: recommendation.highlights || [],
+        pageLink: recommendation.pageLink,
+        matchScore: recommendation.matchScore,
+        matchRationale: recommendation.matchRationale,
+        isFavorite: recommendation.isFavorite || false,
+        feedbackNegative: recommendation.feedbackNegative || false,
+        feedbackReason: recommendation.feedbackReason || null,
+        feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
+        scholarships: recommendation.scholarships || [],
+        pathway_id: recommendation.pathway_id, // Include pathway_id
+        userId: userId,
+        syncedAt: new Date().toISOString()
+      }, null, 2);
+      
+      // Convert JSON string directly to base64 (Node.js compatible)
+      const base64Content = stringToBase64(recommendationJson);
+      
+      // Use a consistent naming pattern for program files, including pathway_id
+      const fileName = `program_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendation.id}.json`;
+      
+      const fileObject = { name: fileName, content: base64Content };
+      
+      // Upload the file with absolute URL
+      const uploadUrl = `${baseUrl}/api/vector_stores/upload_file`;
+      console.log(`POST request to: ${uploadUrl}`);
+      
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ fileObject }),
+        credentials: 'include'
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error(`Upload failed with status ${uploadResponse.status}: ${errorText}`);
+        throw new Error(`Failed to upload program file for ${recommendation.id}: ${errorText}`);
+      }
+      
+      const uploadData = await uploadResponse.json();
+      const fileId = uploadData.id;
+      
+      if (!fileId) {
+        console.error('Upload succeeded but no file ID was returned');
+        throw new Error('No file ID returned from upload');
+      }
+      
+      fileIds.push(fileId);
+      
+      // Save the file ID to the recommendation_files table
+      await saveRecommendationFileId(recommendation.id, fileId, fileName);
+      
+      console.log(`Uploaded program file for ${recommendation.name} with file ID: ${fileId}`);
+    }
+    
+    // Add all files to the vector store using the batch API
+    if (fileIds.length > 0) {
+      console.log(`Adding ${fileIds.length} files to Vector Store: ${vectorStoreId}`);
+      const batchUrl = `${baseUrl}/api/vector_stores/add_files_batch`;
+      console.log(`POST request to: ${batchUrl} with data:`, { vectorStoreId, fileIds });
+      
+      try {
+        // Get fresh headers for this request
+        const batchHeaders = await getAuthHeaders();
+        console.log('Auth headers for batch request:', Object.keys(batchHeaders).join(', '));
+        
+        // Make the batch request with explicit error handling
+        const addFilesResponse = await fetch(batchUrl, {
+          method: "POST",
+          headers: batchHeaders,
+          body: JSON.stringify({
+            vectorStoreId,
+            fileIds
+          }),
+          credentials: 'include'
+        });
+        
+        // Log the status of the response for debugging
+        console.log(`Batch add response status: ${addFilesResponse.status}`);
+        
+        if (!addFilesResponse.ok) {
+          // Try to extract the error message from the response
+          let errorText = '';
+          try {
+            const errorJson = await addFilesResponse.json();
+            errorText = JSON.stringify(errorJson);
+          } catch {
+            errorText = await addFilesResponse.text();
+          }
+          
+          console.error(`Batch add failed with status ${addFilesResponse.status}: ${errorText}`);
+          
+          // If batch add fails, try adding files one by one as a fallback
+          console.log("Batch add failed, attempting to add files individually...");
+          const addFileUrl = `${baseUrl}/api/vector_stores/add_file`;
+          
+          let individualSuccessCount = 0;
+          
+          for (const fileId of fileIds) {
+            try {
+              // Get fresh headers for each request
+              const fileHeaders = await getAuthHeaders();
+              
+              const addSingleFileResponse = await fetch(addFileUrl, {
+                method: "POST",
+                headers: fileHeaders,
+                body: JSON.stringify({
+                  vectorStoreId,
+                  fileId
+                }),
+                credentials: 'include'
+              });
+              
+              if (addSingleFileResponse.ok) {
+                console.log(`Successfully added file ${fileId} to vector store`);
+                individualSuccessCount++;
+              } else {
+                console.error(`Failed to add file ${fileId} to vector store: ${addSingleFileResponse.status}`);
+              }
+            } catch (singleFileError) {
+              console.error(`Error adding file ${fileId} to vector store:`, singleFileError);
+            }
+          }
+          
+          if (individualSuccessCount > 0) {
+            console.log(`Successfully added ${individualSuccessCount}/${fileIds.length} files individually`);
+          } else {
+            // If all individual adds fail too, throw an error
+            throw new Error(`Failed to add program files to vector store batch: ${errorText}`);
+          }
+        } else {
+          // Successfully added all files in a batch
+          const batchResult = await addFilesResponse.json();
+          console.log(`Successfully added ${fileIds.length} program files to vector store with batch ID: ${batchResult.batch_id}`);
+        }
+      } catch (batchError) {
+        console.error('Error in batch operation:', batchError);
+        throw new Error(`Failed to add files to vector store: ${batchError instanceof Error ? batchError.message : String(batchError)}`);
+      }
+    } else {
+      console.log("No program files to add to vector store");
+    }
+    
+    return {
+      success: true,
+      fileIds
+    };
+  } catch (error) {
+    console.error("Error syncing programs to Vector Store:", error);
+    return {
+      success: false,
+      fileIds: [],
+      error: error instanceof Error ? error.message : "Unknown error during program sync"
     };
   }
 } 

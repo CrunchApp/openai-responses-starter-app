@@ -13,7 +13,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import useProfileStore from "@/stores/useProfileStore";
-import useRecommendationsStore from "@/stores/useRecommendationsStore";
 import SignupModal from "@/app/auth/SignupModal";
 
 interface ReviewStepProps {
@@ -36,7 +35,6 @@ export default function ReviewStep({
   
   // Use our stores
   const { vectorStoreId: storeVectorStoreId, setVectorStoreId, setProfileComplete } = useProfileStore();
-  const { setUserProfile } = useRecommendationsStore();
   const { setVectorStore, setFileSearchEnabled } = useToolsStore();
 
   // Add a useEffect to verify vector store ID consistency

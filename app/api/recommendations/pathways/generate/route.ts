@@ -6,6 +6,41 @@ import { checkUserAuthentication } from '@/app/recommendations/supabase-helpers'
 // Check for required environment variables
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// Utility function to ensure profile data is correctly structured
+function sanitizeUserProfile(userProfile: any) {
+  if (!userProfile) return userProfile;
+  
+  const sanitized = {...userProfile};
+  
+  // Ensure careerGoals is properly structured
+  if (!sanitized.careerGoals) {
+    sanitized.careerGoals = { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] };
+  } else {
+    // Preserve existing values even if empty strings
+    sanitized.careerGoals = {
+      shortTerm: sanitized.careerGoals.shortTerm !== undefined ? sanitized.careerGoals.shortTerm : '',
+      longTerm: sanitized.careerGoals.longTerm !== undefined ? sanitized.careerGoals.longTerm : '',
+      desiredIndustry: Array.isArray(sanitized.careerGoals.desiredIndustry) ? sanitized.careerGoals.desiredIndustry : [],
+      desiredRoles: Array.isArray(sanitized.careerGoals.desiredRoles) ? sanitized.careerGoals.desiredRoles : []
+    };
+  }
+  
+  // Ensure preferences is properly structured
+  if (!sanitized.preferences) {
+    sanitized.preferences = { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 100000 } };
+  } else {
+    // Preserve existing values 
+    sanitized.preferences = {
+      preferredLocations: Array.isArray(sanitized.preferences.preferredLocations) ? sanitized.preferences.preferredLocations : [],
+      studyMode: sanitized.preferences.studyMode !== undefined ? sanitized.preferences.studyMode : '',
+      startDate: sanitized.preferences.startDate !== undefined ? sanitized.preferences.startDate : '',
+      budgetRange: sanitized.preferences.budgetRange || { min: 0, max: 100000 }
+    };
+  }
+  
+  return sanitized;
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
@@ -22,18 +57,28 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const requestData: GeneratePathwaysPayload = await request.json();
     const { 
-      userProfile, 
+      userProfile: rawUserProfile, 
       previousResponseId, 
       existingPathways, 
       feedbackContext 
     } = requestData;
     
-    if (!userProfile) {
+    if (!rawUserProfile) {
       return NextResponse.json(
         { error: 'Missing required parameter: userProfile' },
         { status: 400 }
       );
     }
+    
+    // Sanitize and ensure profile data is correctly structured
+    const userProfile = sanitizeUserProfile(rawUserProfile);
+    
+    // Debug logging for user profile data
+    console.log('User profile received for recommendations:');
+    console.log('Raw Career Goals:', JSON.stringify(rawUserProfile.careerGoals));
+    console.log('Sanitized Career Goals:', JSON.stringify(userProfile.careerGoals));
+    console.log('Raw Preferences:', JSON.stringify(rawUserProfile.preferences));
+    console.log('Sanitized Preferences:', JSON.stringify(userProfile.preferences));
     
     // Check authentication to track pathway generation counts for users
     const { isAuthenticated, userId } = await checkUserAuthentication();

@@ -18,8 +18,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/components/auth/AuthContext';
 
 // Helper function to format currency
-function formatCurrency(amount?: number) {
-  if (amount === undefined) return "Not specified";
+function formatCurrency(amount?: number | null) {
+  if (amount === undefined || amount === null) return "Not specified";
   
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -216,7 +216,7 @@ export function SavedProgramsView({ userProfile }: { userProfile: any }) {
             program={program}
             pathwayId={pathwayId}
             pathwayTitle={pathwayTitle}
-            onUnfavorite={() => handleUnfavorite(pathwayId, program.id)}
+            onUnfavorite={() => program.id && handleUnfavorite(pathwayId, program.id)}
           />
         ))}
       </div>

@@ -102,6 +102,31 @@ export async function generateEducationPathways(
       };
     }
     
+    // If response contains a responseId and user is authenticated, save it to the user profile
+    if (pathwaysResult.responseId && isAuthenticated && userId) {
+      try {
+        const supabase = await createClient();
+        console.log(`Saving conversation response ID to user profile: ${pathwaysResult.responseId}`);
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ last_pathway_response_id: pathwaysResult.responseId })
+          .eq('id', userId);
+        
+        if (updateError) {
+          console.warn(`Failed to save conversation response ID: ${updateError.message}`);
+        } else {
+          console.log('Successfully saved conversation response ID');
+        }
+      } catch (updateError) {
+        console.warn('Error saving response ID:', updateError);
+        // Non-critical error, continue with the rest of the function
+      }
+    } else if (pathwaysResult.responseId) {
+      console.log(`ResponseId received but not saved (guest mode): ${pathwaysResult.responseId}`);
+    } else {
+      console.log('No responseId received from API');
+    }
+    
     if (!isAuthenticated || !userId) {
       console.log('User not authenticated, returning generated pathways without saving');
       return {
@@ -166,6 +191,7 @@ async function fetchPathwaysFromAPI(
   userProfile: UserProfile
 ): Promise<{
   pathways: EducationPathway[];
+  responseId?: string;
   error?: string;
 }> {
   try {
@@ -221,8 +247,10 @@ async function fetchPathwaysFromAPI(
       throw new Error('Invalid response format from pathways API');
     }
     
+    // Return both pathways and responseId
     return {
       pathways: data.pathways,
+      responseId: data.responseId
     };
   } catch (error) {
     console.error('Error fetching pathways:', error);
@@ -440,16 +468,31 @@ export async function generateProgramsForPathway(
   dbSaveError?: string;
   partialSave?: boolean;
   savedCount?: number;
+  rejectedPrograms?: Array<{name: string, reason: string}>;
 }> {
-  const startTime = Date.now(); // Keep track of execution time
+  let recommendations: RecommendationProgram[] = [];
+  const startTime = Date.now(); // Restore execution time tracking
+  
   try {
+    // ---- Initialize Supabase Client ----
+    const supabase = await createClient();
+    
+    // Get the userId from the user profile
+    const userId = userProfile.userId;
+    if (!userId) {
+      return {
+        recommendations: [],
+        error: "User ID not found in profile"
+      };
+    }
+    
     console.log(`Generating program recommendations for pathway ${pathwayId}...`);
     
     // Check authentication status (already done in exploreProgramsAction, but good practice here too)
-    const { isAuthenticated, userId } = await checkUserAuthentication();
-    console.log(`Auth check result: isAuthenticated=${isAuthenticated}, userId=${userId}`);
+    const { isAuthenticated, userId: authUserId } = await checkUserAuthentication();
+    console.log(`Auth check result: isAuthenticated=${isAuthenticated}, userId=${authUserId}`);
     
-    if (!isAuthenticated || !userId) {
+    if (!isAuthenticated || !authUserId) {
       return {
         recommendations: [],
         error: 'Authentication required to generate program recommendations'
@@ -470,13 +513,37 @@ export async function generateProgramsForPathway(
     console.log(`Successfully fetched pathway: ${pathway.title}`);
     // ---- End Fetch Pathway Data ----
 
+    // ---- Fetch previousResponseId from user profile ----
+    let previousResponseId: string | undefined = undefined;
+    try {
+      const { data: profileData, error: profileFetchError } = await supabase
+        .from('profiles')
+        .select('last_pathway_response_id')
+        .eq('id', userId)
+        .single();
+      
+      if (profileFetchError) {
+        console.warn('Could not fetch profile to get last_pathway_response_id:', profileFetchError.message);
+      } else if (profileData?.last_pathway_response_id) {
+        previousResponseId = profileData.last_pathway_response_id;
+        console.log(`Retrieved previousResponseId for context: ${previousResponseId}`);
+      }
+    } catch (fetchError) {
+      console.warn('Error fetching last_pathway_response_id from profile:', fetchError);
+    }
+    // ---- End Fetch previousResponseId ----
+
     // ---- Call Program Research Agent Directly ----
     console.log(`Calling researchSpecificPrograms for pathway: ${pathway.title}`);
-    let recommendations: RecommendationProgram[] = [];
     let agentError: string | undefined = undefined;
     
     try {
-      recommendations = await researchSpecificPrograms(pathway, userProfile, pathwayFeedback);
+      recommendations = await researchSpecificPrograms(
+        pathway, 
+        userProfile, 
+        pathwayFeedback,
+        previousResponseId // Pass the retrieved ID
+      );
       console.log(`Agent finished: ${recommendations.length} programs found`);
     } catch (error) {
       console.error('Error calling researchSpecificPrograms agent:', error);
@@ -518,7 +585,8 @@ export async function generateProgramsForPathway(
           recommendations: recommendations, // Still return the generated programs
           dbSaveError: saveResult.error,
           partialSave: Boolean(saveResult.savedCount && saveResult.savedCount > 0),
-          savedCount: saveResult.savedCount
+          savedCount: saveResult.savedCount,
+          rejectedPrograms: saveResult.rejectedPrograms
           // No warning needed here, dbSaveError is the primary issue
         };
       }
@@ -527,7 +595,6 @@ export async function generateProgramsForPathway(
 
       // Mark pathway as explored after successful save
       try {
-        const supabase = await createClient();
         const { error: exploredError } = await supabase.rpc(
           'update_pathway_explored_status',
           { p_pathway_id: pathwayId, p_is_explored: true }
@@ -546,7 +613,8 @@ export async function generateProgramsForPathway(
       console.log(`Program generation and saving completed in ${executionTime}ms`);
       return {
         recommendations: recommendations, // Return saved programs
-        savedCount: saveResult.savedCount
+        savedCount: saveResult.savedCount,
+        rejectedPrograms: saveResult.rejectedPrograms
         // No specific warning needed on full success
       };
     } catch (dbError) {
@@ -690,24 +758,149 @@ export async function resetPathwaysAction(): Promise<{
     const pathwayIdsToReset = pathwaysToReset.map(p => p.id);
     console.log(`Deleting ${pathwayIdsToReset.length} pathways for user ${userId}.`);
 
-    // First, delete all associated recommendations to maintain referential integrity
-    const { data: deletedPrograms, error: programDeleteError } = await supabase
-      .from('recommendations')
-      .delete()
-      .eq('user_id', userId)
-      .in('pathway_id', pathwayIdsToReset)
-      .select('id');
+    // Get vector store ID from user's recommendations
+    let vectorStoreId = null;
+    try {
+      const { data: vectorStoreData, error: vectorStoreError } = await supabase
+        .from('recommendations')
+        .select('vector_store_id')
+        .eq('user_id', userId)
+        .limit(1);
       
-    if (programDeleteError) {
-      console.error('Error deleting associated recommendations during reset:', programDeleteError);
-      return {
-        success: false,
-        error: `Failed to delete associated recommendations: ${programDeleteError.message}`
-      };
+      if (!vectorStoreError && vectorStoreData && vectorStoreData.length > 0) {
+        vectorStoreId = vectorStoreData[0].vector_store_id;
+        console.log(`Found vector store ID for user ${userId}: ${vectorStoreId}`);
+      } else {
+        console.log(`No vector store ID found for user ${userId}, skipping vector store cleanup`);
+      }
+    } catch (vectorStoreError) {
+      console.error('Error fetching vector store ID:', vectorStoreError);
+      // Continue with deletion even if we can't get the vector store ID
     }
+
+    // First, get all recommendation IDs to clean up vector store files
+    const { data: recommendationsToDelete, error: recFetchError } = await supabase
+      .from('recommendations')
+      .select('id')
+      .eq('user_id', userId)
+      .in('pathway_id', pathwayIdsToReset);
     
-    const deletedProgramsCount = deletedPrograms?.length || 0;
-    console.log(`Deleted ${deletedProgramsCount} recommendations for user ${userId}.`);
+    let deletedProgramsCount = 0;
+    
+    if (recFetchError) {
+      console.error('Error fetching recommendations to delete:', recFetchError);
+      // Continue with deletion even if we can't get all recommendation IDs
+    } else if (recommendationsToDelete && recommendationsToDelete.length > 0) {
+      const recommendationIds = recommendationsToDelete.map(r => r.id);
+      deletedProgramsCount = recommendationIds.length;
+      console.log(`Found ${deletedProgramsCount} recommendations to delete for pathways.`);
+      
+      // First get all file IDs before deleting any records
+      const fileIds: string[] = [];
+      
+      try {
+        console.log('Getting file IDs from recommendation_files...');
+        const { data: fileData, error: fileError } = await supabase
+          .from('recommendation_files')
+          .select('file_id')
+          .in('recommendation_id', recommendationIds);
+        
+        if (fileError) {
+          console.error('Error fetching file IDs:', fileError);
+          // Continue with deletion even if we can't get file IDs
+        } else {
+          if (fileData && fileData.length > 0) {
+            fileIds.push(...fileData.map(f => f.file_id));
+            console.log(`Found ${fileIds.length} file IDs to delete from OpenAI`);
+          } else {
+            console.log('No files found to delete from OpenAI');
+          }
+        }
+      } catch (fileError) {
+        console.error('Error getting file IDs:', fileError);
+        // Continue with deletion even if we can't get file IDs
+      }
+      
+      // Delete vector store files if we have a vector store ID
+      if (vectorStoreId && fileIds.length > 0) {
+        try {
+          // Use a direct API call instead of importing the function, which may not work in this context
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+          
+          // Get auth headers for the API call
+          const headers = await getAuthHeaders();
+          
+          try {
+            // First, call the delete_file endpoint for each file ID
+            let successCount = 0;
+            for (const fileId of fileIds) {
+              try {
+                console.log(`Deleting file ${fileId} from OpenAI`);
+                const deleteUrl = `${baseUrl}/api/vector_stores/delete_file?file_id=${fileId}`;
+                
+                const response = await fetch(deleteUrl, {
+                  method: 'DELETE',
+                  headers: headers,
+                  credentials: 'include'
+                });
+                
+                if (response.ok) {
+                  console.log(`Successfully deleted file ${fileId} from OpenAI`);
+                  successCount++;
+                } else {
+                  console.error(`Failed to delete file ${fileId} from OpenAI: ${await response.text()}`);
+                }
+              } catch (fileError) {
+                console.error(`Error deleting file ${fileId} from OpenAI:`, fileError);
+              }
+            }
+            
+            console.log(`Successfully deleted ${successCount}/${fileIds.length} files from OpenAI vector store`);
+          } catch (cleanupError) {
+            console.error('Error cleaning up vector store files:', cleanupError);
+            // Continue with deletion even if we have errors here
+          }
+        } catch (filesError) {
+          console.error('Error handling vector store file cleanup:', filesError);
+          // Continue with deletion even if we have errors here
+        }
+      }
+      
+      // Now delete the recommendation_files records
+      try {
+        console.log('Deleting recommendation_files records...');
+        const { error: fileDeleteError } = await supabase
+          .from('recommendation_files')
+          .delete()
+          .in('recommendation_id', recommendationIds);
+        
+        if (fileDeleteError) {
+          console.error('Error deleting recommendation_files:', fileDeleteError);
+          // Continue with deletion even if we have errors here
+        } else {
+          console.log(`Successfully deleted recommendation_files records for ${recommendationIds.length} recommendations`);
+        }
+      } catch (fileDeleteError) {
+        console.error('Error during recommendation_files deletion:', fileDeleteError);
+        // Continue with deletion even if we have errors here
+      }
+      
+      // Now delete the recommendations
+      const { error: recDeleteError } = await supabase
+        .from('recommendations')
+        .delete()
+        .in('id', recommendationIds);
+      
+      if (recDeleteError) {
+        console.error('Error deleting recommendations:', recDeleteError);
+        return {
+          success: false,
+          error: `Failed to delete recommendations: ${recDeleteError.message}`
+        };
+      }
+      
+      console.log(`Successfully deleted ${deletedProgramsCount} recommendations.`);
+    }
 
     // Now permanently delete all pathways
     const { data: deletedPathways, error: pathwayDeleteError } = await supabase
@@ -768,12 +961,34 @@ async function saveProgramsForPathway(
   success: boolean;
   savedCount: number;
   error?: string;
+  rejectedPrograms?: Array<{name: string, reason: string}>;
 }> {
   try {
     const supabase = await createClient();
     
-    // Validate recommendations to ensure they have required fields
-    const validatedRecommendations = recommendations.map(rec => {
+    // Track programs that fail validation or saving
+    const rejectedPrograms: Array<{name: string, reason: string}> = [];
+    const validatedRecommendations: RecommendationProgram[] = [];
+    
+    // First phase validation - validate each program individually
+    for (const rec of recommendations) {
+      // Check for required fields
+      if (!rec.name || rec.name.trim() === '') {
+        rejectedPrograms.push({
+          name: rec.name || 'Unnamed Program',
+          reason: 'Program name is required'
+        });
+        continue;
+      }
+      
+      if (!rec.institution || rec.institution.trim() === '') {
+        rejectedPrograms.push({
+          name: rec.name,
+          reason: 'Institution name is required'
+        });
+        continue;
+      }
+      
       // Extract scholarships and save the rest of the properties
       const { scholarships, ...programData } = rec;
       
@@ -786,23 +1001,114 @@ async function saveProgramsForPathway(
         ? rec.highlights 
         : [];
       
-      return {
+      // Check for numeric fields
+      const costPerYear = typeof rec.costPerYear === 'number' 
+        ? rec.costPerYear 
+        : (rec.costPerYear ? parseFloat(String(rec.costPerYear).replace(/[^\d.-]/g, '')) : null);
+      
+      const duration = typeof rec.duration === 'number' 
+        ? rec.duration 
+        : (rec.duration ? parseInt(String(rec.duration).replace(/[^\d.-]/g, ''), 10) : null);
+      
+      // Only validate costPerYear if it's provided
+      if (costPerYear !== null && isNaN(costPerYear)) {
+        rejectedPrograms.push({
+          name: rec.name,
+          reason: 'Cost per year must be a valid number'
+        });
+        continue;
+      }
+      
+      // Only validate duration if it's provided
+      if (duration !== null && isNaN(duration)) {
+        rejectedPrograms.push({
+          name: rec.name,
+          reason: 'Duration must be a valid number'
+        });
+        continue;
+      }
+      
+      // Create a validated recommendation
+      const validatedRec = {
         ...programData,
         // Ensure matchScore is never null (required by DB)
         matchScore: typeof rec.matchScore === 'number' ? rec.matchScore : 70,
         // Ensure other required fields have defaults
-        name: rec.name || 'Unnamed Program',
-        institution: rec.institution || 'Unknown Institution',
+        name: rec.name,
+        institution: rec.institution,
         degreeType: rec.degreeType || 'Not Specified',
         fieldOfStudy: rec.fieldOfStudy || 'Not Specified',
         description: rec.description || 'No description available',
+        costPerYear: costPerYear !== null ? costPerYear : null,
+        duration: duration !== null ? duration : null,
         // Replace requirements and highlights with validated arrays
         requirements: requirements,
-        highlights: highlights
+        highlights: highlights,
+        // Include scholarships if available
+        scholarships: scholarships
       };
-    });
+      
+      validatedRecommendations.push(validatedRec);
+    }
     
-    console.log(`Saving ${validatedRecommendations.length} validated programs to database`);
+    console.log(`Validated ${validatedRecommendations.length} programs out of ${recommendations.length}`);
+    
+    if (validatedRecommendations.length === 0) {
+      return {
+        success: false,
+        savedCount: 0,
+        error: 'No valid programs to save',
+        rejectedPrograms
+      };
+    }
+    
+    // Create a formatter that matches *exactly* what the SQL function expects
+    const prepareForDatabase = (program: any) => {
+      // Make sure match_rationale is proper JSONB
+      const matchRationale = typeof program.matchRationale === 'object' && program.matchRationale !== null
+        ? program.matchRationale
+        : { careerAlignment: 70, budgetFit: 70, locationMatch: 70, academicFit: 70 };
+      
+      // Ensure requirements is a properly-formatted array of strings
+      const requirements = Array.isArray(program.requirements) 
+        ? program.requirements.filter((r: any) => typeof r === 'string')
+        : [];
+      
+      // Ensure highlights is a properly-formatted array of strings  
+      const highlights = Array.isArray(program.highlights)
+        ? program.highlights.filter((h: any) => typeof h === 'string')
+        : [];
+      
+      return {
+        // Basic fields - keep as is
+        name: program.name,
+        institution: program.institution,
+        description: program.description,
+        location: program.location,
+        
+        // Fields SQL expects in camelCase with type conversions
+        degreeType: program.degreeType,
+        fieldOfStudy: program.fieldOfStudy,
+        costPerYear: typeof program.costPerYear === 'number' ? program.costPerYear : null,
+        duration: typeof program.duration === 'number' ? program.duration : null,
+        startDate: program.startDate || '',
+        applicationDeadline: program.applicationDeadline || '',
+        pageLink: program.pageLink || '',
+        
+        // Fields SQL expects in snake_case (from examining SQL function)
+        match_score: typeof program.matchScore === 'number' ? program.matchScore : 70,
+        match_rationale: matchRationale, // Make sure this is a valid JSONB object
+        is_favorite: program.isFavorite === true,
+        
+        // Arrays and objects - using validated versions
+        requirements: requirements,
+        highlights: highlights,
+        scholarships: program.scholarships || []
+      };
+    };
+    
+    // Prepare recommendations with exact SQL-expected format
+    const dbReadyRecommendations = validatedRecommendations.map(prepareForDatabase);
     
     // Call the stored procedure to store the programs
     const { data, error } = await supabase.rpc(
@@ -811,148 +1117,181 @@ async function saveProgramsForPathway(
         p_user_id: userId,
         p_pathway_id: pathwayId,
         p_vector_store_id: vectorStoreId,
-        p_recommendations: validatedRecommendations
+        p_recommendations: dbReadyRecommendations // Use SQL-compatible version
       }
     );
     
     if (error) {
       console.error('Error saving programs batch via RPC:', error);
+      
+      // Add all valid programs as rejected if the entire batch failed
+      const newlyRejected = validatedRecommendations.map(rec => ({
+        name: rec.name,
+        reason: `Failed to save: ${error.message}`
+      }));
+      
+      rejectedPrograms.push(...newlyRejected);
+      
       return {
         success: false,
         savedCount: 0,
-        error: `Failed to save programs: ${error.message}`
+        error: `Failed to save programs: ${error.message}`,
+        rejectedPrograms
       };
     }
     
     // Extract results from the stored procedure (assuming it returns an array with one object)
     const result = data?.[0]; // Use optional chaining
     
+    if (result?.rejected_programs && result.rejected_programs.length > 0) {
+      console.log(`${result.rejected_programs.length} programs were rejected during database save:`, 
+        result.rejected_programs.map((p: {name: string; reason: string}) => `${p.name}: ${p.reason}`).join('; '));
+      
+      // Add any rejected programs from the database to our list
+      rejectedPrograms.push(...result.rejected_programs);
+    }
+    
     if (!result || !result.success) {
       console.error('Stored procedure store_programs_batch did not return success:', result);
+      
+      // Add all valid programs as rejected with the error from the result
+      const newlyRejected = validatedRecommendations.map(rec => ({
+        name: rec.name,
+        reason: result?.error || 'Unknown error saving programs batch'
+      }));
+      
+      // Only add programs not already in rejectedPrograms
+      const existingNames = new Set(rejectedPrograms.map(p => p.name));
+      const uniqueNewlyRejected = newlyRejected.filter(p => !existingNames.has(p.name));
+      
+      rejectedPrograms.push(...uniqueNewlyRejected);
+      
       return {
         success: false,
         savedCount: result?.saved_count || 0,
-        error: result?.error || 'Unknown error saving programs batch'
+        error: result?.error || 'Unknown error saving programs batch',
+        rejectedPrograms
       };
     }
     
     const savedCount = result.saved_count || 0;
     console.log(`RPC saved ${savedCount} programs.`);
 
-    // Save scholarships to program_scholarships table if needed
-    // This assumes the stored procedure returns the saved program IDs
-    if (savedCount > 0 && result.saved_program_ids && Array.isArray(result.saved_program_ids)) {
-      try {
-        // Find programs with scholarships and map them to program IDs
-        const scholarshipsToSave = [];
-        
-        for (let i = 0; i < Math.min(recommendations.length, result.saved_program_ids.length); i++) {
-          const programId = result.saved_program_ids[i];
-          const scholarships = recommendations[i].scholarships;
-          
-          if (programId && scholarships && Array.isArray(scholarships) && scholarships.length > 0) {
-            for (const scholarship of scholarships) {
-              scholarshipsToSave.push({
-                program_id: programId,
-                name: scholarship.name || 'Unnamed Scholarship',
-                amount: scholarship.amount || '0',
-                eligibility: scholarship.eligibility || 'No eligibility criteria specified'
-              });
-            }
-          }
-        }
-        
-        // If we have scholarships to save, call a scholarship-specific RPC or insert directly
-        if (scholarshipsToSave.length > 0) {
-          console.log(`Saving ${scholarshipsToSave.length} scholarships`);
-          
-          // Using a separate RPC to save scholarships
-          const { data: scholarshipData, error: scholarshipError } = await supabase.rpc(
-            'store_program_scholarships_batch',
-            {
-              p_scholarships: scholarshipsToSave
-            }
-          );
-          
-          if (scholarshipError) {
-            console.warn('Error saving scholarships:', scholarshipError);
-            // Don't fail the entire operation, just log the warning
-          }
-        }
-      } catch (scholarshipError) {
-        console.warn('Error processing scholarships:', scholarshipError);
-        // Don't fail the entire operation for scholarship errors
-      }
+    // Get the saved program and recommendation IDs from the RPC result
+    const savedProgramIds = result.saved_program_ids || [];
+    const savedRecommendationIds = result.saved_recommendation_ids || [];
+
+    console.log(`RPC returned ${savedProgramIds.length} program IDs and ${savedRecommendationIds.length} recommendation IDs.`);
+    
+    // Check if we have the expected number of IDs
+    if (savedRecommendationIds.length !== savedCount || savedProgramIds.length !== savedCount) {
+      console.warn(`Mismatch between saved count (${savedCount}) and returned IDs (rec: ${savedRecommendationIds.length}, prog: ${savedProgramIds.length})`);
     }
 
-    // Sync successfully saved recommendations to vector store
-    if (savedCount > 0) {
+    // Create recommendations with proper IDs for vector store syncing
+    const savedRecommendationsWithIds: RecommendationProgram[] = [];
+    
+    // Map the first savedCount items from validatedRecommendations to their database IDs
+    for (let i = 0; i < Math.min(savedCount, validatedRecommendations.length, savedRecommendationIds.length); i++) {
+      savedRecommendationsWithIds.push({
+        ...validatedRecommendations[i],
+        id: savedRecommendationIds[i],          // Use the actual recommendation ID from the DB
+        program_id: savedProgramIds[i],         // Use the actual program ID from the DB
+        pathway_id: pathwayId                   // Ensure pathway_id is included
+      });
+    }
+    
+    // Identify programs that were in the input but not in the saved list
+    if (validatedRecommendations.length > savedRecommendationsWithIds.length) {
+      // Track which programs were actually saved by creating a set of names
+      const savedNames = new Set(savedRecommendationsWithIds.map(r => r.name));
+      
+      // For each validated program that's not in the saved list
+      validatedRecommendations.forEach((rec, index) => {
+        if (!savedNames.has(rec.name) && !rejectedPrograms.some(rej => rej.name === rec.name)) {
+          // See if we can get a more specific reason from the database results
+          let reason = 'Not included in the successfully saved list from database.';
+          
+          // If we have fewer recommendation IDs than expected, that might indicate an issue
+          if (index < validatedRecommendations.length && 
+              (savedRecommendationIds.length <= index || savedProgramIds.length <= index)) {
+            reason = 'Database did not return an ID for this program. This may be due to a duplicate name/institution or other constraint violation.';
+          }
+          
+          rejectedPrograms.push({
+            name: rec.name,
+            reason: reason
+          });
+        }
+      });
+    }
+
+    // Sync the recommendations that have confirmed database IDs
+    if (savedRecommendationsWithIds.length > 0) {
       try {
-        // Ensure recommendations have pathway_id for vector store context
-        const recommendationsWithContext = validatedRecommendations.map(rec => ({
-          ...rec,
-          pathway_id: pathwayId
-        }));
-        
-        console.log(`Syncing ${savedCount} programs to vector store ${vectorStoreId}`);
+        console.log(`Syncing ${savedRecommendationsWithIds.length} programs with confirmed IDs to vector store ${vectorStoreId}`);
         const syncResult = await syncProgramsToVectorStore(
           userId,
-          recommendationsWithContext, // Use the enriched recommendations
+          savedRecommendationsWithIds, // Pass only recommendations with valid DB IDs
           vectorStoreId
         );
         
         if (!syncResult.success) {
           console.error('Error syncing programs to vector store:', syncResult.error);
-          // Return success for DB save, but include sync error
+          return {
+            success: true, // DB save was successful
+            savedCount: savedCount,
+            error: `Programs saved to database but failed to sync to vector store: ${syncResult.error}`,
+            rejectedPrograms
+          };
+        }
+        
+        // Check if the number of files synced matches the number of recommendations
+        if (syncResult.fileIds.length < savedRecommendationsWithIds.length) {
+          console.warn(`Only synced ${syncResult.fileIds.length} files to vector store out of ${savedRecommendationsWithIds.length} recommendations`);
           return {
             success: true,
             savedCount: savedCount,
-            error: `Programs saved to database but failed to sync to vector store: ${syncResult.error}`
+            error: `Only ${syncResult.fileIds.length} out of ${savedRecommendationsWithIds.length} programs were synced to vector store`,
+            rejectedPrograms
           };
         }
         
         console.log(`Successfully synced ${syncResult.fileIds.length} programs to vector store`);
       } catch (syncError) {
-        console.error('Unexpected error syncing programs to vector store:', syncError);
-        // Return success for DB save, but include sync error
+        console.error('Error syncing programs to vector store:', syncError);
         return {
-          success: true,
+          success: true, // DB save was successful
           savedCount: savedCount,
-          error: `Programs saved to database but failed to sync to vector store: ${syncError instanceof Error ? syncError.message : 'Unknown sync error'}`
+          error: `Programs saved to database but failed to sync to vector store due to an error: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`,
+          rejectedPrograms
         };
       }
+    } else if (savedCount > 0) {
+      console.warn(`No programs could be synced to vector store even though ${savedCount} were reported as saved`);
+      return {
+        success: true, // DB save was successful
+        savedCount: savedCount,
+        error: 'Programs saved to database but could not be synced to vector store due to missing IDs',
+        rejectedPrograms
+      };
     }
     
-    // Save the responseId for future use
-    if (data.responseId) {
-      try {
-        console.log(`Saving conversation response ID to user profile: ${data.responseId}`);
-        await supabase
-          .from('profiles')
-          .update({ last_pathway_response_id: data.responseId })
-          .eq('id', userId);
-        console.log('Successfully saved conversation response ID');
-      } catch (error) {
-        console.warn('Failed to save conversation response ID:', error);
-        // Non-critical error, continue
-      }
-    } else {
-      console.warn('No responseId returned from API, conversation history not saved');
-    }
-    
-    // If everything succeeded
     return {
       success: true,
-      savedCount: savedCount
+      savedCount: savedCount,
+      rejectedPrograms: rejectedPrograms.length > 0 ? rejectedPrograms : undefined
     };
   } catch (error) {
-    console.error('Unexpected error in saveProgramsForPathway:', error);
+    console.error('Error in saveProgramsForPathway:', error);
     return {
       success: false,
       savedCount: 0,
-      error: error instanceof Error
-        ? error.message
-        : 'An unexpected error occurred while saving programs'
+      error: error instanceof Error ? error.message : 'Unknown error saving programs',
+      rejectedPrograms: recommendations.map(rec => ({
+        name: rec.name || 'Unknown program',
+        reason: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }))
     };
   }
 }
@@ -990,51 +1329,84 @@ export async function fetchProgramsForPathway(pathwayId: string): Promise<{
     
     const supabase = await createClient();
     
-    // Call the stored procedure to get recommendations for this pathway
-    const { data, error } = await supabase.rpc(
-      'get_pathway_programs',
-      { p_pathway_id: pathwayId, p_user_id: userId }
-    );
+    // Instead of using the RPC function that's causing errors,
+    // use separate queries that we join in application code
+    console.log(`Fetching programs for pathway ${pathwayId} using direct queries`);
     
-    if (error) {
-      console.error(`Error fetching programs for pathway ${pathwayId}:`, error);
+    // First get the recommendations
+    const { data: recData, error: recError } = await supabase
+      .from('recommendations')
+      .select('id, match_score, is_favorite, match_rationale, program_id, feedback_negative, feedback_reason, feedback_submitted_at')
+      .eq('pathway_id', pathwayId)
+      .eq('user_id', userId);
+      
+    if (recError) {
+      console.error(`Error fetching recommendations for pathway ${pathwayId}:`, recError);
       return {
         recommendations: [],
-        error: `Failed to fetch programs: ${error.message}`
+        error: `Failed to fetch recommendations: ${recError.message}`
       };
     }
     
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      console.log(`No programs found for pathway ${pathwayId}`);
+    if (!recData || recData.length === 0) {
+      console.log(`No recommendations found for pathway ${pathwayId}`);
       return { recommendations: [] };
     }
     
-    // Map from database columns to RecommendationProgram objects
-    // Update to use recommendation_id instead of id
-    const recommendations: RecommendationProgram[] = data.map(item => ({
-      id: item.recommendation_id, // Changed from item.id to item.recommendation_id
-      name: item.name,
-      institution: item.institution,
-      degreeType: item.degree_type,
-      fieldOfStudy: item.field_of_study,
-      description: item.description,
-      costPerYear: item.cost_per_year,
-      duration: item.duration,
-      location: item.location,
-      startDate: item.start_date,
-      applicationDeadline: item.application_deadline,
-      requirements: item.requirements,
-      highlights: item.highlights,
-      pageLink: item.page_link,
-      matchScore: item.match_score,
-      matchRationale: item.match_rationale,
-      isFavorite: item.is_favorite,
-      feedbackNegative: item.feedback_negative,
-      feedbackReason: item.feedback_reason,
-      feedbackSubmittedAt: item.feedback_submitted_at,
-      scholarships: item.scholarships || [],
-      pathway_id: pathwayId
-    }));
+    // Get all program IDs from the recommendations
+    const programIds = recData.map(rec => rec.program_id).filter(Boolean);
+    
+    // Now fetch program details
+    const { data: progData, error: progError } = await supabase
+      .from('programs')
+      .select('*')
+      .in('id', programIds);
+      
+    if (progError) {
+      console.error(`Error fetching program details:`, progError);
+      return {
+        recommendations: [],
+        error: `Failed to fetch program details: ${progError.message}`
+      };
+    }
+    
+    // Create a map of programs by ID for easy lookup
+    const programsMap = new Map();
+    progData?.forEach(prog => {
+      programsMap.set(prog.id, prog);
+    });
+    
+    // Now combine the data
+    const recommendations: RecommendationProgram[] = recData
+      .filter(rec => programsMap.has(rec.program_id))
+      .map(rec => {
+        const program = programsMap.get(rec.program_id);
+        return {
+          id: rec.id,
+          name: program.name || '',
+          institution: program.institution || '',
+          degreeType: program.degree_type || '',
+          fieldOfStudy: program.field_of_study || '',
+          description: program.description || '',
+          costPerYear: typeof program.cost_per_year === 'number' ? program.cost_per_year : 0,
+          duration: typeof program.duration === 'number' ? program.duration : 0,
+          location: program.location || '',
+          startDate: program.start_date || '',
+          applicationDeadline: program.application_deadline || '',
+          requirements: Array.isArray(program.requirements) ? program.requirements : [],
+          highlights: Array.isArray(program.highlights) ? program.highlights : [],
+          pageLink: program.page_link || '',
+          matchScore: typeof rec.match_score === 'number' ? Math.round(rec.match_score) : 0,
+          matchRationale: rec.match_rationale || {},
+          isFavorite: rec.is_favorite || false,
+          feedbackNegative: rec.feedback_negative || false,
+          feedbackReason: rec.feedback_reason || null,
+          feedbackSubmittedAt: rec.feedback_submitted_at || null,
+          scholarships: [],
+          pathway_id: pathwayId,
+          program_id: program.id
+        };
+      });
     
     console.log(`Successfully fetched ${recommendations.length} programs for pathway ${pathwayId}`);
     return { recommendations };
@@ -1053,7 +1425,7 @@ export async function fetchProgramsForPathway(pathwayId: string): Promise<{
  */
 export async function deletePathwayWithFeedbackAction(
   pathwayId: string,
-  feedback: { reason: string; details?: string }
+  feedback?: { reason: string; details?: string }
 ): Promise<{
   success: boolean;
   error?: string;
@@ -1195,16 +1567,18 @@ async function fetchDeletedPathwaysWithFeedback(): Promise<{
  * Generate more pathways based on user feedback and existing pathways
  */
 export async function generateMorePathwaysAction(
-  existingPathways: EducationPathway[], // Assuming EducationPathway type is correct
-  feedbackContext: Array<{ pathwaySummary: string; feedback: object }> = [] // Assuming object type for feedback
+  existingPathways: EducationPathway[],
+  feedbackContext?: Array<{ pathwaySummary: string; feedback: object }>
 ): Promise<{
   pathways: EducationPathway[];
   error?: string;
-  isGuest: boolean; // Keep isGuest for consistency, although this action requires auth
+  isGuest: boolean;
   dbSaveError?: string;
   partialSave?: boolean;
   savedCount?: number;
 }> {
+  const startTime = Date.now(); // Execution time tracking
+  
   try {
     // Check authentication status FIRST
     const { isAuthenticated, userId } = await checkUserAuthentication();
@@ -1262,10 +1636,20 @@ export async function generateMorePathwaysAction(
       linkedInProfile: profileData.linkedin_profile || undefined,
       goal: profileData.goal || undefined,
       desiredField: profileData.desired_field || undefined,
-      education: profileData.education || [], 
-      careerGoals: profileData.career_goals || { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
+      education: profileData.education || [],
+      careerGoals: profileData.career_goals ? {
+        shortTerm: profileData.career_goals.shortTerm !== undefined ? profileData.career_goals.shortTerm : '',
+        longTerm: profileData.career_goals.longTerm !== undefined ? profileData.career_goals.longTerm : '',
+        desiredIndustry: Array.isArray(profileData.career_goals.desiredIndustry) ? profileData.career_goals.desiredIndustry : [],
+        desiredRoles: Array.isArray(profileData.career_goals.desiredRoles) ? profileData.career_goals.desiredRoles : []
+      } : { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
       skills: profileData.skills || [],
-      preferences: profileData.preferences || { preferredLocations: [], studyMode: '', startDate: '', budgetRange: { min: 0, max: 0 } },
+      preferences: profileData.preferences ? {
+        preferredLocations: Array.isArray(profileData.preferences.preferredLocations) ? profileData.preferences.preferredLocations : [],
+        studyMode: profileData.preferences.studyMode !== undefined ? profileData.preferences.studyMode : '',
+        startDate: profileData.preferences.startDate !== undefined ? profileData.preferences.startDate : '',
+        budgetRange: profileData.preferences.budgetRange || { min: 0, max: 0 }
+      } : { preferredLocations: [], studyMode: '', startDate: '', budgetRange: { min: 0, max: 0 } },
       documents: profileData.documents || { resume: null, transcripts: null, statementOfPurpose: null, otherDocuments: [] },
       vectorStoreId: vectorStoreId || undefined,
       profileFileId: profileData.profile_file_id || undefined,
@@ -1273,24 +1657,31 @@ export async function generateMorePathwaysAction(
     
     // Get the most recent responseId from user profile or from a dedicated table
     let previousResponseId: string | undefined = undefined;
+    let fetchResponseIdError: string | undefined = undefined;
     try {
-      const { data: responseData } = await supabase
+      const { data: responseData, error: responseIdError } = await supabase
         .from('profiles')
         .select('last_pathway_response_id')
         .eq('id', userId)
         .single();
-        
+      
+      if (responseIdError && responseIdError.code !== 'PGRST116') { // Ignore "not found"
+        // Don't throw, just log and continue without ID
+        console.warn('Error fetching previous response ID:', responseIdError.message);
+        fetchResponseIdError = responseIdError.message;
+      }
       if (responseData?.last_pathway_response_id) {
         previousResponseId = responseData.last_pathway_response_id;
         console.log(`Using previous response ID: ${previousResponseId}`);
       }
     } catch (error) {
       console.warn('Error fetching previous response ID:', error);
+      fetchResponseIdError = error instanceof Error ? error.message : String(error);
       // Continue without previous response ID if there's an error
     }
     
     // Fetch deleted pathways with feedback from the database
-    let combinedFeedbackContext = [...feedbackContext]; // Start with client-side feedback
+    let combinedFeedbackContext = feedbackContext ? [...feedbackContext] : []; // Start with client-side feedback if provided
     
     // Fetch additional feedback from deleted pathways in the database
     const { pathways: deletedPathways, error: fetchError } = await fetchDeletedPathwaysWithFeedback();
@@ -1357,19 +1748,35 @@ export async function generateMorePathwaysAction(
     
     // Save the responseId for future use
     if (data.responseId) {
+      let updateError: string | undefined = undefined;
       try {
-        await supabase
+        const { error: updateIdError } = await supabase
           .from('profiles')
           .update({ last_pathway_response_id: data.responseId })
           .eq('id', userId);
+        if (updateIdError) {
+          updateError = updateIdError.message;
+        }
       } catch (error) {
         console.warn('Failed to save conversation response ID:', error);
+        updateError = error instanceof Error ? error.message : String(error);
         // Non-critical error, continue
+      }
+      if (updateError) {
+        console.warn('Non-critical error saving conversation response ID:', updateError);
+        // Attach to dbSaveError if it exists, or create it
+        if (data.error) {
+          data.error += `; Failed to save conversation response ID: ${updateError}`;
+        } else {
+          data.error = `Failed to save conversation response ID: ${updateError}`;
+        }
       }
     } else {
       console.warn('No responseId returned from API, conversation history not saved');
     }
 
+    console.log(`More pathways generation completed in ${(Date.now() - startTime) / 1000} seconds`);
+    
     // Save the new pathways to the database
     if (newPathways.length > 0) {
       const saveResult = await savePathways(userId, newPathways);
@@ -1408,7 +1815,6 @@ export async function generateMorePathwaysAction(
 
 /**
  * Delete a program from recommendations (mark as deleted)
- * Assumes a recommendation_programs table exists.
  */
 export async function deleteRecommendationProgramAction(
   programId: string,
@@ -1416,6 +1822,7 @@ export async function deleteRecommendationProgramAction(
 ): Promise<{
   success: boolean;
   error?: string;
+  pathwayUpdated?: boolean;
 }> {
   try {
     // Check authentication status
@@ -1430,67 +1837,194 @@ export async function deleteRecommendationProgramAction(
     
     const supabase = await createClient();
     
-    // First, check if the program exists, belongs to the user, and is not already deleted
-    const { data: existingProgram, error: fetchError } = await supabase
-      .from('recommendation_programs')
-      .select('id') // Only need ID for check
-      .eq('id', programId)
-      .eq('user_id', userId)
-      .eq('is_deleted', false)
-      .single();
-    
-    if (fetchError) {
-       if (fetchError.code === 'PGRST116') {
-         console.warn(`Program ${programId} not found for user ${userId} or already deleted.`);
-         return { 
-            success: false, 
-            error: 'Program not found or already marked as deleted.' 
-         };
-       }
-       console.error('Error fetching program:', fetchError);
-       return {
-         success: false,
-         error: `Failed to fetch program: ${fetchError.message}`
-       };
-    }
-    
-    if (!existingProgram) {
-      return {
-        success: false,
-        error: 'Program not found or does not belong to the current user'
-      };
-    }
-    
-    // Update the program to mark it as deleted
-    const { error: updateError } = await supabase
-      .from('recommendation_programs')
-      .update({
-        is_deleted: true,
-        // pathway_id: pathwayId, // pathway_id should already be set when program was created
-        updated_at: new Date().toISOString()
-      })
+    // First, try to get the recommendation record
+    const { data: recommendation, error: fetchError } = await supabase
+      .from('recommendations')
+      .select('id, vector_store_id, pathway_id')
       .eq('id', programId)
       .eq('user_id', userId);
+    
+    // Handle case where no recommendation is found
+    if (fetchError) {
+      console.error('Error fetching recommendation:', fetchError);
       
-    if (updateError) {
-      console.error('Error updating program:', updateError);
+      // If error code is PGRST116, it means no rows were found, which is fine for deletion
+      if (fetchError.code === 'PGRST116') {
+        console.log(`No recommendation found with ID ${programId} for user ${userId}, already deleted or doesn't exist`);
+        
+        // If pathwayId was provided, we can still check if that pathway needs updating
+        if (pathwayId) {
+          return await checkAndUpdatePathwayStatus(supabase, userId, pathwayId);
+        }
+        
+        return {
+          success: true,
+          error: 'Recommendation already deleted or not found'
+        };
+      }
+      
       return {
         success: false,
-        error: `Failed to update program: ${updateError.message}`
+        error: fetchError.message || 'Failed to find the recommendation'
       };
     }
     
-    console.log(`Program ${programId} marked as deleted for user ${userId}.`);
+    // Handle empty results (no recommendation found)
+    if (!recommendation || recommendation.length === 0) {
+      console.log(`No recommendation found with ID ${programId} for user ${userId}, already deleted or doesn't exist`);
+      
+      // If pathwayId was provided, we can still check if that pathway needs updating
+      if (pathwayId) {
+        return await checkAndUpdatePathwayStatus(supabase, userId, pathwayId);
+      }
+      
+      return {
+        success: true,
+        error: 'Recommendation already deleted or not found'
+      };
+    }
+    
+    // Get the first recommendation (should be only one, but we're being cautious)
+    const rec = recommendation[0];
+    
+    // Get the pathway_id from the recommendation if not explicitly provided
+    const recommendationPathwayId = rec.pathway_id || pathwayId;
+    const vectorStoreId = rec.vector_store_id;
+    
+    // Delete from vector store first if vector_store_id is available
+    if (vectorStoreId) {
+      try {
+        // Import the deleteRecommendationFromVectorStore function
+        const { deleteRecommendationFromVectorStore } = await import('./vector-store-helpers');
+        
+        // Try to cleanup from vector store first
+        const vectorStoreResult = await deleteRecommendationFromVectorStore(
+          userId,
+          rec.id, // Use rec.id instead of programId - this is the recommendation ID
+          vectorStoreId
+        );
+        
+        if (!vectorStoreResult.success) {
+          console.error('Error deleting from vector store:', vectorStoreResult.error);
+          // Continue with database deletion even if vector store deletion fails
+        }
+      } catch (vectorStoreError) {
+        console.error('Error with vector store deletion:', vectorStoreError);
+        // Continue with database deletion even if vector store deletion fails
+      }
+    }
+    
+    // Delete from the recommendations table
+    const { error: deleteError } = await supabase
+      .from('recommendations')
+      .delete()
+      .eq('id', programId)
+      .eq('user_id', userId);
+    
+    if (deleteError) {
+      console.error('Error deleting recommendation from database:', deleteError);
+      return {
+        success: false,
+        error: deleteError.message || 'Failed to delete the recommendation from the database'
+      };
+    }
+    
+    console.log(`Successfully deleted recommendation program ${programId} for user ${userId}`);
+    
+    // Check if this was the last program for the pathway
+    if (recommendationPathwayId) {
+      return await checkAndUpdatePathwayStatus(supabase, userId, recommendationPathwayId);
+    }
+    
     return {
       success: true
     };
   } catch (error) {
-    console.error('Error deleting program:', error);
+    console.error('Error in deleteRecommendationProgramAction:', error);
     return {
       success: false,
       error: error instanceof Error 
         ? error.message 
-        : 'An unexpected error occurred while deleting program'
+        : 'An unexpected error occurred while deleting the recommendation'
     };
+  }
+}
+
+/**
+ * Helper function to check if a pathway has any programs left and update its status if needed
+ */
+async function checkAndUpdatePathwayStatus(
+  supabase: any,
+  userId: string,
+  pathwayId: string
+): Promise<{
+  success: boolean;
+  error?: string;
+  pathwayUpdated?: boolean;
+}> {
+  let pathwayUpdated = false;
+  
+  const { count, error: countError } = await supabase
+    .from('recommendations')
+    .select('id', { count: 'exact', head: true })
+    .eq('pathway_id', pathwayId)
+    .eq('user_id', userId);
+  
+  if (countError) {
+    console.error('Error counting remaining recommendations:', countError);
+    return { success: true, error: 'Failed to check remaining programs' };
+  } 
+  
+  if (count === 0) {
+    // This was the last program for the pathway, reset the is_explored status
+    const { error: updateError } = await supabase
+      .from('education_pathways')
+      .update({ 
+        is_explored: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', pathwayId)
+      .eq('user_id', userId);
+    
+    if (updateError) {
+      console.error('Error resetting pathway explored status:', updateError);
+      return { 
+        success: true, 
+        error: 'Program deleted but failed to reset pathway status' 
+      };
+    } else {
+      console.log(`Reset is_explored status for pathway ${pathwayId} as it now has 0 programs`);
+      pathwayUpdated = true;
+    }
+  }
+  
+  return {
+    success: true,
+    pathwayUpdated
+  };
+}
+
+/**
+ * Get authentication headers for API requests
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getSession();
+    
+    // Create headers with content-type
+    const headers: HeadersInit = {
+      "Content-Type": "application/json"
+    };
+    
+    // Add session token if available
+    if (data?.session?.access_token) {
+      headers["Authorization"] = `Bearer ${data.session.access_token}`;
+    }
+    
+    return headers;
+  } catch (error) {
+    console.error('Error getting auth headers:', error);
+    return { "Content-Type": "application/json" };
   }
 } 

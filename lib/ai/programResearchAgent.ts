@@ -4,11 +4,13 @@ import { searchProgramsWithPerplexityAPI } from '@/app/api/recommendations/perpl
 /**
  * Program Research Agent
  * Takes a single education pathway and user profile and finds specific matching programs
+ * Updated to accept previousResponseId for context
  */
 export async function researchSpecificPrograms(
   pathway: any, 
   userProfile: UserProfile, 
-  pathwayFeedback?: any
+  pathwayFeedback?: any,
+  previousResponseId?: string
 ): Promise<RecommendationProgram[]> {
   try {
     if (!pathway) {
@@ -45,7 +47,12 @@ export async function researchSpecificPrograms(
     const query = constructDetailedQuery(normalizedPathway, userProfile, pathwayFeedback);
     
     // Create the research promise
-    const researchPromise = searchProgramsWithPerplexityAPI(query, normalizedPathway);
+    const researchPromise = searchProgramsWithPerplexityAPI(
+      query, 
+      normalizedPathway,
+      userProfile,
+      previousResponseId
+    );
     
     // Race the research promise against the timeout
     const results = await Promise.race([
@@ -115,12 +122,13 @@ Please take this feedback into account when finding specific programs.
   // Create a structured query based on the pathway and user profile
   const query = `
 ${pathway.queryString || ''}
-Find 5 specific ${qualificationType} programs in ${fieldOfStudy} 
-${subfields ? `with specializations like ${subfields}` : ''}
-in ${targetRegions}. 
-Budget range: ${budgetRange} per year. 
-Duration: ${duration.min}-${duration.max} months.
-Make sure you include an accurate URL to the program webpage plus any relevant scholarships, financial aid, or other funding opportunities that could help with affordability.
+I need a comprehensive list of educational programs matching the following criteria:
+
+TYPE: ${qualificationType} programs 
+FIELD: ${fieldOfStudy}${subfields ? ` with specializations in ${subfields}` : ''}
+LOCATION: ${targetRegions}
+BUDGET: ${budgetRange} per year
+DURATION: ${duration.min}-${duration.max} months
 
 USER PREFERENCES:
 - Preferred locations: ${preferredLocations}
@@ -129,21 +137,29 @@ USER PREFERENCES:
 
 ${feedbackNotes}
 
-Format each program as a structured entry with: 
-- Name of program
-- Institution
-- Degree type
-- Field of study
-- Description
-- Annual cost
-- Program duration
-- Location
-- Starting dates
-- Application deadlines
-- Key requirements
-- Program highlights
-- Program webpage URL
-- Scholarships and funding opportunities
+IMPORTANT INSTRUCTIONS:
+1. List AT LEAST 5 different programs - preferably 8-10 if available.
+2. List them in a numbered format (1. First Program, 2. Second Program, etc.)
+3. For EACH program, provide comprehensive details including:
+   - Program name and degree/certificate type
+   - Institution name
+   - Field of study and specializations
+   - Detailed program description
+   - Annual cost in USD
+   - Program duration in months
+   - Location (city, country, or online)
+   - Application deadlines and start dates
+   - Key admission requirements
+   - Program highlights and unique features
+   - Direct URL to the program webpage
+   - Available scholarships and financial aid options
+
+4. Continue providing programs until you've listed at least 5 complete program profiles.
+5. Make sure to provide URLs for each program.
+6. Prioritize programs that match the user's budget and location preferences.
+7. DO NOT abbreviate or truncate your response. List all programs in full detail.
+
+Begin your response with "PROGRAM LIST:" followed by the complete numbered list of programs.
 `;
 
   return query;

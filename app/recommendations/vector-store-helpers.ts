@@ -52,6 +52,7 @@ async function getRecommendationFileIds(recommendationId: string): Promise<strin
 
 /**
  * Save a file ID to the recommendation_files table
+ * Performs a check to ensure the recommendation exists before saving
  */
 async function saveRecommendationFileId(
   recommendationId: string, 
@@ -62,12 +63,40 @@ async function saveRecommendationFileId(
     console.log(`Saving file ID ${fileId} for recommendation: ${recommendationId}`);
     const supabase = await createClient();
     
+    // Before inserting, first verify this recommendation ID actually exists
+    const { data: recommendationExists, error: checkError } = await supabase
+      .from('recommendations')
+      .select('id')
+      .eq('id', recommendationId)
+      .maybeSingle();
+    
+    if (checkError || !recommendationExists) {
+      console.log(`Recommendation not found with id column, trying recommendation_id column...`);
+      
+      // Try with recommendation_id column
+      const { data: altRecommendationExists, error: altCheckError } = await supabase
+        .from('recommendations')
+        .select('id')
+        .eq('recommendation_id', recommendationId)
+        .maybeSingle();
+      
+      if (altCheckError || !altRecommendationExists) {
+        console.error('Error checking if recommendation exists:', checkError || altCheckError);
+        console.error(`Cannot save file: Recommendation ID ${recommendationId} does not exist in the database with either id or recommendation_id`);
+        return false;
+      }
+      
+      // Found with recommendation_id, use its actual id
+      recommendationId = altRecommendationExists.id;
+      console.log(`Found recommendation using recommendation_id, actual id is: ${recommendationId}`);
+    }
+    
     // Before inserting, delete any existing files for this recommendation
     await cleanupRecommendationFiles(recommendationId);
     
-    // Use the new SECURITY DEFINER function to bypass RLS
+    // Use the server-side function that bypasses auth checks
     const { data, error } = await supabase.rpc(
-      'save_recommendation_file',
+      'save_recommendation_file_server',
       {
         p_recommendation_id: recommendationId,
         p_file_id: fileId,
@@ -76,7 +105,18 @@ async function saveRecommendationFileId(
     );
     
     if (error) {
+      // Check for foreign key violation specifically
+      if (error.message && error.message.includes('foreign key constraint')) {
+        console.error(`Foreign key constraint violation when saving file for recommendation ${recommendationId}. This recommendation may have been deleted.`);
+        return false;
+      }
+      
       console.error('Error saving recommendation file ID:', error);
+      return false;
+    }
+    
+    if (!data) {
+      console.error(`Failed to save file ID ${fileId} for recommendation ${recommendationId}: No data returned`);
       return false;
     }
     
@@ -578,17 +618,36 @@ export async function syncProgramsToVectorStore(
   userId: string,
   recommendations: RecommendationProgram[],
   vectorStoreId: string
-): Promise<{ success: boolean; fileIds: string[]; error?: string }> {
+): Promise<{ success: boolean; fileIds: string[]; error?: string; syncedCount?: number; failedCount?: number }> {
   if (!vectorStoreId) {
     return { 
       success: false, 
       fileIds: [],
-      error: "No vector store ID provided. Cannot sync programs."
+      error: "No vector store ID provided. Cannot sync programs.",
+      syncedCount: 0,
+      failedCount: recommendations.length
     };
   }
 
   try {
-    console.log(`Syncing ${recommendations.length} programs to Vector Store with ID: ${vectorStoreId}`);
+    // Filter out recommendations that don't have either an id or a program_id
+    const validRecommendations = recommendations.filter(rec => !!rec.id);
+    
+    if (validRecommendations.length < recommendations.length) {
+      console.warn(`Filtered out ${recommendations.length - validRecommendations.length} recommendations without valid IDs`);
+    }
+    
+    if (validRecommendations.length === 0) {
+      return {
+        success: true,
+        fileIds: [],
+        error: 'No valid recommendations to sync to vector store',
+        syncedCount: 0,
+        failedCount: recommendations.length
+      };
+    }
+    
+    console.log(`Syncing ${validRecommendations.length} programs to Vector Store with ID: ${vectorStoreId}`);
     
     // Get base URL for absolute API paths
     const baseUrl = getBaseUrl();
@@ -596,101 +655,190 @@ export async function syncProgramsToVectorStore(
     
     // Get auth headers for requests
     const headers = await getAuthHeaders();
-    console.log('Auth headers included:', Object.keys(headers).join(', '));
+    
+    // Check which recommendation IDs actually exist in the database
+    const supabase = await createClient();
+    const recommendationIds = validRecommendations
+      .filter(rec => !!rec.id)
+      .map(rec => rec.id as string);
+    
+    if (recommendationIds.length === 0) {
+      return {
+        success: false,
+        fileIds: [],
+        error: 'No valid recommendation IDs to sync',
+        syncedCount: 0,
+        failedCount: recommendations.length
+      };
+    }
+    
+    const { data: existingRecommendations, error: recCheckError } = await supabase
+      .from('recommendations')
+      .select('id')
+      .in('id', recommendationIds);
+    
+    if (recCheckError) {
+      console.error('Error checking existing recommendations:', recCheckError);
+      // Continue but may fail on individual saves
+    }
+    
+    // Create a set of valid recommendation IDs for quick lookup
+    const validRecommendationIds = new Set<string>(
+      existingRecommendations?.map(rec => rec.id) || []
+    );
+    
+    console.log(`Found ${validRecommendationIds.size} valid existing recommendation IDs out of ${recommendationIds.length} possible IDs`);
     
     // Create new files for each recommendation
     const fileIds: string[] = [];
+    let syncedCount = 0;
+    let failedCount = 0;
     
-    for (const recommendation of recommendations) {
-      if (!recommendation.id) {
-        console.error('Program is missing ID, skipping:', recommendation.name);
-        continue;
+    // Track specific failures for better debugging
+    const failures: Array<{name: string, reason: string}> = [];
+    
+    for (const recommendation of validRecommendations) {
+      try {
+        if (!recommendation.id) {
+          console.error('Program is missing id, skipping:', recommendation.name);
+          failedCount++;
+          failures.push({
+            name: recommendation.name,
+            reason: 'Missing recommendation ID'
+          });
+          continue;
+        }
+        
+        const recommendationId = recommendation.id;
+        
+        // Verify the recommendation ID actually exists in the database
+        if (!validRecommendationIds.has(recommendationId)) {
+          console.error(`Recommendation ID ${recommendationId} for program ${recommendation.name} does not exist in the database, skipping`);
+          failedCount++;
+          failures.push({
+            name: recommendation.name,
+            reason: `Recommendation ID ${recommendationId} does not exist in database`
+          });
+          continue;
+        }
+        
+        console.log(`Processing program with recommendation ID: ${recommendationId} (${recommendation.name})`);
+        
+        // First, check if this recommendation already has files associated with it
+        await cleanupRecommendationFiles(recommendationId, true);
+        
+        // Create a rich JSON representation of the recommendation/program
+        const recommendationJson = JSON.stringify({
+          id: recommendationId,
+          name: recommendation.name,
+          institution: recommendation.institution,
+          degreeType: recommendation.degreeType,
+          fieldOfStudy: recommendation.fieldOfStudy,
+          description: recommendation.description,
+          costPerYear: recommendation.costPerYear,
+          duration: recommendation.duration,
+          location: recommendation.location,
+          startDate: recommendation.startDate,
+          applicationDeadline: recommendation.applicationDeadline,
+          requirements: recommendation.requirements || [],
+          highlights: recommendation.highlights || [],
+          pageLink: recommendation.pageLink,
+          matchScore: recommendation.matchScore,
+          matchRationale: recommendation.matchRationale,
+          isFavorite: recommendation.isFavorite || false,
+          feedbackNegative: recommendation.feedbackNegative || false,
+          feedbackReason: recommendation.feedbackReason || null,
+          feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
+          scholarships: recommendation.scholarships || [],
+          pathway_id: recommendation.pathway_id, // Include pathway_id
+          program_id: recommendation.program_id, // Include program_id for traceability
+          userId: userId,
+          syncedAt: new Date().toISOString()
+        }, null, 2);
+        
+        // Convert JSON string directly to base64 (Node.js compatible)
+        const base64Content = stringToBase64(recommendationJson);
+        
+        // Use a consistent naming pattern for program files, including pathway_id
+        const fileName = `program_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendationId}.json`;
+        
+        const fileObject = { name: fileName, content: base64Content };
+        
+        // Upload the file with absolute URL
+        const uploadUrl = `${baseUrl}/api/vector_stores/upload_file`;
+        
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ fileObject }),
+          credentials: 'include'
+        });
+        
+        if (!uploadResponse.ok) {
+          let errorText;
+          try {
+            const errorJson = await uploadResponse.json();
+            errorText = JSON.stringify(errorJson);
+          } catch {
+            errorText = await uploadResponse.text();
+          }
+          
+          console.error(`Upload failed with status ${uploadResponse.status}: ${errorText}`);
+          failedCount++;
+          failures.push({
+            name: recommendation.name,
+            reason: `Upload failed: ${errorText.substring(0, 100)}`
+          });
+          continue;
+        }
+        
+        const uploadData = await uploadResponse.json();
+        const fileId = uploadData.id;
+        
+        if (!fileId) {
+          console.error('Upload succeeded but no file ID was returned');
+          failedCount++;
+          failures.push({
+            name: recommendation.name,
+            reason: 'Upload succeeded but no file ID was returned'
+          });
+          continue;
+        }
+        
+        fileIds.push(fileId);
+        
+        // Save the file ID to the recommendation_files table using the resolved recommendation ID
+        const saveResult = await saveRecommendationFileId(recommendationId, fileId, fileName);
+        if (!saveResult) {
+          console.error(`Failed to save file ID ${fileId} for recommendation ${recommendationId}`);
+          failedCount++;
+          failures.push({
+            name: recommendation.name,
+            reason: `Failed to save file ID to recommendation_files table`
+          });
+          continue;
+        }
+        
+        console.log(`Uploaded program file for ${recommendation.name} with file ID: ${fileId}`);
+        syncedCount++;
+      } catch (recError) {
+        console.error(`Error processing recommendation ${recommendation.name}:`, recError);
+        failedCount++;
+        failures.push({
+          name: recommendation.name,
+          reason: `Unexpected error: ${recError instanceof Error ? recError.message : 'Unknown error'}`
+        });
       }
-      
-      console.log(`Processing program: ${recommendation.id} (${recommendation.name})`);
-      
-      // First, check if this recommendation already has files associated with it
-      await cleanupRecommendationFiles(recommendation.id, true);
-      
-      // Create a rich JSON representation of the recommendation/program
-      const recommendationJson = JSON.stringify({
-        id: recommendation.id,
-        name: recommendation.name,
-        institution: recommendation.institution,
-        degreeType: recommendation.degreeType,
-        fieldOfStudy: recommendation.fieldOfStudy,
-        description: recommendation.description,
-        costPerYear: recommendation.costPerYear,
-        duration: recommendation.duration,
-        location: recommendation.location,
-        startDate: recommendation.startDate,
-        applicationDeadline: recommendation.applicationDeadline,
-        requirements: recommendation.requirements || [],
-        highlights: recommendation.highlights || [],
-        pageLink: recommendation.pageLink,
-        matchScore: recommendation.matchScore,
-        matchRationale: recommendation.matchRationale,
-        isFavorite: recommendation.isFavorite || false,
-        feedbackNegative: recommendation.feedbackNegative || false,
-        feedbackReason: recommendation.feedbackReason || null,
-        feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
-        scholarships: recommendation.scholarships || [],
-        pathway_id: recommendation.pathway_id, // Include pathway_id
-        userId: userId,
-        syncedAt: new Date().toISOString()
-      }, null, 2);
-      
-      // Convert JSON string directly to base64 (Node.js compatible)
-      const base64Content = stringToBase64(recommendationJson);
-      
-      // Use a consistent naming pattern for program files, including pathway_id
-      const fileName = `program_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendation.id}.json`;
-      
-      const fileObject = { name: fileName, content: base64Content };
-      
-      // Upload the file with absolute URL
-      const uploadUrl = `${baseUrl}/api/vector_stores/upload_file`;
-      console.log(`POST request to: ${uploadUrl}`);
-      
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ fileObject }),
-        credentials: 'include'
-      });
-      
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`Upload failed with status ${uploadResponse.status}: ${errorText}`);
-        throw new Error(`Failed to upload program file for ${recommendation.id}: ${errorText}`);
-      }
-      
-      const uploadData = await uploadResponse.json();
-      const fileId = uploadData.id;
-      
-      if (!fileId) {
-        console.error('Upload succeeded but no file ID was returned');
-        throw new Error('No file ID returned from upload');
-      }
-      
-      fileIds.push(fileId);
-      
-      // Save the file ID to the recommendation_files table
-      await saveRecommendationFileId(recommendation.id, fileId, fileName);
-      
-      console.log(`Uploaded program file for ${recommendation.name} with file ID: ${fileId}`);
     }
     
     // Add all files to the vector store using the batch API
     if (fileIds.length > 0) {
       console.log(`Adding ${fileIds.length} files to Vector Store: ${vectorStoreId}`);
       const batchUrl = `${baseUrl}/api/vector_stores/add_files_batch`;
-      console.log(`POST request to: ${batchUrl} with data:`, { vectorStoreId, fileIds });
       
       try {
         // Get fresh headers for this request
         const batchHeaders = await getAuthHeaders();
-        console.log('Auth headers for batch request:', Object.keys(batchHeaders).join(', '));
         
         // Make the batch request with explicit error handling
         const addFilesResponse = await fetch(batchUrl, {
@@ -723,6 +871,8 @@ export async function syncProgramsToVectorStore(
           const addFileUrl = `${baseUrl}/api/vector_stores/add_file`;
           
           let individualSuccessCount = 0;
+          const originalSyncedCount = syncedCount;
+          syncedCount = 0; // Reset because we need to count successful adds
           
           for (const fileId of fileIds) {
             try {
@@ -742,19 +892,35 @@ export async function syncProgramsToVectorStore(
               if (addSingleFileResponse.ok) {
                 console.log(`Successfully added file ${fileId} to vector store`);
                 individualSuccessCount++;
+                syncedCount++;
               } else {
                 console.error(`Failed to add file ${fileId} to vector store: ${addSingleFileResponse.status}`);
+                failedCount++;
               }
             } catch (singleFileError) {
               console.error(`Error adding file ${fileId} to vector store:`, singleFileError);
+              failedCount++;
             }
           }
           
           if (individualSuccessCount > 0) {
             console.log(`Successfully added ${individualSuccessCount}/${fileIds.length} files individually`);
+            return {
+              success: true,
+              fileIds: fileIds.slice(0, individualSuccessCount),
+              error: `Batch add failed but ${individualSuccessCount}/${fileIds.length} files were added individually`,
+              syncedCount,
+              failedCount
+            };
           } else {
-            // If all individual adds fail too, throw an error
-            throw new Error(`Failed to add program files to vector store batch: ${errorText}`);
+            // If all individual adds fail too, return an error
+            return {
+              success: false,
+              fileIds: [],
+              error: `Failed to add program files to vector store: ${errorText}`,
+              syncedCount: 0,
+              failedCount: validRecommendations.length
+            };
           }
         } else {
           // Successfully added all files in a batch
@@ -763,22 +929,43 @@ export async function syncProgramsToVectorStore(
         }
       } catch (batchError) {
         console.error('Error in batch operation:', batchError);
-        throw new Error(`Failed to add files to vector store: ${batchError instanceof Error ? batchError.message : String(batchError)}`);
+        return {
+          success: false,
+          fileIds: [],
+          error: `Failed to add files to vector store: ${batchError instanceof Error ? batchError.message : String(batchError)}`,
+          syncedCount: 0,
+          failedCount: validRecommendations.length
+        };
       }
     } else {
       console.log("No program files to add to vector store");
     }
     
+    // Log detailed results
+    if (failures.length > 0) {
+      console.log(`Sync failures summary (${failures.length} total):`);
+      failures.forEach(failure => {
+        console.log(`- ${failure.name}: ${failure.reason}`);
+      });
+    }
+    
+    // Return success status - partial success is still considered success
+    const isPartialSuccess = syncedCount > 0 && syncedCount < validRecommendations.length;
     return {
-      success: true,
-      fileIds
+      success: syncedCount > 0,
+      fileIds,
+      error: isPartialSuccess ? `Partial sync: Only synced ${syncedCount} out of ${validRecommendations.length} recommendations` : undefined,
+      syncedCount,
+      failedCount
     };
   } catch (error) {
     console.error("Error syncing programs to Vector Store:", error);
     return {
       success: false,
       fileIds: [],
-      error: error instanceof Error ? error.message : "Unknown error during program sync"
+      error: error instanceof Error ? error.message : "Unknown error during program sync",
+      syncedCount: 0,
+      failedCount: recommendations.length
     };
   }
 } 

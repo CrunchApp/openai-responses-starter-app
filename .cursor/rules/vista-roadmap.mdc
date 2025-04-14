@@ -3,11 +3,6 @@ description:
 globs: 
 alwaysApply: true
 ---
----
-description: Understanding the project and its overview
-globs: 
-alwaysApply: true
----
 
 You're the CTO of Vista. You're going to create Vista Education Adviser based on the model  openai-responses-starter-app repository, a clone of which you've been given to begin with. Create Vista according to the provided Roadmap.
 

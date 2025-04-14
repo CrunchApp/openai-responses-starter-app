@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { UserProfile } from '@/app/types/profile-schema';
-import { EducationPathway } from '@/app/recommendations/types';
+import { EducationPathway, RecommendationProgram } from '@/app/recommendations/types';
 import { OpenAIError } from 'openai/error';
 
 // Check for required environment variables
@@ -96,6 +96,170 @@ const pathwaySchema = {
   additionalProperties: false
 };
 
+// Define the JSON Schema for the program evaluation output
+const programEvaluationSchema = {
+  "type": "object",
+  "properties": {
+    "programs": {
+      "type": "array",
+      "description": "List of programs evaluated.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the program."
+          },
+          "institution": {
+            "type": "string",
+            "description": "Name of the institution offering the program."
+          },
+          "degreeType": {
+            "type": "string",
+            "description": "Type of degree or qualification (e.g., Bachelor's, Master's)."
+          },
+          "fieldOfStudy": {
+            "type": "string",
+            "description": "Main field of study."
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief description of the program."
+          },
+          "costPerYear": {
+            "type": "number",
+            "description": "Estimated annual cost in USD. Estimate if not explicitly mentioned."
+          },
+          "duration": {
+            "type": "number",
+            "description": "Program duration in months. Estimate if not explicitly mentioned."
+          },
+          "location": {
+            "type": "string",
+            "description": "Location of the program (City, Country or Online)."
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Typical start date(s)."
+          },
+          "applicationDeadline": {
+            "type": "string",
+            "description": "Application deadline(s)."
+          },
+          "requirements": {
+            "type": "array",
+            "description": "Key admission requirements.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "highlights": {
+            "type": "array",
+            "description": "Key program highlights or unique selling points.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pageLink": {
+            "type": "string",
+            "description": "Direct URL to the program's webpage."
+          },
+          "scholarships": {
+            "type": "array",
+            "description": "List of potential scholarships mentioned.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the scholarship."
+                },
+                "amount": {
+                  "type": "string",
+                  "description": "Financial amount of the scholarship."
+                },
+                "eligibility": {
+                  "type": "string",
+                  "description": "Eligibility criteria for the scholarship."
+                }
+              },
+              "required": [
+                "name",
+                "amount",
+                "eligibility"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "matchScore": {
+            "type": "number",
+            "description": "Overall match score (0-100) based on alignment with pathway and user profile."
+          },
+          "matchRationale": {
+            "type": "object",
+            "description": "Breakdown of match scores based on specific criteria.",
+            "properties": {
+              "careerAlignment": {
+                "type": "number",
+                "description": "Score based on alignment with user's career goals."
+              },
+              "budgetFit": {
+                "type": "number",
+                "description": "Score based on how well the cost fits the user's budget."
+              },
+              "locationMatch": {
+                "type": "number",
+                "description": "Score based on alignment with user's location preferences."
+              },
+              "academicFit": {
+                "type": "number",
+                "description": "Score based on academic prerequisites and user's background."
+              }
+            },
+            "required": [
+              "careerAlignment",
+              "budgetFit",
+              "locationMatch",
+              "academicFit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "institution",
+          "degreeType",
+          "fieldOfStudy",
+          "description",
+          "costPerYear",
+          "duration",
+          "location",
+          "startDate",
+          "applicationDeadline",
+          "requirements",
+          "highlights",
+          "pageLink",
+          "scholarships",
+          "matchScore",
+          "matchRationale"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "programs"
+  ],
+  "additionalProperties": false
+};
+
+// Define interface for the structured output (excluding generated ID)
+interface EvaluatedProgramOutput extends Omit<RecommendationProgram, 'id'> {}
+
+interface ProgramEvaluationResponse {
+  programs: EvaluatedProgramOutput[];
+}
+
 /**
  * Career & Education Matcher (Planning Agent)
  * Analyzes the user profile and generates tailored education pathway queries
@@ -149,11 +313,28 @@ ${existingPathways.map((pathway, index) => {
 
     // Safely access career goals, providing defaults if undefined
     const careerGoals = userProfile.careerGoals || {};
-    const shortTermGoal = careerGoals.shortTerm || 'Not specified';
-    const longTermGoal = careerGoals.longTerm || 'Not specified';
-    const desiredIndustry = Array.isArray(careerGoals.desiredIndustry) ? careerGoals.desiredIndustry.join(', ') : 'Not specified';
-    const desiredRoles = Array.isArray(careerGoals.desiredRoles) ? careerGoals.desiredRoles.join(', ') : 'Not specified';
+    const shortTermGoal = careerGoals.shortTerm !== undefined && careerGoals.shortTerm !== null 
+      ? careerGoals.shortTerm 
+      : 'Not specified';
+    const longTermGoal = careerGoals.longTerm !== undefined && careerGoals.longTerm !== null 
+      ? careerGoals.longTerm 
+      : 'Not specified';
+    const desiredIndustry = Array.isArray(careerGoals.desiredIndustry) && careerGoals.desiredIndustry.length > 0
+      ? careerGoals.desiredIndustry.join(', ') 
+      : 'Not specified';
+    const desiredRoles = Array.isArray(careerGoals.desiredRoles) && careerGoals.desiredRoles.length > 0
+      ? careerGoals.desiredRoles.join(', ') 
+      : 'Not specified';
 
+    // Additional debug logging for career goals and preferences
+    console.log('DEBUG - Career Goals Processing:');
+    console.log('Raw careerGoals:', JSON.stringify(careerGoals));
+    console.log('Processed shortTermGoal:', shortTermGoal);
+    console.log('Processed longTermGoal:', longTermGoal);
+    console.log('Processed desiredIndustry:', desiredIndustry);
+    console.log('Processed desiredRoles:', desiredRoles);
+    console.log('Preferences:', JSON.stringify(userProfile.preferences));
+    
     // Safely access education, providing defaults if undefined
     const educationHistory = Array.isArray(userProfile.education) 
       ? userProfile.education.map((edu) => 
@@ -345,6 +526,313 @@ Think carefully about each suggestion and ensure they truly fit the user's uniqu
       throw new Error(`Education pathway generation failed: ${error.message}`);
     } else {
       throw new Error(`Education pathway generation failed: ${String(error)}`);
+    }
+  }
+}
+
+/**
+ * Evaluates programs found by a research tool (like Perplexity) against
+ * a specific education pathway and user profile, calculating match scores.
+ */
+export async function evaluateAndScorePrograms(
+  perplexityResponseText: string,
+  pathway: EducationPathway, // Use the specific type
+  userProfile: UserProfile,
+  previousResponseId?: string
+): Promise<ProgramEvaluationResponse> {
+  try {
+    if (!OPENAI_API_KEY) {
+      throw new Error('Missing OPENAI_API_KEY environment variable');
+    }
+    if (!perplexityResponseText) {
+      throw new Error('Missing Perplexity response text');
+    }
+    if (!pathway) {
+      throw new Error('Missing pathway context');
+    }
+    if (!userProfile) {
+      throw new Error('Missing user profile context');
+    }
+
+    // Add detailed logging to verify full text is received
+    console.log(`evaluateAndScorePrograms called for pathway: ${pathway.title}`);
+    console.log(`Received perplexityResponseText: ${perplexityResponseText.length} characters`);
+    console.log(`First 200 chars: ${perplexityResponseText.substring(0, 200)}`);
+    console.log(`Last 200 chars: ${perplexityResponseText.substring(Math.max(0, perplexityResponseText.length - 200))}`);
+    
+    // Verify text is large enough
+    if (perplexityResponseText.length < 1000) {
+      console.warn('WARNING: perplexityResponseText is suspiciously short. Full text:', perplexityResponseText);
+    }
+    
+    // Check for potential truncation markers
+    const hasTruncationMarkers = perplexityResponseText.includes('...');
+    if (hasTruncationMarkers) {
+      console.warn('WARNING: perplexityResponseText contains ellipsis (...) which might indicate truncation');
+    }
+    
+    console.log(`Using previous response ID: ${previousResponseId || 'none'}`);
+    
+    // Add debug logging to inspect the schema structure
+    console.log('Program evaluation schema structure:', JSON.stringify(programEvaluationSchema).substring(0, 100) + '...');
+
+    // --- Prepare Request Options ---
+    const requestOptions: any = {
+      model: "o3-mini-2025-01-31",
+      store: true 
+    };
+    
+    // If we have a previous response ID, use it to maintain conversation context
+    if (previousResponseId) {
+      // When using previous_response_id, we don't need to reconstruct the full context
+      // as the model already has access to the conversation history
+      console.log('Using previous conversation context via previous_response_id');
+      requestOptions.previous_response_id = previousResponseId;
+      
+      // With conversation history, we only need to send the new user message
+      const userMessage = `I've received program research results from Perplexity API for the ${pathway.qualification_type || 'degree'} program in ${pathway.field_of_study || 'the field'} that you suggested. Please evaluate these programs against the pathway you recommended and the user's profile. Score each program (0-100) on overall fit and provide detailed match rationale.
+
+Research results:
+\`\`\`
+${perplexityResponseText}
+\`\`\`
+
+Please identify and evaluate up to 5 distinct programs, returning your analysis in a structured JSON format with match scores. For each program, include a valid URL in the pageLink field (e.g., "https://example.edu/program").`;
+      
+      requestOptions.input = [
+        {
+          role: "user",
+          content: userMessage
+        }
+      ];
+      
+      // Add logging to verify prompt content
+      console.log(`Prompt with previous_response_id constructed. Total length: ${userMessage.length} characters`);
+      console.log(`Research results section starts at char ${userMessage.indexOf('Research results:')}`);
+      console.log(`Research results section length: ${perplexityResponseText.length} characters`);
+      
+      // Verify the prompt contains the full perplexity text
+      if (!userMessage.includes(perplexityResponseText.substring(0, 100)) || 
+          !userMessage.includes(perplexityResponseText.substring(perplexityResponseText.length - 100))) {
+        console.warn('WARNING: Prompt may not contain the full perplexity response text!');
+      }
+      
+      // Use the same JSON schema format to ensure structured output
+      requestOptions.text = { 
+        format: { 
+          type: "json_schema",
+          name: "program_evaluation",
+          schema: programEvaluationSchema,
+          strict: true 
+        } 
+      };
+    } else {
+      // If no previous_response_id is available, fall back to the full context construction
+      console.log('No previous conversation context, creating detailed prompt');
+      
+      // --- Prepare Context ---
+      // User Profile Summary
+      const educationHistory = Array.isArray(userProfile.education) 
+        ? userProfile.education.map((edu) => 
+          `${edu.degreeLevel} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.graduationYear})`
+        ).join(', ')
+        : 'Not specified';
+      const careerGoals = userProfile.careerGoals || {};
+      const shortTermGoal = careerGoals.shortTerm !== undefined && careerGoals.shortTerm !== null 
+        ? careerGoals.shortTerm 
+        : 'Not specified';
+      const longTermGoal = careerGoals.longTerm !== undefined && careerGoals.longTerm !== null 
+        ? careerGoals.longTerm 
+        : 'Not specified';
+      const desiredIndustry = Array.isArray(careerGoals.desiredIndustry) && careerGoals.desiredIndustry.length > 0
+        ? careerGoals.desiredIndustry.join(', ') 
+        : 'Not specified';
+      const desiredRoles = Array.isArray(careerGoals.desiredRoles) && careerGoals.desiredRoles.length > 0
+        ? careerGoals.desiredRoles.join(', ') 
+        : 'Not specified';
+      const skillsList = Array.isArray(userProfile.skills) ? userProfile.skills.join(', ') : 'Not specified';
+      const preferences = userProfile.preferences || {};
+      const preferredLocations = preferences.preferredLocations?.join(', ') || 'Not specified';
+      const budgetRange = `$${(preferences.budgetRange?.min ?? 0).toLocaleString()} - $${(preferences.budgetRange?.max ?? 0).toLocaleString()} per year`;
+
+      // Pathway Context
+      const pathwayContext = `
+PATHWAY CONTEXT:
+- Title: ${pathway.title}
+- Qualification: ${pathway.qualification_type}
+- Field: ${pathway.field_of_study} ${pathway.subfields ? `(${pathway.subfields.join(', ')})` : ''}
+- Target Regions: ${pathway.target_regions?.join(', ') || 'Global'}
+- Budget (Annual USD): $${pathway.budget_range_usd?.min?.toLocaleString()} - $${pathway.budget_range_usd?.max?.toLocaleString()}
+- Duration (Months): ${pathway.duration_months || 'Not specified'}
+- Alignment Rationale: ${pathway.alignment_rationale || 'Not specified'}
+`;
+
+      // --- Construct Full Prompt ---
+      const prompt = `
+You are an expert education program evaluator. Your task is to analyze the following research results (from Perplexity) about education programs, evaluate their fit against a specific pathway and user profile, and calculate meaningful match scores.
+
+RESEARCH RESULTS:
+\`\`\`
+${perplexityResponseText}
+\`\`\`
+
+${pathwayContext}
+
+USER PROFILE SUMMARY:
+- Career Goals: Short-term: ${shortTermGoal}; Long-term: ${longTermGoal}; Industries: ${desiredIndustry}; Roles: ${desiredRoles}
+- Education: ${educationHistory}
+- Skills: ${skillsList}
+- Preferences: Locations: ${preferredLocations}; Budget: ${budgetRange}; Study Mode: ${preferences.studyMode || 'Any'}; Start Date: ${preferences.startDate || 'Any'}
+
+INSTRUCTIONS:
+1.  Parse the 'RESEARCH RESULTS' to identify distinct educational programs (aim for 5).
+2.  For each program, extract the details required by the JSON schema (Name, Institution, Degree Type, Field, Description, Cost/Year (USD), Duration (months), Location, Start Date, Deadline, Requirements, Highlights, URL, Scholarships). If cost or duration are not explicit, provide a reasonable estimate based on the program type and location.
+3.  Evaluate each program against the 'PATHWAY CONTEXT' and 'USER PROFILE SUMMARY'.
+4.  Calculate an overall 'matchScore' (0-100) reflecting the holistic fit.
+5.  Calculate specific 'matchRationale' scores (0-100) for:
+    -   'careerAlignment': How well the program aligns with user's stated career goals and desired roles/industries.
+    -   'budgetFit': How well the program's cost fits within the user's and pathway's budget range.
+    -   'locationMatch': How well the program's location aligns with user's and pathway's preferred regions.
+    -   'academicFit': How well the program's field, degree level, and potential prerequisites align with the user's education history and the pathway's intent.
+6.  Respond ONLY with the valid JSON object conforming strictly to the provided schema. Do not include explanations outside the JSON structure.
+
+Think critically about the alignment. The match scores should be quantitative reflections of the fit based on the provided context.
+`;
+
+      // Add validation for the full prompt construction
+      console.log(`Full prompt constructed. Total length: ${prompt.length} characters`);
+      console.log(`Research results section starts at char ${prompt.indexOf('RESEARCH RESULTS:')}`);
+      console.log(`Research results section length: ${perplexityResponseText.length} characters`);
+      
+      // Verify the prompt contains the full perplexity text
+      if (!prompt.includes(perplexityResponseText.substring(0, 100)) || 
+          !prompt.includes(perplexityResponseText.substring(perplexityResponseText.length - 100))) {
+        console.warn('WARNING: Full prompt may not contain the complete perplexity response text!');
+      }
+      
+      // Analyze potential truncation - if the prompt is very large, OpenAI might truncate it
+      if (prompt.length > 100000) {
+        console.warn(`WARNING: Full prompt is very large (${prompt.length} chars), which may exceed API limits`);
+      }
+
+      // --- Set up request options for new conversation ---
+      requestOptions.input = [
+        { role: "system", content: "You are an expert education program evaluator. Respond strictly according to the provided JSON schema." },
+        { role: "user", content: prompt }
+      ];
+      requestOptions.text = { 
+        format: { 
+          type: "json_schema",
+          name: "program_evaluation",
+          schema: programEvaluationSchema,
+          strict: true 
+        } 
+      };
+    }
+    
+    // --- Call OpenAI API ---
+    console.log("Calling OpenAI Responses API for program evaluation");
+    console.log("Request format configuration:", JSON.stringify(requestOptions.text.format).substring(0, 150) + '...');
+    
+    try {
+      const response = await openai.responses.create(requestOptions);
+      console.log(`Evaluation response received with status: ${response.status}`);
+
+      // --- Process Response (remain unchanged) ---
+      // ... existing code for extracting output text, handling errors, and parsing responses
+      if (response.status === 'incomplete') {
+        const reason = response.incomplete_details?.reason || 'unknown';
+        const details = (response.incomplete_details as any)?.typedError?.message || '';
+        console.error(`OpenAI evaluation response incomplete (${reason}): ${details}`);
+        throw new Error(`Program evaluation failed: Response was incomplete. Reason: ${reason}${details ? ` - ${details}` : ''}`);
+      }
+
+      // Extract output text (similar logic as generateEducationPathways)
+      let outputText: string | undefined;
+      if (response.output_text) {
+        outputText = response.output_text;
+      } else if (response.output && Array.isArray(response.output)) {
+        const messageOutput = response.output.find(item => item.type === 'message');
+        if (messageOutput && (messageOutput as any).content) {
+          const content = (messageOutput as any).content;
+          const refusalContent = Array.isArray(content) && content.find(c => c.type === 'refusal');
+           if (refusalContent?.type === 'refusal') {
+             throw new Error(`Program evaluation failed: AI refused the request. Reason: ${refusalContent.refusal}`);
+           }
+          const outputTextContent = Array.isArray(content) && content.find(c => c.type === 'output_text');
+          if (outputTextContent?.type === 'output_text') {
+            outputText = outputTextContent.text;
+          }
+        }
+         if (!outputText) {
+           const reasoningOutput = response.output.find(item => item.type === 'reasoning');
+           if (reasoningOutput && (reasoningOutput as any).text) {
+             outputText = (reasoningOutput as any).text;
+           }
+         }
+         if (!outputText) {
+           for (const item of response.output) {
+             if ((item as any).text) {
+               outputText = (item as any).text;
+               break;
+             }
+           }
+         }
+      }
+
+      if (!outputText) {
+        console.error('Could not find output_text in evaluation response');
+        throw new Error('Failed to extract any usable text from the AI evaluation response.');
+      }
+
+      console.log(`Successfully extracted evaluation output text.`);
+      
+      try {
+        const evaluatedData = JSON.parse(outputText) as ProgramEvaluationResponse;
+
+        if (!evaluatedData || !Array.isArray(evaluatedData.programs)) {
+          console.error('Parsed evaluation JSON does not match expected structure');
+          throw new Error('Failed to parse evaluated programs: Invalid JSON structure.');
+        }
+
+        console.log(`Successfully parsed ${evaluatedData.programs.length} evaluated programs.`);
+        
+        // Add verification of the number of programs
+        if (evaluatedData.programs.length < 3) {
+          console.warn(`WARNING: Only ${evaluatedData.programs.length} programs were extracted. This may indicate text truncation.`);
+          console.warn(`Original perplexityResponseText length: ${perplexityResponseText.length} characters.`);
+          
+          // Count the approximate number of programs in the original text
+          const programMatches = perplexityResponseText.match(/(\d+\.\s+|Program\s+\d+:|University of|College of)/gi) || [];
+          console.warn(`Approximate program mentions in original text: ${programMatches.length}`);
+          
+          // If there's a significant discrepancy, log a more severe warning
+          if (programMatches.length > 5 && evaluatedData.programs.length < 3) {
+            console.error(`CRITICAL: Text analysis suggests ${programMatches.length} programs in original text, but only ${evaluatedData.programs.length} were extracted. Text was likely truncated.`);
+          }
+        }
+        
+        // Note: The caller (parsePerplexityResponse) will add unique IDs.
+        return evaluatedData; 
+        
+      } catch (parseError) {
+        console.error('JSON parsing error during evaluation:', parseError instanceof Error ? parseError.message : String(parseError));
+        console.error('Raw Evaluation Output Text:', outputText.substring(0, 500) + (outputText.length > 500 ? '...(truncated)' : ''));
+        throw new Error(`Failed to parse evaluated programs: Invalid JSON. ${parseError instanceof Error ? parseError.message : ''}`);
+      }
+    } catch (apiError) {
+      if (apiError instanceof OpenAIError) {
+        console.error(`OpenAI API Error during evaluation:`, apiError.message);
+        throw new Error(`OpenAI API error during evaluation: ${apiError.message}`);
+      }
+      throw apiError;
+    }
+  } catch (error) {
+    console.error('Error evaluating and scoring programs:', error);
+    if (error instanceof Error) {
+      throw new Error(`Program evaluation failed: ${error.message}`);
+    } else {
+      throw new Error(`Program evaluation failed: ${String(error)}`);
     }
   }
 } 

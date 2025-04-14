@@ -67,9 +67,19 @@ export async function exploreProgramsAction(pathwayId: string) {
       goal: dbProfile.goal || '',
       desiredField: dbProfile.desired_field || '',
       education: dbProfile.education || [],
-      careerGoals: dbProfile.career_goals || { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
+      careerGoals: dbProfile.career_goals ? {
+        shortTerm: dbProfile.career_goals.shortTerm !== undefined ? dbProfile.career_goals.shortTerm : '',
+        longTerm: dbProfile.career_goals.longTerm !== undefined ? dbProfile.career_goals.longTerm : '',
+        desiredIndustry: Array.isArray(dbProfile.career_goals.desiredIndustry) ? dbProfile.career_goals.desiredIndustry : [],
+        desiredRoles: Array.isArray(dbProfile.career_goals.desiredRoles) ? dbProfile.career_goals.desiredRoles : []
+      } : { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
       skills: dbProfile.skills || [],
-      preferences: dbProfile.preferences || { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 0 } },
+      preferences: dbProfile.preferences ? {
+        preferredLocations: Array.isArray(dbProfile.preferences.preferredLocations) ? dbProfile.preferences.preferredLocations : [],
+        studyMode: dbProfile.preferences.studyMode !== undefined ? dbProfile.preferences.studyMode : 'Full-time',
+        startDate: dbProfile.preferences.startDate !== undefined ? dbProfile.preferences.startDate : '',
+        budgetRange: dbProfile.preferences.budgetRange || { min: 0, max: 0 }
+      } : { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 0 } },
       documents: dbProfile.documents || {},
       vectorStoreId: dbProfile.vector_store_id as string, // Type assertion since we've verified it exists
       profileFileId: dbProfile.profile_file_id || undefined
@@ -92,6 +102,11 @@ export async function exploreProgramsAction(pathwayId: string) {
         success: false,
         error: result.error || result.dbSaveError || "Unknown error generating or saving programs"
       };
+    }
+
+    // Check if there were rejected programs and include this info in the warning
+    if (result.partialSave && result.rejectedPrograms && result.rejectedPrograms.length > 0) {
+      console.warn(`${result.rejectedPrograms.length} programs were rejected during save`);
     }
 
     // Revalidate the recommendations page to show updated data

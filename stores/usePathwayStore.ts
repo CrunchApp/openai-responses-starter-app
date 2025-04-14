@@ -355,15 +355,31 @@ const usePathwayStore = create<PathwayState>()(
            return;
          }
 
+         // Check if this will be the last program
+         const remainingPrograms = originalPrograms.filter(p => p.id !== programId);
+         const isLastProgram = remainingPrograms.length === 0;
+
          // Optimistic UI update: remove program
-         set((state) => ({
-           programsByPathway: {
-             ...state.programsByPathway,
-             [pathwayId]: (state.programsByPathway[pathwayId] || []).filter(p => p.id !== programId)
-           },
-           isActionLoading: true,
-           actionError: null,
-         }));
+         set((state) => {
+           // Create a state update with the correct typing
+           const updates: Partial<PathwayState> = {
+             programsByPathway: {
+               ...state.programsByPathway,
+               [pathwayId]: remainingPrograms
+             },
+             isActionLoading: true,
+             actionError: null,
+           };
+
+           // If this is the last program, also update the pathway's is_explored status
+           if (isLastProgram) {
+             updates.pathways = state.pathways.map(p => 
+               p.id === pathwayId ? { ...p, is_explored: false } : p
+             );
+           }
+
+           return updates;
+         });
 
          try {
            const result = await deleteRecommendationProgramAction(programId, pathwayId);
@@ -378,8 +394,19 @@ const usePathwayStore = create<PathwayState>()(
              });
            } else {
              console.log(`Program ${programId} deleted successfully from pathway ${pathwayId}.`);
-             // Program already removed optimistically
-             set({ isActionLoading: false });
+             
+             // Update is_explored status based on server response
+             if (result.pathwayUpdated || isLastProgram) {
+               console.log(`Pathway ${pathwayId} has 0 programs now, is_explored set to false`);
+               set((state) => ({
+                 pathways: state.pathways.map(p => 
+                   p.id === pathwayId ? { ...p, is_explored: false } : p
+                 ),
+                 isActionLoading: false
+               }));
+             } else {
+               set({ isActionLoading: false });
+             }
            }
          } catch (error) {
            console.error("Error calling deleteRecommendationProgramAction:", error);

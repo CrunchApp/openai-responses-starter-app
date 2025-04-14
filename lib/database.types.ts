@@ -74,6 +74,32 @@ export interface Database {
           recommendations_file_id?: string | null
         }
       },
+      recommendation_files: {
+        Row: {
+          id: string
+          recommendation_id: string
+          file_id: string
+          file_name: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          recommendation_id: string
+          file_id: string
+          file_name: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          recommendation_id?: string
+          file_id?: string
+          file_name?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      },
       password_reset_tokens: {
         Row: {
           token: string
@@ -275,6 +301,7 @@ export interface Database {
           user_feedback: Json | null
           is_explored: boolean | null
           last_explored_at: string | null
+          is_deleted: boolean | null
         }
         Insert: {
           id?: string
@@ -294,6 +321,7 @@ export interface Database {
           user_feedback?: Json | null
           is_explored?: boolean | null
           last_explored_at?: string | null
+          is_deleted?: boolean | null
         }
         Update: {
           id?: string
@@ -313,6 +341,7 @@ export interface Database {
           user_feedback?: Json | null
           is_explored?: boolean | null
           last_explored_at?: string | null
+          is_deleted?: boolean | null
         }
       },
       education_programs: {
@@ -454,8 +483,14 @@ export interface Database {
           p_user_id: string
           p_vector_store_id: string
           p_recommendation: Json
+          p_pathway_id: string | null
         }
-        Returns: string
+        Returns: {
+          success: boolean
+          recommendation_id: string | null
+          program_id: string | null
+          error: string | null
+        }[]
       },
       toggle_recommendation_favorite: {
         Args: {
@@ -463,6 +498,64 @@ export interface Database {
           p_recommendation_id: string
         }
         Returns: boolean
+      },
+      get_pathway_programs: {
+        Args: {
+          p_pathway_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      },
+      store_programs_batch: {
+        Args: {
+          p_user_id: string
+          p_pathway_id: string
+          p_vector_store_id: string
+          p_programs: Json[]
+        }
+        Returns: {
+          success: boolean
+          saved_count: number
+          saved_program_ids: string[] | null
+          saved_recommendation_ids: string[] | null
+          rejected_programs: Json[] | null
+          error: string | null
+        }[]
+      },
+      create_education_pathways: {
+        Args: {
+          p_user_id: string
+          p_title: string
+          p_qualification_type: string
+          p_field_of_study: string
+          p_subfields: string[] | null
+          p_target_regions: string[] | null
+          p_budget_range_usd: Json
+          p_duration_months: Json
+          p_alignment_rationale: string
+          p_alternatives: string[] | null
+          p_query_string: string | null
+          p_user_feedback: Json | null
+          p_is_explored: boolean | null
+          p_last_explored_at: string | null
+        }
+        Returns: Json
+      },
+      delete_pathway: {
+        Args: {
+          p_pathway_id: string
+          p_delete_recommendations: boolean
+          p_user_id: string
+        }
+        Returns: Json
+      },
+      save_recommendation_file_server: {
+        Args: {
+          p_recommendation_id: string
+          p_file_id: string
+          p_file_name: string
+        }
+        Returns: string
       }
     },
     Enums: {

@@ -234,7 +234,16 @@ export function PathwayExplorer({
     if (onSelectPathway) {
       onSelectPathway(pathway);
     } else {
-      router.push(`/recommendations/pathway/${pathway.id}`);
+      // Only navigate if we're sure this route exists
+      // Comment this out for now to prevent not-found compilation
+      // router.push(`/recommendations/pathway/${pathway.id}`);
+      
+      // Instead, log a message and focus on program exploration
+      console.log(`Selected pathway: ${pathway.title}`);
+      // Automatically trigger program exploration if not already exploring
+      if (!programGenerationLoading[pathway.id]) {
+        handleExplorePrograms(pathway);
+      }
     }
   };
   
@@ -422,7 +431,9 @@ function EnhancedPathwayCard({
   isGuest: boolean;
   isNew: boolean;
 }) {
-  const hasPrograms = programs.length > 0;
+  const filteredPrograms = programs.filter(p => !p.is_deleted);
+  const hasPrograms = filteredPrograms.length > 0;
+  // Only consider a pathway explored if it has is_explored=true OR it actually has programs
   const isExplored = pathway.is_explored || hasPrograms;
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
   const [feedbackReason, setFeedbackReason] = useState("not_relevant");
@@ -593,7 +604,7 @@ function EnhancedPathwayCard({
               <AccordionTrigger className="py-2">
                 <span className="flex items-center gap-2">
                   <BookOpen className="h-4 w-4" />
-                  {programs.filter(p => !p.is_deleted).length} Programs
+                  {filteredPrograms.length} Programs
                 </span>
               </AccordionTrigger>
               <AccordionContent>
@@ -602,17 +613,17 @@ function EnhancedPathwayCard({
                     <Skeleton className="h-24 w-full" />
                     <Skeleton className="h-24 w-full" />
                   </div>
-                ) : programs.filter(p => !p.is_deleted).length > 0 ? (
+                ) : filteredPrograms.length > 0 ? (
                   <div className="space-y-4 mt-2">
-                    {programs.filter(p => !p.is_deleted).map((program) => (
+                    {filteredPrograms.map((program) => (
                       <ProgramCard 
                         key={program.id} 
                         program={program} 
-                        onToggleFavorite={() => onToggleFavorite(program.id)}
-                        onSubmitFeedback={(reason) => onSubmitFeedback(program.id, reason)}
+                        onToggleFavorite={() => program.id && onToggleFavorite(program.id)}
+                        onSubmitFeedback={(reason) => program.id && onSubmitFeedback(program.id, reason)}
                         onDeleteProgram={() => {
                           const pathwayStore = usePathwayStore.getState();
-                          pathwayStore.deleteProgram(pathway.id, program.id);
+                          program.id && pathwayStore.deleteProgram(pathway.id, program.id);
                         }}
                         isGuest={isGuest}
                       />
@@ -621,6 +632,14 @@ function EnhancedPathwayCard({
                 ) : (
                   <div className="py-4 text-center">
                     <p className="text-muted-foreground">No programs found for this pathway.</p>
+                    <Button 
+                      onClick={onExplorePrograms} 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                    >
+                      Generate New Programs
+                    </Button>
                   </div>
                 )}
 
@@ -1043,8 +1062,8 @@ function formatBudgetRange(budget?: { min?: number, max?: number } | null) {
   return `${formatter.format(budget.min)} - ${formatter.format(budget.max)}`;
 }
 
-function formatCurrency(amount?: number) {
-  if (amount === undefined) return "Not specified";
+function formatCurrency(amount?: number | null) {
+  if (amount === undefined || amount === null) return "Not specified";
   
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

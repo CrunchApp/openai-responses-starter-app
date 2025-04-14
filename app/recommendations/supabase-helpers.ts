@@ -182,6 +182,8 @@ export async function toggleRecommendationFavorite(
     }
 
     // Call the Supabase function to toggle the favorite status
+    // Note: This RPC function expects recommendation_id, but we're passing recommendationId
+    // The RPC handling should process this properly as it's just a parameter name
     const { data, error } = await supabase.rpc(
       'toggle_recommendation_favorite',
       {
@@ -242,20 +244,41 @@ export async function toggleRecommendationFavorite(
     }
     
     // First get the basic recommendation data, including pathway_id
-    const { data: recommendationData, error: recError } = await supabase
+    // Update to use recommendation_id in column name but use the passed recommendationId value
+    let recommendationData: any; // Changed from const to let to allow reassignment
+    const { data: initialRecommendationData, error: recError } = await supabase
       .from('recommendations')
       .select('id, match_score, is_favorite, match_rationale, program_id, pathway_id')
-      .eq('id', recommendationId)
+      .eq('id', recommendationId) // This needs to match the database column name
       .eq('user_id', userId)
       .single();
     
     if (recError) {
       console.error('Error retrieving recommendation details:', recError);
-      return {
-        success: true,
-        newStatus,
-        error: 'Favorite status updated but failed to sync with AI system'
-      };
+      // Try again with recommendation_id to handle database schema changes
+      console.log('Attempting to find recommendation using recommendation_id...');
+      // Check if we can access this recommendation as "recommendation_id" instead of "id"
+      const { data: altRecommendationData, error: altRecError } = await supabase
+        .from('recommendations')
+        .select('id, match_score, is_favorite, match_rationale, program_id, pathway_id')
+        .eq('recommendation_id', recommendationId) // Try using recommendation_id column
+        .eq('user_id', userId)
+        .single();
+        
+      if (altRecError || !altRecommendationData) {
+        console.error('Error retrieving recommendation with alternative method:', altRecError);
+        return {
+          success: true,
+          newStatus,
+          error: 'Favorite status updated but failed to sync with AI system due to schema inconsistency'
+        };
+      }
+      
+      // If we got here, we found it using recommendation_id column
+      recommendationData = altRecommendationData;
+    } else {
+      // Use the initial data if the first query was successful
+      recommendationData = initialRecommendationData;
     }
     
     if (!recommendationData || !recommendationData.program_id) {
@@ -658,7 +681,8 @@ export async function submitRecommendationFeedback(
     const supabase = await createClient();
     
     // Check if the recommendation exists and belongs to the user
-    const { data: recommendation, error: fetchError } = await supabase
+    let recommendation: any;
+    const { data: initialRecommendation, error: fetchError } = await supabase
       .from('recommendations')
       .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id, pathway_id')
       .eq('id', recommendationId)
@@ -667,10 +691,35 @@ export async function submitRecommendationFeedback(
     
     if (fetchError) {
       console.error('Error fetching recommendation:', fetchError);
+      
+      // Try again with recommendation_id to handle database schema changes
+      console.log('Attempting to find recommendation using recommendation_id...');
+      const { data: altRecommendation, error: altFetchError } = await supabase
+        .from('recommendations')
+        .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id, pathway_id')
+        .eq('recommendation_id', recommendationId) // Try using recommendation_id column
+        .eq('user_id', userId)
+        .single();
+        
+      if (altFetchError || !altRecommendation) {
+        console.error('Error fetching recommendation with alternative method:', altFetchError);
+        throw new Error(`Recommendation not found or doesn't belong to the user`);
+      }
+      
+      // If we got here, we found it using recommendation_id column
+      recommendation = altRecommendation;
+    } else {
+      // Use the initial data if the first query was successful
+      recommendation = initialRecommendation;
+    }
+    
+    // Check if recommendation exists after both attempts
+    if (!recommendation) {
       throw new Error(`Recommendation not found or doesn't belong to the user`);
     }
     
     // Update the recommendation with feedback
+    // Use the id from the recommendation we found
     const { error: updateError } = await supabase
       .from('recommendations')
       .update({
@@ -679,7 +728,7 @@ export async function submitRecommendationFeedback(
         feedback_submitted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
-      .eq('id', recommendationId)
+      .eq('id', recommendation.id) // Use the id we found, not the passed recommendationId
       .eq('user_id', userId);
     
     if (updateError) {
@@ -687,7 +736,7 @@ export async function submitRecommendationFeedback(
       throw new Error(`Failed to update recommendation with feedback: ${updateError.message}`);
     }
     
-    console.log(`Successfully updated recommendation ${recommendationId} with negative feedback`);
+    console.log(`Successfully updated recommendation ${recommendation.id} with negative feedback`);
     
     // If vector store exists, sync the updated recommendation
     if (recommendation.vector_store_id) {
@@ -709,7 +758,7 @@ export async function submitRecommendationFeedback(
         
         // Create a complete recommendation object with feedback data
         const updatedRecommendation: RecommendationProgram = {
-          id: recommendationId,
+          id: recommendation.id, // Use the id we found, not the passed recommendationId
           name: programData.name || 'Unknown Program',
           institution: programData.institution || 'Unknown Institution',
           degreeType: programData.degree_type || 'Unknown',

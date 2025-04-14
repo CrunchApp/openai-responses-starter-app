@@ -10,37 +10,34 @@ export type { UserProfile };
  * Represents a single educational program recommendation
  */
 export interface RecommendationProgram {
-  id: string;
+  id?: string;
   name: string;
   institution: string;
   degreeType: string;
   fieldOfStudy: string;
   description: string;
-  matchScore: number;
-  costPerYear: number;
-  duration: number;
+  costPerYear: number | null;
+  duration: number | null;
   location: string;
   startDate: string;
-  isFavorite?: boolean;
   applicationDeadline: string;
-  requirements: string[];
-  highlights: string[];
-  pageLink: string;
-  matchRationale: {
-    careerAlignment: number;
-    budgetFit: number;
-    locationMatch: number;
-    academicFit: number;
+  requirements?: string[];
+  highlights?: string[];
+  pageLink?: string;
+  matchScore: number;
+  matchRationale?: {
+    careerAlignment?: number;
+    budgetFit?: number;
+    locationMatch?: number;
+    academicFit?: number;
   };
-  scholarships?: {
-    name: string;
-    amount: string;
-    eligibility: string;
-  }[];
+  isFavorite?: boolean;
   feedbackNegative?: boolean;
-  feedbackReason?: string;
-  feedbackSubmittedAt?: string;
-  pathway_id?: string; // Link to the education pathway that generated this recommendation
+  feedbackReason?: string | null;
+  feedbackSubmittedAt?: string | null;
+  scholarships?: Scholarship[];
+  pathway_id?: string; // ID of the education pathway this program belongs to
+  program_id?: string; // ID of the program in the programs table
   is_deleted?: boolean; // Added for soft delete
 }
 

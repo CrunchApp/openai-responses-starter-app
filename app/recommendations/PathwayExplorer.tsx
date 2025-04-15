@@ -26,7 +26,10 @@ import {
   TrendingUp,
   Wallet,
   MapPin,
-  GraduationCap
+  GraduationCap,
+  CheckCircle2,
+  BanknoteIcon,
+  Globe
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -274,17 +277,49 @@ export function PathwayExplorer({
           <h2 className="text-2xl font-bold">Your Education Pathways</h2>
           
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Sort Dropdown */} 
+            {/* Sort Dropdown - Enhanced */} 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">Sort By: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}</Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="flex items-center gap-1.5 min-w-[140px] group transition-colors"
+                >
+                  <span className="text-muted-foreground text-xs mr-1">Sort:</span>
+                  <span className="font-medium">{sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}</span>
+                  <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground group-data-[state=open]:rotate-180 transition-transform duration-200" />
+                </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Sort Pathways</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-[200px] animate-in fade-in-40 zoom-in-95 duration-200">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Sort Pathways By</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSortBy('default')}>Default</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('duration')}>Duration (Shortest)</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('budget')}>Budget (Lowest)</DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setSortBy('default')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <span className={sortBy === 'default' ? "font-medium" : ""}>
+                    Default Order
+                  </span>
+                  {sortBy === 'default' && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setSortBy('duration')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <span className={sortBy === 'duration' ? "font-medium" : ""}>
+                    Duration (Shortest First)
+                  </span>
+                  {sortBy === 'duration' && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setSortBy('budget')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <span className={sortBy === 'budget' ? "font-medium" : ""}>
+                    Budget (Lowest First)
+                  </span>
+                  {sortBy === 'budget' && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           
@@ -514,41 +549,61 @@ function EnhancedPathwayCard({
         </AlertDialog>
       )}
 
-      <CardHeader className="pb-2 pr-10">
+      <CardHeader className="pb-3 pr-10">
         <div className="flex justify-between items-start gap-2">
-          <CardTitle className="text-lg">{pathway.title}</CardTitle>
-          <Badge variant={getQualificationBadgeVariant(pathway.qualification_type)}>
+          <CardTitle className="text-lg font-bold text-blue-900">{pathway.title}</CardTitle>
+          <Badge 
+            variant={getQualificationBadgeVariant(pathway.qualification_type)}
+            className="transition-all duration-200 group-hover:bg-blue-100"
+          >
             {pathway.qualification_type}
           </Badge>
         </div>
-        <CardDescription className="line-clamp-2">
-          {pathway.field_of_study}
+        <CardDescription className="line-clamp-2 mt-1 text-sm">
+          <span className="text-zinc-700 font-medium">{pathway.field_of_study}</span>
           {pathway.subfields && pathway.subfields.length > 0 && (
-            <span className="text-muted-foreground"> ({pathway.subfields.join(", ")})</span>
+            <span className="text-muted-foreground text-xs"> ({pathway.subfields.join(", ")})</span>
           )}
         </CardDescription>
       </CardHeader>
       
-      <CardContent className="flex-grow">
-        <div className="space-y-2">
+      <CardContent className="flex-grow pb-3">
+        <div className="bg-slate-50 p-3 rounded-md space-y-2.5 mb-4">
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Duration:</span>
+            <span className="text-muted-foreground flex items-center">
+              <Calendar className="h-3.5 w-3.5 mr-1.5 text-blue-500" />
+              <span>Duration:</span>
+            </span>
             <span className="font-medium">{formatDurationRange(pathway.duration_months)}</span>
           </div>
           
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Budget:</span>
+            <span className="text-muted-foreground flex items-center">
+              <BanknoteIcon className="h-3.5 w-3.5 mr-1.5 text-green-500" />
+              <span>Budget:</span>
+            </span>
             <span className="font-medium">{formatBudgetRange(pathway.budget_range_usd)}</span>
           </div>
           
           {pathway.target_regions && pathway.target_regions.length > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Regions:</span>
-              <span className="font-medium text-right">{pathway.target_regions.join(", ")}</span>
+              <span className="text-muted-foreground flex items-center">
+                <Globe className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
+                <span>Regions:</span>
+              </span>
+              <span className="font-medium text-right max-w-[60%] truncate" title={pathway.target_regions.join(", ")}>
+                {pathway.target_regions.join(", ")}
+              </span>
             </div>
           )}
-          
-          <div className="mt-3 text-sm relative">
+        </div>
+        
+        <div className="relative pt-1">
+          <h4 className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center">
+            <Info className="h-3.5 w-3.5 mr-1 text-blue-500" /> 
+            Alignment Rationale
+          </h4>
+          <div className="text-sm relative">
             <p className="line-clamp-3 group-hover:line-clamp-none transition-all duration-300">
               {pathway.alignment_rationale}
             </p>
@@ -580,10 +635,10 @@ function EnhancedPathwayCard({
           <Button 
             onClick={onSelect} 
             variant="outline" 
-            className="w-full"
+            className="w-full transition-all duration-200 hover:bg-blue-50 hover:text-blue-600 group"
           >
             View Programs
-            <ChevronRight className="ml-2 h-4 w-4" />
+            <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
           </Button>
         )}
       </CardFooter>
@@ -593,37 +648,38 @@ function EnhancedPathwayCard({
 
 function PathwayCardSkeleton() {
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col overflow-hidden relative">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-100/70 to-transparent skeleton-pulse transform translate-x-[-100%]" />
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
-          <Skeleton className="h-6 w-3/4" />
-          <Skeleton className="h-5 w-20" />
+          <Skeleton className="h-6 w-3/4 rounded-md" />
+          <Skeleton className="h-5 w-20 rounded-full" />
         </div>
-        <Skeleton className="h-4 w-full mt-2" />
+        <Skeleton className="h-4 w-full mt-2 rounded-md" />
       </CardHeader>
       
       <CardContent className="flex-grow">
-        <div className="space-y-3">
-          <div className="flex justify-between">
-            <Skeleton className="h-4 w-1/4" />
-            <Skeleton className="h-4 w-1/4" />
+        <div className="space-y-4">
+          <div className="bg-muted/40 p-3 rounded-md space-y-3">
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-1/4 rounded-md" />
+              <Skeleton className="h-4 w-1/4 rounded-md" />
+            </div>
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-1/4 rounded-md" />
+              <Skeleton className="h-4 w-1/3 rounded-md" />
+            </div>
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-1/4 rounded-md" />
+              <Skeleton className="h-4 w-1/2 rounded-md" />
+            </div>
           </div>
-          <div className="flex justify-between">
-            <Skeleton className="h-4 w-1/4" />
-            <Skeleton className="h-4 w-1/3" />
-          </div>
-          <div className="flex justify-between">
-            <Skeleton className="h-4 w-1/4" />
-            <Skeleton className="h-4 w-1/2" />
-          </div>
-          <Skeleton className="h-16 w-full mt-2" />
-          {/* Add skeleton for accordion trigger */}
-          <Skeleton className="h-6 w-1/3 mt-2" /> 
+          <Skeleton className="h-20 w-full mt-2 rounded-md" />
         </div>
       </CardContent>
       
-      <CardFooter className="pt-2">
-        <Skeleton className="h-10 w-full" />
+      <CardFooter className="pt-2 pb-4">
+        <Skeleton className="h-10 w-full rounded-md" />
       </CardFooter>
     </Card>
   );
@@ -631,14 +687,20 @@ function PathwayCardSkeleton() {
 
 function PathwaysLoadingSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in-50 duration-300">
       <div className="flex justify-between items-center">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-10 w-40" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64 rounded-md" />
+          <Skeleton className="h-4 w-40 rounded-md" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-28 rounded-md" />
+          <Skeleton className="h-9 w-36 rounded-md" />
+        </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {Array.from({ length: 2 }).map((_, i) => (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+        {Array.from({ length: 3 }).map((_, i) => (
           <PathwayCardSkeleton key={i} />
         ))}
       </div>

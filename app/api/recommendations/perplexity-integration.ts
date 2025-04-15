@@ -171,7 +171,7 @@ export async function callPerplexityApi(query: string): Promise<string> {
     messages: [
       { 
         role: "system", 
-        content: "You are an expert educational researcher with global knowledge about universities, colleges, and educational programs. Your task is to provide comprehensive, detailed responses that include as many relevant educational programs as possible (minimum 5) that match the user's query. Do not stop your response prematurely - be thorough and exhaustive in your research. Include ALL the details of the programs you can find that match the criteria."
+        content: "You are an expert educational researcher with global knowledge about universities, colleges, and educational programs. Your task is to provide comprehensive, detailed responses that include as many relevant educational programs as possible that match the user's query. Do not stop your response prematurely - be thorough and exhaustive in your research. Include ALL the details of the programs you can find that match the criteria."
       },
       {
         role: "user",

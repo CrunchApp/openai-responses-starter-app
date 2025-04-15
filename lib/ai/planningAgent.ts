@@ -590,14 +590,24 @@ export async function evaluateAndScorePrograms(
       requestOptions.previous_response_id = previousResponseId;
       
       // With conversation history, we only need to send the new user message
-      const userMessage = `I've received program research results from Perplexity API for the ${pathway.qualification_type || 'degree'} program in ${pathway.field_of_study || 'the field'} that you suggested. Please evaluate these programs against the pathway you recommended and the user's profile. Score each program (0-100) on overall fit and provide detailed match rationale.
+      const userMessage = `I managed to find the following programs for the ${pathway.qualification_type || 'degree'} program in ${pathway.field_of_study || 'the field'} that you suggested. Please evaluate these programs against your recommendation and my profile.
 
 Research results:
 \`\`\`
 ${perplexityResponseText}
 \`\`\`
 
-Please identify and evaluate up to 5 distinct programs, returning your analysis in a structured JSON format with match scores. For each program, include a valid URL in the pageLink field (e.g., "https://example.edu/program").`;
+Please review the results and for each program, assign specific 'matchRationale' scores (0-100) for:
+    -   'careerAlignment': How well the program aligns with user's stated career goals and desired roles/industries.
+    -   'budgetFit': How well the program's cost fits within the user's and pathway's budget range.
+    -   'locationMatch': How well the program's location aligns with user's and pathway's preferred regions.
+    -   'academicFit': How well the program's field, degree level, and potential prerequisites align with the user's education history and the pathway's intent.
+
+Then, calculate an overall 'matchScore' (0-100) reflecting the holistic fit.
+
+Finally, pick the top 5 programs with the highest overall matchScore and return your analysis in a structured JSON format.
+
+Respond ONLY with the valid JSON object conforming strictly to the provided schema. Do not include explanations outside the JSON structure.`;
       
       requestOptions.input = [
         {

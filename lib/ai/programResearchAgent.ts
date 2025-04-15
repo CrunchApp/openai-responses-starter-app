@@ -155,7 +155,7 @@ IMPORTANT INSTRUCTIONS:
    - Available scholarships and financial aid options
 
 4. Continue providing programs until you've listed at least 5 complete program profiles.
-5. Make sure to provide URLs for each program.
+5. Make sure to provide accurate URLs for each program that are currently active and up to date and link to the program's webpage not the university's website.
 6. Prioritize programs that match the user's budget and location preferences.
 7. DO NOT abbreviate or truncate your response. List all programs in full detail.
 

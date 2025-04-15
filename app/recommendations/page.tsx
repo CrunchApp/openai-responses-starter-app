@@ -20,7 +20,8 @@ import {
   Trash2,
   Lock,
   Shield,
-  CheckCircle2
+  CheckCircle2,
+  ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import useToolsStore from "@/stores/useToolsStore";
@@ -334,30 +335,51 @@ export default function RecommendationsPage() {
 
       <GuestLimitMonitor />
       <TooltipProvider>
-        <div className="container mx-auto py-4 md:py-8 px-4 max-w-6xl">
+        <div className="container mx-auto py-6 md:py-10 px-4 max-w-6xl">
           <>
             <div className="mb-6 flex justify-between items-center">
               <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
+                className="max-w-2xl"
               >
-                <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                  Hi {typedProfile?.first_name ? `${typedProfile.first_name}, ` : ''}welcome to your education dashboard
+                <h1 className="text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2">
+                  {/* <span className="bg-blue-100 text-blue-800 p-1.5 rounded-lg inline-flex">
+                    <BookOpen className="h-6 w-6" />
+                  </span> */}
+                  <span>
+                    Hi{' '}
+                    <span className="text-blue-700">
+                      {typedProfile?.first_name ? `${typedProfile.first_name}` : ''}
+                    </span>
+                    , welcome to your education dashboard
+                  </span>
                 </h1>
+                <p className="text-muted-foreground mt-2 max-w-xl">
+                  Explore personalized education pathways, save programs you're interested in, and track your applications.
+                </p>
                 
                 {!user && (
-                  <div className="mt-2 text-amber-600 flex items-center text-sm">
-                    <Shield className="h-4 w-4 mr-1" />
-                    Guest mode - <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1" onClick={() => router.push('/signup')}>
-                      Sign up to save your progress
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.5 }}
+                    className="mt-3 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-md flex items-center text-sm"
+                  >
+                    <Shield className="h-4 w-4 mr-2 text-amber-500" />
+                    <span>You're browsing in guest mode with limited features.</span>
+                    <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1 text-amber-700 font-medium" onClick={() => router.push('/signup')}>
+                      Sign up for full access →
                     </Button>
-                  </div>
+                  </motion.div>
                 )}
                 {user && !typedProfile && (
-                   <div className="mt-2 text-zinc-500 flex items-center text-sm">
-                      <User className="h-4 w-4 mr-1" /> Loading profile...
-                   </div>
+                  <div className="mt-3 flex items-center text-sm bg-slate-50 border border-slate-200 px-3 py-2 rounded-md">
+                    <User className="h-4 w-4 mr-2 text-slate-500" /> 
+                    <span>Loading your profile information...</span>
+                    <AnimatedLogo size={16} className="ml-2" />
+                  </div>
                 )}
               </motion.div>
               
@@ -462,43 +484,73 @@ export default function RecommendationsPage() {
             </div>
             
             {pageError && (
-              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-6 flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500" />
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-6 flex items-start shadow-sm"
+              >
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">Page Error</p>
-                  <p className="text-sm">{pageError}</p>
+                  <p className="font-semibold text-red-700">Page Error</p>
+                  <p className="text-sm mt-1">{pageError}</p>
+                  <Button variant="ghost" size="sm" className="mt-2 h-8 text-red-700 hover:bg-red-100 p-0 pr-2">
+                    Refresh Page <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
                 </div>
-              </div>
+              </motion.div>
             )}
 
             {actionError && (
-              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-6 flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500" />
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-6 flex items-start shadow-sm"
+              >
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">Action Error</p>
-                  <p className="text-sm">{actionError}</p>
+                  <p className="font-semibold text-red-700">Action Error</p>
+                  <p className="text-sm mt-1">{actionError}</p>
                 </div>
-              </div>
+              </motion.div>
             )}
 
-            <Tabs defaultValue="recommendations" className="w-full" onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-3 mb-6">
-                <TabsTrigger value="recommendations" className="text-sm md:text-base">
-                  <BookOpen className="w-4 h-4 mr-2 hidden md:inline" />
-                  Pathways
-                </TabsTrigger>
-                <TabsTrigger value="saved" className="text-sm md:text-base">
-                  <Heart className="w-4 h-4 mr-2 hidden md:inline" />
-                  Saved Programs
-                </TabsTrigger>
-                <TabsTrigger value="applications" className="text-sm md:text-base" disabled={!user}>
-                  <FileText className="w-4 h-4 mr-2 hidden md:inline" />
-                  Applications
-                  {!user && <Lock className="w-3 h-3 ml-1" />}
-                </TabsTrigger>
-              </TabsList>
+            <Tabs 
+              defaultValue="recommendations" 
+              className="w-full mt-8" 
+              onValueChange={handleTabChange}
+            >
+              <div className="border-b mb-6">
+                <TabsList className="bg-transparent h-auto p-0 mb-0 gap-4">
+                  <TabsTrigger 
+                    value="recommendations" 
+                    className="text-sm md:text-base px-2 py-3 h-auto data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none transition-all duration-200"
+                  >
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    Pathways
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="saved" 
+                    className="text-sm md:text-base px-2 py-3 h-auto data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none transition-all duration-200"
+                  >
+                    <Heart className="w-4 h-4 mr-2" />
+                    Saved Programs
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="applications" 
+                    className="text-sm md:text-base px-2 py-3 h-auto data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none transition-all duration-200"
+                    disabled={!user}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Applications
+                    {!user && <Lock className="w-3 h-3 ml-1" />}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
               
-              <TabsContent value="recommendations">
+              <TabsContent 
+                value="recommendations"
+                className="mt-0 animate-in fade-in-50 duration-300 data-[state=inactive]:animate-out data-[state=inactive]:fade-out-0 data-[state=inactive]:duration-150"
+              >
                 <PathwayExplorer 
                   userProfile={mapSupabaseProfileToUserProfile(typedProfile)} 
                   onStartGeneration={startProgressSimulation} 
@@ -511,10 +563,18 @@ export default function RecommendationsPage() {
                   {user ? (
                     <SavedProgramsView userProfile={mapSupabaseProfileToUserProfile(typedProfile)} />
                   ) : (
-                    <div className="text-center py-12">
-                      <h3 className="text-xl font-semibold mb-2">Sign in to save programs</h3>
-                      <p className="text-zinc-600 mb-6">Create an account to save and track programs.</p>
-                      <Button onClick={() => router.push('/signup')}>
+                    <div className="text-center py-16 px-4 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="inline-flex items-center justify-center p-3 bg-white rounded-full border border-slate-200 shadow-sm mb-4">
+                        <Heart className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-3">Sign in to save programs</h3>
+                      <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                        Create an account to save your favorite programs and access them anytime, anywhere.
+                      </p>
+                      <Button 
+                        onClick={() => router.push('/signup')}
+                        className="px-6 py-2"
+                      >
                         Create Account
                       </Button>
                     </div>
@@ -524,18 +584,32 @@ export default function RecommendationsPage() {
               
               <TabsContent value="applications">
                 {user ? (
-                  <div className="text-center py-12">
-                    <h3 className="text-xl font-semibold mb-2">No applications yet</h3>
-                    <p className="text-zinc-600 mb-6">Track your education program applications here.</p>
-                    <Button variant="outline" disabled> 
+                  <div className="text-center py-16 px-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="inline-flex items-center justify-center p-3 bg-white rounded-full border border-slate-200 shadow-sm mb-4">
+                      <FileText className="w-8 h-8 text-slate-400" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-3">No applications yet</h3>
+                    <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                      Your education program applications will appear here when you start applying.
+                    </p>
+                    <Button variant="outline" disabled className="px-6 bg-white"> 
+                      <Star className="w-4 h-4 mr-2 text-amber-400" />
                       Coming Soon
                     </Button>
                   </div>
                 ) : (
-                  <div className="text-center py-12">
-                    <h3 className="text-xl font-semibold mb-2">Sign in to track applications</h3>
-                    <p className="text-zinc-600 mb-6">Create an account to manage your program applications.</p>
-                    <Button onClick={() => router.push('/signup')}>
+                  <div className="text-center py-16 px-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="inline-flex items-center justify-center p-3 bg-white rounded-full border border-slate-200 shadow-sm mb-4">
+                      <Lock className="w-8 h-8 text-slate-400" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-3">Sign in to track applications</h3>
+                    <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                      Create an account to manage your program applications and keep track of their status.
+                    </p>
+                    <Button 
+                      onClick={() => router.push('/signup')}
+                      className="px-6 py-2"
+                    >
                       Create Account
                     </Button>
                   </div>

@@ -1,4 +1,4 @@
-export const MODEL = "gpt-4o-mini";
+export const MODEL = "gpt-4.1-2025-04-14";
 
 // Developer prompt for the Vista Education Adviser assistant
 export const DEVELOPER_PROMPT = `
@@ -10,6 +10,7 @@ When interacting with users:
 - Store important information about the user's profile using the save_context tool for future interactions.
 - When users need up-to-date information about specific institutions, programs, or industry trends, use the web search tool to provide accurate and current data.
 - If they ask about their own documents (transcripts, statements of purpose, etc.) or your recommendations, use the file search tool to analyze and reference those materials.
+- If they ask for a motivation letter, use the file search tool to analyze and create a motivation letter.
 
 Your goal is to encourage users to get in touch with Vista advisers to help them make well-informed educational and career decisions. Steer the conversation towards getting them to book a call with a human adviser.
 

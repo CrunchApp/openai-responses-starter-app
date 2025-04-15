@@ -181,18 +181,15 @@ export default function Home() {
               tailored to your unique goals and potential.
             </p>
             <div className="hero-buttons flex flex-col sm:flex-row gap-4 justify-center mb-8">
-              <Button 
-                size="default" 
-                className="group relative overflow-hidden transition-all duration-300 shadow-md hover:shadow-primary/40"
-                onMouseEnter={() => setIsHovered(1)}
-                onMouseLeave={() => setIsHovered(null)}
-              >
-                <span className={`absolute inset-0 bg-primary-foreground/10 transform transition-transform duration-300 ${isHovered === 1 ? 'scale-90 opacity-100' : 'scale-0 opacity-0'}`}></span>
-                <Link href="/profile-wizard" className="flex items-center">
-                  Start Your Journey
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </Button>
+                  <Button 
+                    size="default" 
+                    className="group"
+                  >
+                    <Link href="/profile-wizard" className="flex items-center">
+                    Start Your Journey
+                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    </Link>
+                  </Button>
               {/* <Button 
                 variant="outline" 
                 size="default" 

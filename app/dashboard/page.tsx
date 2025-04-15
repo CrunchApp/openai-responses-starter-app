@@ -1,87 +1,91 @@
 "use client";
 import React, { useEffect } from "react";
-import { User, MessageSquare, Bookmark, Sparkles } from "lucide-react";
+import { User, MessageSquare, Bookmark, Sparkles, MoveUpRight } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from '@/app/components/auth/AuthContext';
 import { PageWrapper } from "@/components/layouts/PageWrapper";
-import { gsap } from 'gsap';
+import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
   
   const displayName = profile?.first_name 
-  || user?.email?.split('@')[0] 
-  || 'there';
+    || user?.email?.split('@')[0] 
+    || 'there';
 
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { 
       opacity: 1,
       transition: { 
-        staggerChildren: 0.15
+        staggerChildren: 0.1,
+        delayChildren: 0.2,
       }
     }
   };
   
   const itemVariants = {
-    hidden: { y: 30, opacity: 0 },
+    hidden: { y: 20, opacity: 0 },
     visible: { 
       y: 0, 
       opacity: 1,
-      transition: { type: "spring", stiffness: 80, damping: 12 }
+      transition: { type: "spring", stiffness: 100, damping: 15 }
     }
   };
 
-  // Add subtle animations to decorative elements
-  useEffect(() => {
-    const decorElements = document.querySelectorAll('.decor-element');
-    
-    decorElements.forEach(el => {
-      gsap.to(el, {
-        y: `${Math.random() * 20 - 10}px`,
-        rotation: Math.random() * 10 - 5,
-        duration: 3 + Math.random() * 2,
-        repeat: -1,
-        yoyo: true,
-        ease: "sine.inOut",
-      });
-    });
-  }, []);
+  // Placeholder for potential illustration components within cards
+  const CardIllustrationPlaceholder = ({ className }: { className?: string }) => (
+    <div className={cn("absolute bottom-0 right-0 w-24 h-24 bg-gradient-to-tl from-muted/30 to-transparent rounded-tl-full opacity-50", className)}>
+      {/* Future: Replace with actual SVG or Image component */}
+    </div>
+  );
 
   return (
     <PageWrapper requireAuth>
-      {/* Decorative Elements - Similar to landing page */}
-      <div className="fixed inset-0 w-full h-screen pointer-events-none overflow-hidden z-0">
-        <div 
-          className="decor-element absolute w-32 h-32 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 blur-xl"
-          style={{ top: '20%', left: '5%' }}
-        ></div>
-        <div 
-          className="decor-element absolute w-24 h-24 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 blur-lg"
-          style={{ top: '60%', right: '10%' }}
-        ></div>
-        <div 
-          className="decor-element absolute w-40 h-40 rounded-full bg-gradient-to-r from-purple-500/5 to-blue-500/10 blur-xl"
-          style={{ bottom: '15%', left: '15%' }}
-        ></div>
+      {/* Enhanced Decorative Elements using Tailwind and pseudo-elements */}
+      <div className="fixed inset-0 w-full h-full pointer-events-none overflow-hidden z-0">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+          className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 rounded-full bg-gradient-radial from-primary/5 via-primary/10 to-transparent blur-3xl"
+        />
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+          className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-gradient-radial from-blue-500/5 via-blue-500/10 to-transparent blur-3xl"
+        />
+         <motion.div 
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 0.07 }}
+          transition={{ duration: 1, ease: "easeOut", delay: 0.8 }}
+          className="absolute top-1/4 right-[5%] w-20 h-20 border border-dashed border-primary rounded-full animate-spin-slow" 
+        />
+        <motion.div 
+          initial={{ x: 50, opacity: 0 }}
+          animate={{ x: 0, opacity: 0.07 }}
+          transition={{ duration: 1, ease: "easeOut", delay: 1 }}
+          className="absolute bottom-[15%] left-[10%] w-16 h-16 border-2 border-dotted border-purple-500 rounded-xl transform rotate-12 animate-pulse" 
+        />
       </div>
       
-      <div className="container mx-auto px-4 py-12 relative z-10">
+      <div className="container mx-auto px-4 py-16 relative z-10">
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="text-center mb-14"
+          transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
+          className="text-center mb-16"
         >
-          <Sparkles className="h-8 w-8 text-primary mx-auto mb-3 opacity-80" />
-          <h1 className="text-4xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
+          <Sparkles className="h-10 w-10 text-primary mx-auto mb-4 opacity-90" />
+          <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
             {loading ? 'Loading...' : `Hey ${displayName}!`}
           </h1>
-          <p className="text-foreground/70 max-w-lg mx-auto text-lg">
-            Manage your profile, get personalized recommendations, and chat with our education adviser assistant
+          <p className="text-foreground/80 max-w-xl mx-auto text-xl leading-relaxed">
+            Explore your profile, get personalized recommendations, and chat with your AI education adviser.
           </p>
         </motion.div>
 
@@ -91,75 +95,87 @@ export default function DashboardPage() {
           initial="hidden"
           animate="visible"
         >
-          {/* Profile Card */}
-          <motion.div variants={itemVariants}>
-            <Card className="h-full overflow-hidden hover:shadow-xl transition-all duration-300 border-blue-100 bg-gradient-to-br from-white to-blue-50/50">
-              <CardHeader className="pb-2 pt-6">
-                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-md transform -rotate-3">
+          {/* Profile Card Refined */}
+          <motion.div variants={itemVariants} className="h-full">
+            <Card className="group relative h-full overflow-hidden transition-all duration-300 border border-border/20 hover:border-blue-300 hover:shadow-lg bg-card/80 backdrop-blur-sm flex flex-col">
+             <CardIllustrationPlaceholder className="from-blue-500/10" />
+              <CardHeader className="relative z-10 pb-3 pt-6">
+                <motion.div 
+                  whileHover={{ scale: 1.1, rotate: -5 }}
+                  className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-md"
+                >
                   <User className="w-7 h-7 text-white" />
-                </div>
-                <CardTitle className="text-xl text-blue-800">Your Profile</CardTitle>
-                <CardDescription className="text-blue-600/80">View and manage your education profile</CardDescription>
+                </motion.div>
+                <CardTitle className="text-xl font-semibold text-foreground">Your Profile</CardTitle>
+                <CardDescription className="text-muted-foreground">View and manage your details</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-foreground/70">
-                  Update your personal information, educational background, and preferences to receive better recommendations.
+              <CardContent className="relative z-10 flex-grow">
+                <p className="text-foreground/80">
+                  Keep your information, background, and preferences up-to-date for tailored guidance.
                 </p>
               </CardContent>
-              <CardFooter className="pb-6">
+              <CardFooter className="relative z-10 pb-6 pt-4">
                 <Link href="/profile" className="w-full">
-                  <Button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:shadow-md hover:shadow-blue-200 transition-all">
-                    Manage Profile
+                  <Button variant="outline" className="w-full border-blue-500/50 text-blue-600 hover:bg-blue-50 hover:text-blue-700 group-hover:bg-blue-500 group-hover:text-white transition-all duration-300">
+                    Manage Profile <MoveUpRight className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Button>
                 </Link>
               </CardFooter>
             </Card>
           </motion.div>
 
-          {/* Chat Card */}
-          <motion.div variants={itemVariants}>
-            <Card className="h-full overflow-hidden hover:shadow-xl transition-all duration-300 border-purple-100 bg-gradient-to-br from-white to-purple-50/50">
-              <CardHeader className="pb-2 pt-6">
-                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-md transform rotate-3">
+          {/* Chat Card Refined */}
+          <motion.div variants={itemVariants} className="h-full">
+            <Card className="group relative h-full overflow-hidden transition-all duration-300 border border-border/20 hover:border-purple-300 hover:shadow-lg bg-card/80 backdrop-blur-sm flex flex-col">
+             <CardIllustrationPlaceholder className="from-purple-500/10" />
+              <CardHeader className="relative z-10 pb-3 pt-6">
+                <motion.div 
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  className="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-md"
+                >
                   <MessageSquare className="w-7 h-7 text-white" />
-                </div>
-                <CardTitle className="text-xl text-purple-800">AI Assistant</CardTitle>
-                <CardDescription className="text-purple-600/80">Chat with our education adviser</CardDescription>
+                </motion.div>
+                <CardTitle className="text-xl font-semibold text-foreground">AI Assistant</CardTitle>
+                <CardDescription className="text-muted-foreground">Chat with your education adviser</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-foreground/70">
-                  Get answers to your questions about education programs, application tips, and personalized guidance from our AI-powered assistant.
+              <CardContent className="relative z-10 flex-grow">
+                <p className="text-foreground/80">
+                  Ask about programs, applications, or career paths and get instant, personalized support.
                 </p>
               </CardContent>
-              <CardFooter className="pb-6">
+              <CardFooter className="relative z-10 pb-6 pt-4">
                 <Link href="/chat" className="w-full">
-                  <Button className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:shadow-md hover:shadow-purple-200 transition-all">
-                    Open Chat
+                   <Button variant="outline" className="w-full border-purple-500/50 text-purple-600 hover:bg-purple-50 hover:text-purple-700 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
+                    Open Chat <MoveUpRight className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Button>
                 </Link>
               </CardFooter>
             </Card>
           </motion.div>
 
-          {/* Recommendations Card */}
-          <motion.div variants={itemVariants}>
-            <Card className="h-full overflow-hidden hover:shadow-xl transition-all duration-300 border-amber-100 bg-gradient-to-br from-white to-amber-50/50">
-              <CardHeader className="pb-2 pt-6">
-                <div className="w-14 h-14 bg-gradient-to-br from-amber-500 to-amber-600 rounded-2xl flex items-center justify-center mb-4 shadow-md transform -rotate-3">
+          {/* Recommendations Card Refined */}
+          <motion.div variants={itemVariants} className="h-full">
+            <Card className="group relative h-full overflow-hidden transition-all duration-300 border border-border/20 hover:border-amber-300 hover:shadow-lg bg-card/80 backdrop-blur-sm flex flex-col">
+              <CardIllustrationPlaceholder className="from-amber-500/10" />
+              <CardHeader className="relative z-10 pb-3 pt-6">
+                 <motion.div 
+                  whileHover={{ scale: 1.1, rotate: -5 }}
+                  className="w-14 h-14 bg-gradient-to-br from-amber-500 to-amber-600 rounded-2xl flex items-center justify-center mb-4 shadow-md"
+                >
                   <Bookmark className="w-7 h-7 text-white" />
-                </div>
-                <CardTitle className="text-xl text-amber-800">Recommendations</CardTitle>
-                <CardDescription className="text-amber-600/80">Discover personalized programs</CardDescription>
+                 </motion.div>
+                <CardTitle className="text-xl font-semibold text-foreground">Recommendations</CardTitle>
+                <CardDescription className="text-muted-foreground">Discover tailored programs</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-foreground/70">
-                  Explore educational programs and career paths tailored to your profile, preferences, and goals from institutions worldwide.
+              <CardContent className="relative z-10 flex-grow">
+                <p className="text-foreground/80">
+                  Explore education and career paths matched to your profile, goals, and interests.
                 </p>
               </CardContent>
-              <CardFooter className="pb-6">
+              <CardFooter className="relative z-10 pb-6 pt-4">
                 <Link href="/recommendations" className="w-full">
-                  <Button className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:shadow-md hover:shadow-amber-200 transition-all">
-                    View Recommendations
+                   <Button variant="outline" className="w-full border-amber-500/50 text-amber-700 hover:bg-amber-50 hover:text-amber-800 group-hover:bg-amber-500 group-hover:text-white transition-all duration-300">
+                    View Recommendations <MoveUpRight className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Button>
                 </Link>
               </CardFooter>

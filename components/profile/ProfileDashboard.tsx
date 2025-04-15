@@ -1327,7 +1327,7 @@ export default function ProfileDashboard() {
                     <Briefcase className="h-5 w-5" />
                   </div>
                   <div className="text-left">
-                    <span className="font-semibold text-lg text-primary-foreground">Career Goals</span>
+                    <span className="font-semibold text-lg text-primary/70">Career Goals</span>
                     <p className="text-xs text-primary/70 mt-0.5">Your professional aspirations and objectives</p>
                   </div>
                 </div>

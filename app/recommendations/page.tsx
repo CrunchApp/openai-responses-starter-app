@@ -86,6 +86,40 @@ interface SupabaseProfile {
   [key: string]: any;
 }
 
+// Utility to map SupabaseProfile to UserProfile (camelCase)
+function mapSupabaseProfileToUserProfile(profile: SupabaseProfile | null): any {
+  if (!profile) return null;
+  
+  return {
+    userId: profile.id,
+    firstName: profile.first_name || '',
+    lastName: profile.last_name || '',
+    email: profile.email || '',
+    phone: profile.phone || '',
+    preferredName: profile.preferred_name || '',
+    linkedInProfile: profile.linkedin_profile || '',
+    goal: profile.goal || '',
+    desiredField: profile.desired_field || '',
+    education: profile.education || [],
+    careerGoals: profile.career_goals ? {
+      shortTerm: profile.career_goals.shortTerm || '',
+      longTerm: profile.career_goals.longTerm || '',
+      desiredIndustry: Array.isArray(profile.career_goals.desiredIndustry) ? profile.career_goals.desiredIndustry : [],
+      desiredRoles: Array.isArray(profile.career_goals.desiredRoles) ? profile.career_goals.desiredRoles : []
+    } : { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
+    skills: profile.skills || [],
+    preferences: profile.preferences ? {
+      preferredLocations: Array.isArray(profile.preferences.preferredLocations) ? profile.preferences.preferredLocations : [],
+      studyMode: profile.preferences.studyMode || 'Full-time',
+      startDate: profile.preferences.startDate || '',
+      budgetRange: profile.preferences.budgetRange || { min: 0, max: 100000 }
+    } : { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 100000 } },
+    documents: profile.documents || {},
+    vectorStoreId: profile.vector_store_id || '',
+    profileFileId: profile.profile_file_id || undefined
+  };
+}
+
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
   const { isProfileComplete, vectorStoreId, setProfileComplete, setVectorStoreId, resetProfile } = useProfileStore();
@@ -466,7 +500,7 @@ export default function RecommendationsPage() {
               
               <TabsContent value="recommendations">
                 <PathwayExplorer 
-                  userProfile={typedProfile} 
+                  userProfile={mapSupabaseProfileToUserProfile(typedProfile)} 
                   onStartGeneration={startProgressSimulation} 
                   onStopGeneration={stopProgressSimulation} 
                 /> 
@@ -475,7 +509,7 @@ export default function RecommendationsPage() {
               <TabsContent value="saved">
                 <div className="flex flex-col space-y-6">
                   {user ? (
-                    <SavedProgramsView userProfile={typedProfile} />
+                    <SavedProgramsView userProfile={mapSupabaseProfileToUserProfile(typedProfile)} />
                   ) : (
                     <div className="text-center py-12">
                       <h3 className="text-xl font-semibold mb-2">Sign in to save programs</h3>

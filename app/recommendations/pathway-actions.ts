@@ -1310,111 +1310,54 @@ export async function fetchProgramsForPathway(pathwayId: string): Promise<{
   error?: string;
 }> {
   try {
-    if (!pathwayId) {
-      return {
-        recommendations: [],
-        error: 'Pathway ID is required to fetch programs'
-      };
-    }
-
     // Check authentication
     const { isAuthenticated, userId } = await checkUserAuthentication();
-    
     if (!isAuthenticated || !userId) {
       return {
         recommendations: [],
         error: 'Authentication required to fetch programs'
       };
     }
-    
-    const supabase = await createClient();
-    
-    // Instead of using the RPC function that's causing errors,
-    // use separate queries that we join in application code
-    console.log(`Fetching programs for pathway ${pathwayId} using direct queries`);
-    
-    // First get the recommendations
-    const { data: recData, error: recError } = await supabase
-      .from('recommendations')
-      .select('id, match_score, is_favorite, match_rationale, program_id, feedback_negative, feedback_reason, feedback_submitted_at')
-      .eq('pathway_id', pathwayId)
-      .eq('user_id', userId);
-      
-    if (recError) {
-      console.error(`Error fetching recommendations for pathway ${pathwayId}:`, recError);
-      return {
-        recommendations: [],
-        error: `Failed to fetch recommendations: ${recError.message}`
-      };
+    const supabase = await import('@/lib/supabase/server').then(mod => mod.createClient());
+    // Use the get_pathway_programs function to fetch programs with scholarships
+    const { data, error } = await supabase.rpc(
+      'get_pathway_programs',
+      { p_pathway_id: pathwayId, p_user_id: userId }
+    );
+    if (error) {
+      return { recommendations: [], error: error.message };
     }
-    
-    if (!recData || recData.length === 0) {
-      console.log(`No recommendations found for pathway ${pathwayId}`);
-      return { recommendations: [] };
-    }
-    
-    // Get all program IDs from the recommendations
-    const programIds = recData.map(rec => rec.program_id).filter(Boolean);
-    
-    // Now fetch program details
-    const { data: progData, error: progError } = await supabase
-      .from('programs')
-      .select('*')
-      .in('id', programIds);
-      
-    if (progError) {
-      console.error(`Error fetching program details:`, progError);
-      return {
-        recommendations: [],
-        error: `Failed to fetch program details: ${progError.message}`
-      };
-    }
-    
-    // Create a map of programs by ID for easy lookup
-    const programsMap = new Map();
-    progData?.forEach(prog => {
-      programsMap.set(prog.id, prog);
-    });
-    
-    // Now combine the data
-    const recommendations: RecommendationProgram[] = recData
-      .filter(rec => programsMap.has(rec.program_id))
-      .map(rec => {
-        const program = programsMap.get(rec.program_id);
-        return {
-          id: rec.id,
-          name: program.name || '',
-          institution: program.institution || '',
-          degreeType: program.degree_type || '',
-          fieldOfStudy: program.field_of_study || '',
-          description: program.description || '',
-          costPerYear: typeof program.cost_per_year === 'number' ? program.cost_per_year : 0,
-          duration: typeof program.duration === 'number' ? program.duration : 0,
-          location: program.location || '',
-          startDate: program.start_date || '',
-          applicationDeadline: program.application_deadline || '',
-          requirements: Array.isArray(program.requirements) ? program.requirements : [],
-          highlights: Array.isArray(program.highlights) ? program.highlights : [],
-          pageLink: program.page_link || '',
-          matchScore: typeof rec.match_score === 'number' ? Math.round(rec.match_score) : 0,
-          matchRationale: rec.match_rationale || {},
-          isFavorite: rec.is_favorite || false,
-          feedbackNegative: rec.feedback_negative || false,
-          feedbackReason: rec.feedback_reason || null,
-          feedbackSubmittedAt: rec.feedback_submitted_at || null,
-          scholarships: [],
-          pathway_id: pathwayId,
-          program_id: program.id
-        };
-      });
-    
-    console.log(`Successfully fetched ${recommendations.length} programs for pathway ${pathwayId}`);
+    // Map the result to RecommendationProgram[]
+    const recommendations = (data || []).map((row: any) => ({
+      id: row.recommendation_id,
+      name: row.name,
+      institution: row.institution,
+      degreeType: row.degree_type,
+      fieldOfStudy: row.field_of_study,
+      description: row.description,
+      costPerYear: row.cost_per_year ?? null,
+      duration: row.duration ?? null,
+      location: row.location,
+      startDate: row.start_date,
+      applicationDeadline: row.application_deadline,
+      requirements: Array.isArray(row.requirements) ? row.requirements : [],
+      highlights: Array.isArray(row.highlights) ? row.highlights : [],
+      pageLink: row.page_link,
+      matchScore: typeof row.match_score === 'number' ? row.match_score : 0,
+      matchRationale: row.match_rationale && typeof row.match_rationale === 'object' ? row.match_rationale : undefined,
+      isFavorite: row.is_favorite ?? false,
+      feedbackNegative: row.feedback_negative ?? false,
+      feedbackReason: row.feedback_reason ?? null,
+      feedbackSubmittedAt: row.feedback_submitted_at ?? null,
+      scholarships: Array.isArray(row.scholarships) ? row.scholarships : [],
+      pathway_id: pathwayId,
+      program_id: row.program_id,
+    }));
     return { recommendations };
   } catch (error) {
-    console.error(`Error in fetchProgramsForPathway(${pathwayId}):`, error);
     return {
       recommendations: [],
-      error: error instanceof Error ? error.message : 'An unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }

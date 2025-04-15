@@ -231,20 +231,8 @@ export function PathwayExplorer({
   };
   
   const handleSelectPathway = (pathway: EducationPathway) => {
-    if (onSelectPathway) {
-      onSelectPathway(pathway);
-    } else {
-      // Only navigate if we're sure this route exists
-      // Comment this out for now to prevent not-found compilation
-      // router.push(`/recommendations/pathway/${pathway.id}`);
-      
-      // Instead, log a message and focus on program exploration
-      console.log(`Selected pathway: ${pathway.title}`);
-      // Automatically trigger program exploration if not already exploring
-      if (!programGenerationLoading[pathway.id]) {
-        handleExplorePrograms(pathway);
-      }
-    }
+    // Navigate to the dedicated pathway details page
+    router.push(`/recommendations/pathway/${pathway.id}`);
   };
   
   // Sort pathways based on the selected criteria
@@ -456,8 +444,8 @@ function EnhancedPathwayCard({
   };
   
   return (
-    <Card className={`flex flex-col hover:shadow-md transition-shadow relative ${
-      isNew ? 'ring-2 ring-green-300 bg-green-50' : ''
+    <Card className={`flex flex-col hover:shadow-md transition-all duration-200 group relative ${
+      isNew ? 'ring-2 ring-green-400 bg-green-50/60 animate-pulse' : ''
     }`}>
       {!isGuest && (
         <AlertDialog open={showFeedbackDialog} onOpenChange={setShowFeedbackDialog}>
@@ -560,9 +548,12 @@ function EnhancedPathwayCard({
             </div>
           )}
           
-          <p className="mt-3 text-sm line-clamp-3">
-            {pathway.alignment_rationale}
-          </p>
+          <div className="mt-3 text-sm relative">
+            <p className="line-clamp-3 group-hover:line-clamp-none transition-all duration-300">
+              {pathway.alignment_rationale}
+            </p>
+            <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white to-transparent group-hover:opacity-0 transition-opacity duration-300"></div>
+          </div>
         </div>
       </CardContent>
       
@@ -591,391 +582,11 @@ function EnhancedPathwayCard({
             variant="outline" 
             className="w-full"
           >
-            View Details
+            View Programs
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         )}
       </CardFooter>
-      
-      {isExplored && (
-        <div className="px-6 pb-6">
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="programs">
-              <AccordionTrigger className="py-2">
-                <span className="flex items-center gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  {filteredPrograms.length} Programs
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                {isLoadingPrograms ? (
-                  <div className="space-y-4 mt-2">
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-24 w-full" />
-                  </div>
-                ) : filteredPrograms.length > 0 ? (
-                  <div className="space-y-4 mt-2">
-                    {filteredPrograms.map((program) => (
-                      <ProgramCard 
-                        key={program.id} 
-                        program={program} 
-                        onToggleFavorite={() => program.id && onToggleFavorite(program.id)}
-                        onSubmitFeedback={(reason) => program.id && onSubmitFeedback(program.id, reason)}
-                        onDeleteProgram={() => {
-                          const pathwayStore = usePathwayStore.getState();
-                          program.id && pathwayStore.deleteProgram(pathway.id, program.id);
-                        }}
-                        isGuest={isGuest}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-4 text-center">
-                    <p className="text-muted-foreground">No programs found for this pathway.</p>
-                    <Button 
-                      onClick={onExplorePrograms} 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-2"
-                    >
-                      Generate New Programs
-                    </Button>
-                  </div>
-                )}
-
-                {programsError && (
-                  <Alert variant="destructive" className="mt-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{programsError}</AlertDescription>
-                  </Alert>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function ProgramCard({ 
-  program, 
-  onToggleFavorite, 
-  onSubmitFeedback,
-  onDeleteProgram,
-  isGuest
-}: { 
-  program: RecommendationProgram;
-  onToggleFavorite: () => void;
-  onSubmitFeedback: (reason: string) => void;
-  onDeleteProgram: () => void;
-  isGuest: boolean;
-}) {
-  // Initialize showFeedbackOptions based on whether feedback is already submitted
-  const [showFeedbackOptions, setShowFeedbackOptions] = useState(false);
-  const [feedbackReason, setFeedbackReason] = useState(program.feedbackReason || "not_relevant");
-  const [showScholarships, setShowScholarships] = useState(false);
-  const router = useRouter();
-  
-  const hasScholarships = program.scholarships && program.scholarships.length > 0;
-  const hasFeedback = program.feedbackNegative === true;
-  
-  const handleToggleFavorite = () => {
-    if (isGuest) {
-      alert("Please sign up to save favorites.");
-      return;
-    }
-    onToggleFavorite();
-  };
-  
-  const handleSubmitFeedback = (reason: string) => {
-    if (isGuest) {
-      alert("Please sign up to submit feedback.");
-      return;
-    }
-    onSubmitFeedback(reason);
-  };
-  
-  const handleDeleteProgram = () => {
-    if (isGuest) {
-      alert("Please sign up to manage programs.");
-      return;
-    }
-    onDeleteProgram();
-  };
-  
-  const handleAskAI = () => {
-    if (!program) return;
-    
-    // Simple navigation to chat with a program query param
-    // This can be enhanced later with more context passing
-    router.push('/chat'); // Navigate to chat page
-  };
-  
-  return (
-    <Card className="w-full">
-      <div className="p-3">
-        <div className="flex justify-between items-start">
-          <div>
-            <h4 className="font-medium text-sm">{program.name}</h4>
-            <p className="text-xs text-muted-foreground">{program.institution}</p>
-          </div>
-          <Badge variant="outline" className="text-xs">
-            {program.degreeType}
-          </Badge>
-        </div>
-        
-        <div className="mt-2 text-xs space-y-1">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Duration:</span>
-            <span>{program.duration} months</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Cost:</span>
-            <span>{formatCurrency(program.costPerYear)}/year</span>
-          </div>
-          {program.location && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Location:</span>
-              <span>{program.location}</span>
-            </div>
-          )}
-          
-          {/* Scholarship info button - only show if scholarships are available */}
-          {hasScholarships && (
-            <div className="flex justify-between items-center mt-1">
-              <span className="text-xs text-muted-foreground flex items-center">
-                <span>Scholarships:</span>
-                <Badge variant="secondary" className="text-xs ml-1 py-0 px-1">{program.scholarships?.length || 0}</Badge>
-              </span>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-5 px-2 text-xs" 
-                onClick={() => setShowScholarships(!showScholarships)}
-              >
-                {showScholarships ? 'Hide' : 'View'}
-              </Button>
-            </div>
-          )}
-          
-          {/* Scholarship details section */}
-          {showScholarships && hasScholarships && (
-            <div className="mt-1 border-t pt-1">
-              <p className="text-xs font-medium mb-1">Available Scholarships:</p>
-              <div className="space-y-2">
-                {program.scholarships?.map((scholarship, idx) => (
-                  <div key={idx} className="bg-muted/30 p-1 rounded text-xs">
-                    <div className="font-medium">{scholarship.name}</div>
-                    {scholarship.amount && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Amount:</span>
-                        <span>{scholarship.amount}</span>
-                      </div>
-                    )}
-                    {scholarship.eligibility && (
-                      <div className="text-muted-foreground text-xs mt-0.5">
-                        <span>Eligibility: </span>
-                        <span>{scholarship.eligibility}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Accordion for More Details */}
-          <Accordion type="single" collapsible className="w-full mt-2">
-            <AccordionItem value="details" className="border-b-0">
-              <AccordionTrigger className="py-1 text-xs font-medium text-blue-600 hover:no-underline">
-                Show Program Details
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-3 pt-2 text-xs">
-                  {/* Match Rationale */}
-                  {program.matchRationale && (
-                    <div>
-                      <h5 className="font-medium mb-1 flex items-center"><TrendingUp className="h-3 w-3 mr-1" /> Match Rationale</h5>
-                      <div className="space-y-1 pl-2">
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center"><GraduationCap className="h-3 w-3 mr-1" /> Academic Fit:</span>
-                          <span className="font-semibold">{program.matchRationale.academicFit || 0}%</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center"><TrendingUp className="h-3 w-3 mr-1" /> Career Alignment:</span>
-                          <span className="font-semibold">{program.matchRationale.careerAlignment || 0}%</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center"><Wallet className="h-3 w-3 mr-1" /> Budget Fit:</span>
-                          <span className="font-semibold">{program.matchRationale.budgetFit || 0}%</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center"><MapPin className="h-3 w-3 mr-1" /> Location Match:</span>
-                          <span className="font-semibold">{program.matchRationale.locationMatch || 0}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Highlights */}
-                  {program.highlights && program.highlights.length > 0 && (
-                    <div>
-                      <h5 className="font-medium mb-1 flex items-center"><Star className="h-3 w-3 mr-1" /> Highlights</h5>
-                      <ul className="list-disc pl-5 space-y-0.5">
-                        {program.highlights.map((h, i) => <li key={i}>{h}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Requirements */}
-                  {program.requirements && program.requirements.length > 0 && (
-                    <div>
-                      <h5 className="font-medium mb-1 flex items-center"><ListChecks className="h-3 w-3 mr-1" /> Requirements</h5>
-                      <ul className="list-disc pl-5 space-y-0.5">
-                        {program.requirements.map((r, i) => <li key={i}>{r}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Application Deadline */}
-                  {program.applicationDeadline && (
-                    <div className="flex items-center justify-between pt-1 border-t mt-2">
-                       <span className="flex items-center"><Calendar className="h-3 w-3 mr-1" /> Application Deadline:</span>
-                       <span className="font-semibold">{program.applicationDeadline}</span>
-                    </div>
-                  )}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-
-          {/* Match Score Indicator - moved outside accordion */}
-          {program.matchScore && (
-            <div className="flex items-center gap-1 mt-1">
-              <span className="text-xs text-muted-foreground">Match:</span>
-              <div className="flex">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Award key={i} 
-                    className={`h-3 w-3 ${i < Math.round(program.matchScore / 20) 
-                      ? 'text-yellow-500 fill-current' // Use fill-current for solid stars
-                      : 'text-muted-foreground/20'
-                    }`} 
-                  />
-                ))}
-              </div>
-              <span className="text-xs font-medium">{program.matchScore}%</span>
-            </div>
-          )}
-        </div>
-        
-        <div className="flex justify-between mt-3">
-          <Button 
-            variant="outline"
-            size="icon"
-            className={program.isFavorite ? "text-red-500" : ""}
-            title={isGuest ? "Sign up to save favorites" : (program.isFavorite ? "Remove from favorites" : "Add to favorites")}
-            onClick={handleToggleFavorite}
-          >
-            {isGuest ? <Lock className="h-4 w-4" /> : <ThumbsUp className="h-4 w-4" />}
-          </Button>
-          
-          {!showFeedbackOptions && !hasFeedback ? (
-            <Button 
-              variant="outline"
-              size="icon"
-              title={isGuest ? "Sign up to provide feedback" : "Not interested"}
-              onClick={() => {
-                if (isGuest) {
-                  alert("Please sign up to submit feedback.");
-                  return;
-                }
-                setShowFeedbackOptions(true);
-              }}
-            >
-              {isGuest ? <Lock className="h-4 w-4" /> : <ThumbsDown className="h-4 w-4" />}
-            </Button>
-          ) : hasFeedback ? (
-            <div className="flex items-center gap-1">
-              <Badge variant="outline" className="text-xs">
-                <ThumbsDown className="h-3 w-3 mr-1" />
-                {program.feedbackReason || "Not interested"}
-              </Badge>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <select 
-                className="text-xs h-7 px-1 rounded border"
-                value={feedbackReason}
-                onChange={(e) => setFeedbackReason(e.target.value)}
-              >
-                <option value="not_relevant">Not Relevant</option>
-                <option value="too_expensive">Too Expensive</option>
-                <option value="wrong_location">Wrong Location</option>
-                <option value="other">Other</option>
-              </select>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  handleSubmitFeedback(feedbackReason);
-                  setShowFeedbackOptions(false);
-                }}
-              >
-                Submit
-              </Button>
-            </div>
-          )}
-          
-          <Button 
-            variant="outline"
-            size="icon"
-            className="text-muted-foreground hover:text-red-500"
-            title={isGuest ? "Sign up to remove programs" : "Remove this program suggestion"}
-            onClick={handleDeleteProgram}
-          >
-            {isGuest ? <Lock className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {/* Actions Row 2: Ask AI, Explore Program */}
-        <div className="flex justify-between items-center mt-2 pt-2 border-t">
-           <Button 
-             variant="ghost" 
-             size="sm"
-             className="text-xs h-7 px-2"
-             onClick={handleAskAI}
-             title="Ask AI assistant about this program"
-           >
-             <MessageSquare className="h-3 w-3 mr-1" /> Ask AI
-           </Button>
-
-           {program.pageLink ? (
-             <Button 
-               variant="outline" 
-               size="sm"
-               className="text-xs h-7 px-2"
-               onClick={() => window.open(program.pageLink, "_blank")}
-               title={`Visit program page at ${program.institution}`}
-             >
-               Explore Program <ExternalLink className="h-3 w-3 ml-1" />
-             </Button>
-           ) : (
-             <Button 
-               variant="outline" 
-               size="sm"
-               className="text-xs h-7 px-2"
-               disabled
-               title="No program link available"
-             >
-               Explore Program <ExternalLink className="h-3 w-3 ml-1" />
-             </Button>
-           )}
-        </div>
-
-      </div>
     </Card>
   );
 }
@@ -1060,16 +671,6 @@ function formatBudgetRange(budget?: { min?: number, max?: number } | null) {
   });
   
   return `${formatter.format(budget.min)} - ${formatter.format(budget.max)}`;
-}
-
-function formatCurrency(amount?: number | null) {
-  if (amount === undefined || amount === null) return "Not specified";
-  
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(amount);
 }
 
 function formatDurationRange(duration?: number | { min?: number, max?: number } | null): string {

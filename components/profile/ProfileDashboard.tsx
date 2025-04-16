@@ -34,6 +34,7 @@ import DocumentUpload from "@/components/document-upload";
 import AnimatedLogo from '@/components/ui/AnimatedLogo';
 import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
 import { useToast } from "@/hooks/use-toast"; // Corrected import path
+import Image from "next/image";
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -1362,9 +1363,24 @@ export default function ProfileDashboard() {
         >
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md">
-                <User className="h-5 w-5 text-white" />
-              </div>
+  
+          <div className="text-center relative z-10 mb"> 
+            {/* Motion div wrapping only the image, with tight bounds */}
+            <motion.div
+              className="inline-block" // Shrink wrap the image
+              whileHover={{ scale: 1.4, rotate: -5 }}
+              transition={{ type: "spring", stiffness: 300, damping: 10 }}
+            >
+              <Image
+                src="/images/vectors/bag.png"
+                alt="backpack"
+                width={64}
+                height={64}
+                priority
+              />
+            </motion.div>
+          </div>
+
               <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
                 Your Profile
               </h1>

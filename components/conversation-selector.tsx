@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import useConversationStore from '@/stores/useConversationStore';
-import { Plus, MessageCircle, Trash2 } from 'lucide-react';
+import { Plus, MessageCircle, Trash2, Search, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 // Conversation type already defined in store
 // type Conversation = {
@@ -27,17 +30,25 @@ export default function ConversationSelector() {
     error, // Use error from the store
   } = useConversationStore();
 
-  // Removed local state: const [conversations, setConversations] = useState<Conversation[]>([]);
-  // Removed local state: const [isLoading, setIsLoading] = useState(false);
-  // Removed local state: const [error, setError] = useState<string | null>(null);
+  // Add search functionality
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Load conversations via store hook when component mounts or auth changes
-  // The store now handles fetching on auth change
-  // useEffect(() => {
-  //   if (isAuthenticated && userId) {
-  //     fetchConversations();
-  //   }
-  // }, [isAuthenticated, userId, fetchConversations]);
+  // Filter conversations based on search term
+  const filteredConversations = conversations.filter(conversation => 
+    conversation.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setIsSearching(false);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    setIsSearching(value.length > 0);
+  };
 
   const handleSelectConversation = async (conversationId: string) => {
     if (conversationId === activeConversationId) return;
@@ -55,11 +66,10 @@ export default function ConversationSelector() {
       // Call createNewConversation without arguments
       // Title generation is handled when the first message is sent
       const newId = await createNewConversation();
-      // The store automatically fetches/updates the list now
-      // No need to manually refresh here
-      // if (newId) {
-      //   fetchConversations(); 
-      // }
+      // Reset search if active
+      if (isSearching) {
+        handleClearSearch();
+      }
     } catch (error) {
       console.error('Error creating new conversation:', error);
       // Error handling is now managed by the store
@@ -97,78 +107,170 @@ export default function ConversationSelector() {
   // For non-authenticated users or when loading
   if (!isAuthenticated || !userId) {
     return (
-      <div className="rounded-lg bg-blue-50 p-4">
-        <h3 className="text-md font-medium text-gray-800 mb-2">Conversations</h3>
-        <p className="text-sm text-gray-600">
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="rounded-lg bg-gradient-to-r from-primary/5 to-blue-500/5 p-5 border border-primary/10 shadow-sm"
+      >
+        <h3 className="text-md font-medium text-foreground mb-2">Conversations</h3>
+        <p className="text-sm text-muted-foreground">
           Sign in to save your conversations and access them later.
         </p>
-      </div>
+        <Button 
+          variant="outline"
+          size="sm" 
+          className="mt-3 w-full bg-white/50 hover:bg-white/80 border-primary/10 text-primary hover:text-primary/80 shadow-sm"
+          onClick={() => window.location.href = '/auth/login'}
+        >
+          Sign in
+        </Button>
+      </motion.div>
     );
   }
 
   return (
-    <div className="conversation-selector p-4 bg-white rounded-lg shadow border border-gray-100">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-md font-semibold text-gray-800">Conversations History</h3>
-        <button
+    <motion.div 
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="conversation-selector p-5 bg-white/70 backdrop-blur-sm rounded-lg shadow-sm border border-primary/10"
+    >
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-md font-semibold text-foreground">Your Conversations</h3>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={handleNewConversation}
-          className="p-1.5 text-gray-500 rounded-md hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          className="p-1.5 rounded-full text-primary hover:text-primary hover:bg-primary/10 transition-colors"
           title="New conversation"
         >
           <Plus size={18} />
-        </button>
+        </Button>
+      </div>
+
+      <div className="relative mb-3">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/70" />
+        <Input 
+          placeholder="Search conversations..." 
+          className="pl-9 bg-white/50 border-primary/10 text-sm focus-visible:ring-primary/20"
+          value={searchTerm}
+          onChange={handleSearchChange}
+        />
+        {isSearching && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClearSearch}
+            className="absolute right-2 top-2 h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+          >
+            <X size={14} />
+          </Button>
+        )}
       </div>
 
       {isLoading && conversations.length === 0 ? (
-        <div className="text-center py-4">
-          <div className="animate-spin h-5 w-5 border-t-2 border-blue-500 rounded-full mx-auto"></div>
+        <div className="text-center py-8 flex flex-col items-center">
+          <div className="animate-spin h-5 w-5 border-2 border-t-transparent border-primary/40 rounded-full mb-2"></div>
+          <p className="text-sm text-muted-foreground">Loading conversations...</p>
         </div>
       ) : error ? (
-        <div className="text-sm text-red-500 py-2 px-1 bg-red-50 rounded border border-red-200">Error: {error}</div>
+        <div className="text-sm text-red-500 py-3 px-3 bg-red-50 rounded-lg border border-red-200 mt-2">
+          <p className="font-medium">Error loading conversations</p>
+          <p className="text-xs mt-1">{error}</p>
+        </div>
       ) : conversations.length === 0 ? (
-        <div className="text-sm text-center text-gray-500 py-4 px-2 border-t border-gray-100">No conversations yet. Start a new one!</div>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-8 px-3 border border-dashed border-primary/10 rounded-lg bg-primary/5"
+        >
+          <MessageCircle className="h-8 w-8 text-primary/30 mx-auto mb-2" />
+          <p className="text-sm font-medium text-foreground mb-1">No conversations yet</p>
+          <p className="text-xs text-muted-foreground mb-3">Start a new conversation to get help with your education journey</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNewConversation}
+            className="bg-white border-primary/20 text-primary hover:bg-primary/5"
+          >
+            <Plus size={14} className="mr-1" /> New conversation
+          </Button>
+        </motion.div>
+      ) : filteredConversations.length === 0 ? (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-6 px-3 border border-dashed border-primary/10 rounded-lg bg-primary/5"
+        >
+          <Search className="h-6 w-6 text-primary/30 mx-auto mb-2" />
+          <p className="text-sm font-medium text-foreground mb-1">No matching conversations</p>
+          <p className="text-xs text-muted-foreground mb-3">Try a different search term or clear your search</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearSearch}
+            className="bg-white border-primary/20 text-primary hover:bg-primary/5"
+          >
+            Clear search
+          </Button>
+        </motion.div>
       ) : (
-        <ul className="space-y-1 max-h-60 overflow-y-auto pr-1 border-t border-gray-100 pt-2">
-          {conversations.map((conversation) => (
-            <li
-              key={conversation.id}
-              onClick={() => handleSelectConversation(conversation.id)}
-              className={`
-                flex items-center justify-between p-2 rounded-md text-sm cursor-pointer transition-colors duration-150 ease-in-out
-                group
-                ${conversation.id === activeConversationId
-                  ? 'bg-blue-100 text-blue-800 font-medium'
-                  : 'text-gray-700 hover:bg-gray-50'
-                }
-              `}
-            >
-              <div className="flex items-center overflow-hidden space-x-2">
-                <MessageCircle
-                  size={16}
-                  className={`shrink-0 ${conversation.id === activeConversationId ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'}`}
-                />
-                <span className="truncate" title={conversation.title}>
-                  {/* Add a subtle effect for placeholder title */}
-                  {conversation.title === "Generating title..."
-                    ? <span className="italic text-gray-500">{conversation.title}</span>
-                    : conversation.title || 'Untitled Conversation'}
-                </span>
-              </div>
-              <button
-                onClick={(e) => handleDeleteConversation(conversation.id, e)}
+        <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 border-t border-primary/5 pt-3">
+          <AnimatePresence>
+            {filteredConversations.map((conversation) => (
+              <motion.div
+                key={conversation.id}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.3 }}
+                onClick={() => handleSelectConversation(conversation.id)}
                 className={`
-                  text-gray-400 opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-md transition-opacity duration-150 ease-in-out
-                  focus:outline-none focus:ring-1 focus:ring-red-400
-                  ${conversation.id === activeConversationId ? 'opacity-100' : ''}
+                  flex items-center justify-between p-2.5 rounded-lg text-sm cursor-pointer transition-all duration-200 
+                  group
+                  ${conversation.id === activeConversationId
+                    ? 'bg-gradient-to-r from-primary/10 to-primary/5 text-primary font-medium'
+                    : 'text-foreground hover:bg-primary/5'
+                  }
                 `}
-                title="Delete conversation"
               >
-                <Trash2 size={14} />
-              </button>
-            </li>
-          ))}
-        </ul>
+                <div className="flex items-center overflow-hidden space-x-2.5">
+                  <div className={`
+                    p-1.5 rounded-full ${conversation.id === activeConversationId 
+                      ? 'bg-primary/20' 
+                      : 'bg-primary/10 group-hover:bg-primary/15'
+                    } transition-colors
+                  `}>
+                    <MessageCircle
+                      size={14}
+                      className={`shrink-0 ${conversation.id === activeConversationId ? 'text-primary' : 'text-primary/50 group-hover:text-primary/70'}`}
+                    />
+                  </div>
+                  <span className="truncate" title={conversation.title}>
+                    {/* Add a subtle effect for placeholder title */}
+                    {conversation.title === "Generating title..."
+                      ? <span className="italic text-muted-foreground">{conversation.title}</span>
+                      : conversation.title || 'Untitled Conversation'}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => handleDeleteConversation(conversation.id, e)}
+                  className={`
+                    opacity-0 group-hover:opacity-100 p-1 rounded-full text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all duration-200
+                    ${conversation.id === activeConversationId ? 'opacity-100' : ''}
+                  `}
+                  title="Delete conversation"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       )}
-    </div>
+    </motion.div>
   );
 } 

@@ -4,6 +4,8 @@ import Chat from "./chat";
 import useConversationStore from "@/stores/useConversationStore";
 import { Item, processMessages } from "@/lib/assistant";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/app/components/auth/AuthContext";
+import { motion } from "framer-motion";
 
 export default function Assistant() {
   const { 
@@ -20,6 +22,9 @@ export default function Assistant() {
     error,
     setError
   } = useConversationStore();
+  
+  // Access user data from AuthContext to pass to chat component
+  const { user, profile } = useAuth();
   
   const [isInitialized, setIsInitialized] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
@@ -153,29 +158,32 @@ export default function Assistant() {
   ]);
 
   return (
-    <div className="h-full w-full bg-gradient-to-b from-blue-50 to-white">
-      <div className="p-4 mb-2 shadow-sm bg-white border-b border-blue-100">
-        {/* <div className="max-w-[750px] mx-auto flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-600 text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-800">Vista Education Advisers</h1>
-            <p className="text-sm text-gray-600">Your personal guide to educational success</p>
-          </div>
-        </div> */}
-      </div>
-      
-      {/* Always render Chat, loading is handled inside */}
-      <Chat items={chatMessages} onSendMessage={handleSendMessage} />
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="h-full w-full relative"
+    >
+      {/* Pass user data to chat component */}
+      <Chat 
+        items={chatMessages} 
+        onSendMessage={handleSendMessage}
+        userData={{ user, profile }}
+      />
             
       {error && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded shadow-lg">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-5 py-2.5 rounded-lg shadow-lg z-50 flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
           {error}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

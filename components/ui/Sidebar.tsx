@@ -8,6 +8,7 @@ import { useAuth } from '@/app/components/auth/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import AvatarSelector from '@/components/profile/AvatarSelector';
 import {
   Home,
   User,
@@ -19,18 +20,22 @@ import {
   LogIn,
   Menu,
   X,
-  Sparkles
+  Sparkles,
+  Camera
 } from 'lucide-react';
 import Image from 'next/image';
 import { gsap } from 'gsap';
+import { useToast } from '@/hooks/use-toast';
 
 export function Sidebar() {
   const { user, profile, loading, signOut } = useAuth();
   const pathname = usePathname();
+  const { toast } = useToast();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isAvatarSelectorOpen, setIsAvatarSelectorOpen] = useState(false);
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -68,6 +73,22 @@ export function Sidebar() {
       // Reset the sign-out state to allow retry
       setIsSigningOut(false);
     }
+  };
+
+  const openAvatarSelector = () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to customize your avatar",
+        variant: "destructive"
+      });
+      return;
+    }
+    setIsAvatarSelectorOpen(true);
+  };
+
+  const closeAvatarSelector = () => {
+    setIsAvatarSelectorOpen(false);
   };
 
   const navItems = [
@@ -163,17 +184,32 @@ export function Sidebar() {
             </div>
           </div>
         ) : user ? (
-          <div className="flex items-center space-x-3 p-2">
-            <Avatar className="border-2 border-primary/20">
-              <AvatarImage 
-                src={user?.user_metadata?.avatar_url || ''} 
-                alt={profile?.first_name || 'User'} 
-              />
-              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary">
-                {profile?.first_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                {profile?.last_name?.charAt(0) || ''}
-              </AvatarFallback>
-            </Avatar>
+          <div className={`flex items-center p-2 transition-all duration-300 ${isCollapsed ? 'flex-col space-y-2 justify-center' : 'space-x-4'}`}>
+            <div className="relative group">
+              <Avatar 
+                className={`border-2 border-primary/20 cursor-pointer group-hover:border-primary transition-all duration-300 ${isCollapsed ? 'h-16 w-16' : 'h-24 w-24'}`}
+                onClick={openAvatarSelector}
+              >
+                <AvatarImage 
+                  src={user?.user_metadata?.avatar_url || ''} 
+                  alt={profile?.first_name || 'User'} 
+                />
+                <AvatarFallback 
+                  className={`bg-gradient-to-br from-primary/20 to-primary/10 text-primary transition-all duration-300 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}
+                >
+                  {profile?.first_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  {profile?.last_name?.charAt(0) || ''}
+                </AvatarFallback>
+              </Avatar>
+              
+              {/* Camera icon overlay on hover */}
+              <div 
+                className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer"
+                onClick={openAvatarSelector}
+              >
+                <Camera className={`text-white transition-all duration-300 ${isCollapsed ? 'h-4 w-4' : 'h-7 w-7'}`} />
+              </div>
+            </div>
             <motion.div
               initial={false}
               animate={isCollapsed ? 'collapsed' : 'expanded'}
@@ -186,9 +222,13 @@ export function Sidebar() {
             </motion.div>
           </div>
         ) : (
-          <div className="flex items-center space-x-3 p-2">
-            <Avatar className="border-2 border-primary/20">
-              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary">?</AvatarFallback>
+          <div className={`flex items-center p-2 transition-all duration-300 ${isCollapsed ? 'flex-col space-y-2' : 'space-x-4'}`}>
+            <Avatar 
+              className={`border-2 border-primary/20 transition-all duration-300 ${isCollapsed ? 'h-10 w-10' : 'h-24 w-24'}`}
+            >
+              <AvatarFallback 
+                className={`bg-gradient-to-br from-primary/20 to-primary/10 text-primary transition-all duration-300 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}
+              >?</AvatarFallback>
             </Avatar>
             <motion.div
               initial={false}
@@ -216,6 +256,7 @@ export function Sidebar() {
                       ? 'text-primary-foreground'
                       : 'text-foreground hover:text-primary'
                     }
+                    ${isCollapsed ? 'justify-center' : ''}
                   `}
                   onMouseEnter={() => setHoveredItem(item.href)}
                   onMouseLeave={() => setHoveredItem(null)}
@@ -270,7 +311,7 @@ export function Sidebar() {
         {user ? (
           <Button
             variant="outline"
-            className="w-full flex items-center justify-center border-primary/20 hover:bg-primary/10 group"
+            className={`w-full flex items-center border-primary/20 hover:bg-primary/10 group transition-all duration-300 ${isCollapsed ? 'justify-center' : ''}`}
             onClick={handleSignOut}
             disabled={isSigningOut}
           >
@@ -302,7 +343,7 @@ export function Sidebar() {
         ) : (
           <Link href="/auth/login">
             <Button 
-              className="w-full flex items-center justify-center bg-gradient-to-r from-primary to-primary/90 group"
+              className={`w-full flex items-center bg-gradient-to-r from-primary to-primary/90 group transition-all duration-300 ${isCollapsed ? 'justify-center' : ''}`}
               variant="default"
             >
               <LogIn className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
@@ -318,6 +359,12 @@ export function Sidebar() {
           </Link>
         )}
       </div>
+
+      {/* Avatar Selector Modal */}
+      <AvatarSelector 
+        isOpen={isAvatarSelectorOpen} 
+        onClose={closeAvatarSelector} 
+      />
     </>
   );
 

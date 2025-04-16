@@ -50,6 +50,8 @@ import usePathwayStore from "@/stores/usePathwayStore";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SavedProgramsView } from "./SavedProgramsView";
 import { RecommendationProgressModal, RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
+import Image from "next/image";
+import { HowItWorksModal, RecommendationOptionsModal } from "./_components";
 
 // Add interface for Supabase profile to fix type issues
 interface SupabaseProfile {
@@ -333,31 +335,47 @@ export default function RecommendationsPage() {
         isComplete={isGenerationComplete}
       />
 
+      {/* Add decorative background elements similar to dashboard */}
+      <div className="fixed inset-0 w-full h-full pointer-events-none overflow-hidden z-0">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+          className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 rounded-full bg-gradient-radial from-primary/5 via-primary/10 to-transparent blur-3xl"
+        />
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+          className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-gradient-radial from-blue-500/5 via-blue-500/10 to-transparent blur-3xl"
+        />
+        <motion.div 
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 0.07 }}
+          transition={{ duration: 1, ease: "easeOut", delay: 0.8 }}
+          className="absolute top-1/4 right-[5%] w-20 h-20 border border-dashed border-primary rounded-full animate-spin-slow" 
+        />
+      </div>
+
       <GuestLimitMonitor />
       <TooltipProvider>
-        <div className="container mx-auto py-6 md:py-10 px-4 max-w-6xl">
+        <div className="container mx-auto py-6 md:py-10 px-4 max-w-6xl relative z-10">
           <>
-            <div className="mb-6 flex justify-between items-center">
+            {/* Enhanced header with illustrations */}
+            <div className="mb-12">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
               <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="max-w-2xl"
-              >
-                <h1 className="text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2">
-                  {/* <span className="bg-blue-100 text-blue-800 p-1.5 rounded-lg inline-flex">
-                    <BookOpen className="h-6 w-6" />
-                  </span> */}
-                  <span>
-                    Hi{' '}
-                    <span className="text-blue-700">
-                      {typedProfile?.first_name ? `${typedProfile.first_name}` : ''}
-                    </span>
-                    , welcome to your education dashboard
-                  </span>
+                  className="flex flex-col justify-center"
+                >
+                  <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
+                    
+                    Welcome to your recommendations page
                 </h1>
-                <p className="text-muted-foreground mt-2 max-w-xl">
-                  Explore personalized education pathways, save programs you're interested in, and track your applications.
+                  <p className="text-muted-foreground text-lg max-w-xl mb-4">
+                    Explore personalized education pathways, find and save programs you're interested in, and track your applications.
                 </p>
                 
                 {!user && (
@@ -369,7 +387,7 @@ export default function RecommendationsPage() {
                   >
                     <Shield className="h-4 w-4 mr-2 text-amber-500" />
                     <span>You're browsing in guest mode with limited features.</span>
-                    <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1 text-amber-700 font-medium" onClick={() => router.push('/signup')}>
+                      <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1 text-amber-700 font-medium" onClick={() => router.push('/profile-wizard')}>
                       Sign up for full access →
                     </Button>
                   </motion.div>
@@ -383,103 +401,68 @@ export default function RecommendationsPage() {
                 )}
               </motion.div>
               
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => router.push(user ? "/profile" : "/profile-wizard?edit=true")}
-                  disabled={!!(user && !typedProfile && !isInitializing)}
+                {/* Add SVG illustrations with speech/thought bubbles */}
+                <motion.div 
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.7, delay: 0.2 }}
+                  className="flex justify-center relative order-first md:order-last"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
-                  {user ? "Edit Profile" : "Edit Guest Profile"}
-                </Button>
-
-                {user && (
-                  <AlertDialog>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <AlertDialogTrigger asChild>
-                          <Button 
-                            variant="destructive"
-                            size="sm" 
-                            className="text-white-500 hover:text-red-700 hover:bg-red-50 border border-red-500 hover:border-red-700"
-                            disabled={isActionLoading || isAuthResetting}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Reset Recommendations
-                          </Button>
-                        </AlertDialogTrigger>
-                      </TooltipTrigger>
-                      {isActionLoading || isAuthResetting ? (
-                        <TooltipContent>
-                          <p>Resetting in progress...</p>
-                        </TooltipContent>
-                      ) : null}
-                    </Tooltip>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Reset Recommendations?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will mark all your current pathways and their associated program explorations as deleted. 
-                          You can then generate a fresh set of pathways. Are you sure?
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isAuthResetting || isActionLoading}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                          onClick={handleAuthReset} 
-                          className="bg-red-600 hover:bg-red-700"
-                          disabled={isAuthResetting || isActionLoading}
-                        >
-                          {isAuthResetting || isActionLoading ? (
-                            <>
-                              <AnimatedLogo size={20} className="mr-2" />
-                              Resetting...
-                            </>
-                          ) : (
-                            "Yes, Reset Now"
-                          )}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-
-                {!user && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Start Over
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Reset Guest Profile?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will clear any profile information you entered as a guest. This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isGuestResetting}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                          onClick={handleGuestReset} 
-                          className="bg-red-500 hover:bg-red-600"
-                          disabled={isGuestResetting}
-                        >
-                          {isGuestResetting ? (
-                            <>
-                              <AnimatedLogo size={20} className="mr-2" />
-                              Resetting...
-                            </>
-                          ) : (
-                            "Reset Profile"
-                          )}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
+                  <div className="relative w-full h-[300px] flex items-center justify-center">
+                    {/* Girl SVG */}
+                    <motion.div 
+                      className="absolute right-0 md:right-10 top-0 md:top-10 w-1/2 h-[200px] flex flex-col items-end justify-end"
+                      whileHover={{ scale: 1.05, rotate: -2 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                    >
+                      <Image
+                        src="/images/vectors/confGirl.svg"
+                        alt="Student Girl"
+                        fill
+                        style={{ objectFit: "contain" }}
+                        priority
+                      />
+                      {/* Move speech bubble to bottom */}
+                      <div className="w-full flex justify-end mt-2 relative z-10">
+                        <div className="bg-blue-100 rounded-lg p-2 pl-3 shadow-sm flex items-center gap-2">
+                          <p className="text-xs font-medium text-blue-700 mb-0 max-w-[140px]">Learn how recommendations work!</p>
+                          <HowItWorksModal />
+                        </div>
+                      </div>
+                    </motion.div>
+                    {/* Boy SVG */}
+                    <motion.div 
+                      className="absolute left-0 md:left-10 bottom-0 md:bottom-10 w-1/2 h-[200px] flex flex-col items-start justify-end"
+                      whileHover={{ scale: 1.05, rotate: 2 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                    >
+                      <Image
+                        src="/images/vectors/confBoy.svg"
+                        alt="Student Boy"
+                        fill
+                        style={{ objectFit: "contain" }}
+                        priority
+                      />
+                      {/* Move thought bubble to bottom */}
+                      <div className="w-full flex justify-start mt-2 relative z-10">
+                        <div className="bg-amber-100 rounded-lg p-2 pl-3 shadow-sm flex items-center gap-2">
+                          <p className="text-xs font-medium text-amber-700 mb-0 max-w-[140px]">Not seeing what you expected?</p>
+                          <RecommendationOptionsModal 
+                            user={user}
+                            typedProfile={typedProfile}
+                            isInitializing={isInitializing}
+                            isGuestResetting={isGuestResetting}
+                            isAuthResetting={isAuthResetting}
+                            isActionLoading={isActionLoading}
+                            handleGuestReset={handleGuestReset}
+                            handleAuthReset={handleAuthReset}
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                    <div className="absolute inset-0 bg-green-400/10 blur-3xl rounded-full z-[-1]"></div>
+                  </div>
+                </motion.div>
               </div>
             </div>
             
@@ -572,7 +555,7 @@ export default function RecommendationsPage() {
                         Create an account to save your favorite programs and access them anytime, anywhere.
                       </p>
                       <Button 
-                        onClick={() => router.push('/signup')}
+                        onClick={() => router.push('/profile-wizard')}
                         className="px-6 py-2"
                       >
                         Create Account

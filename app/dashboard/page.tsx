@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
-import { User, MessageSquare, Bookmark, Sparkles, MoveUpRight } from "lucide-react";
+import { User, MessageSquare, Bookmark, MoveUpRight } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from '@/app/components/auth/AuthContext';
 import { PageWrapper } from "@/components/layouts/PageWrapper";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
@@ -80,7 +81,24 @@ export default function DashboardPage() {
           transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
           className="text-center mb-16"
         >
-          <Sparkles className="h-10 w-10 text-primary mx-auto mb-4 opacity-90" />
+          {/* Position container for the cap image */}
+          <div className="text-center relative z-10 mb-[-3rem]"> 
+            {/* Motion div wrapping only the image, with tight bounds */}
+            <motion.div
+              className="inline-block" // Shrink wrap the image
+              whileHover={{ scale: 1.2, rotate: -5 }}
+              transition={{ type: "spring", stiffness: 300, damping: 10 }}
+            >
+              <Image
+                src="/images/vectors/cap.png"
+                alt="Graduation Cap"
+                width={86}
+                height={86}
+                // Removed mx-auto as centering is handled by the outer div
+                priority
+              />
+            </motion.div>
+          </div>
           <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
             {loading ? 'Loading...' : `Hey ${displayName}!`}
           </h1>

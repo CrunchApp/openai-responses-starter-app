@@ -50,8 +50,8 @@ export default function CareerGoalsStep({
   ];
   
   const commonRoles = [
-    "Software Engineer", "Data Scientist", "Product Manager", 
-    "UX Designer", "Marketing Specialist", "Financial Analyst"
+    "Software Engineer", "Data Scientist", "Chemical Engineer", 
+    "Pharmacist", "Marketing Specialist", "Financial Analyst"
   ];
 
   // Handle changes to text fields

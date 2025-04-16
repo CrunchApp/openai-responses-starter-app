@@ -1,18 +1,8 @@
 ---
-description: Guidelines for writing Next.js apps with Supabase Auth
+description: 
 globs: 
 alwaysApply: false
 ---
----
-description: Guidelines for writing Next.js apps with Supabase Auth
-globs: 
-alwaysApply: false
----
----
-description: Guidelines for writing Next.js apps with Supabase Auth
-globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
----
-
 # Bootstrap Next.js app with Supabase Auth
 
 ## Overview of implementing Supabase Auth SSR

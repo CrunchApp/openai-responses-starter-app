@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft, Loader2, Save, X, Plus, Trash2, Sparkles } from "lucide-react";
+import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft, Loader2, Save, X, Plus, Trash2, Sparkles, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
@@ -32,6 +32,8 @@ import { z } from 'zod';
 import { useAuth } from "@/app/components/auth/AuthContext"; // Import useAuth
 import DocumentUpload from "@/components/document-upload";
 import AnimatedLogo from '@/components/ui/AnimatedLogo';
+import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
+import { useToast } from "@/hooks/use-toast"; // Corrected import path
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -50,6 +52,10 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 
 // Derive the Education type directly from the schema
 type EducationSchemaType = z.infer<typeof ProfileSchema.shape.education.element>;
+
+// Derive the Language Proficiency type directly from the schema
+// Fix Linter Error 1 (Attempt 3): Access the element type through ZodDefault -> ZodOptional -> ZodArray
+type LanguageProficiencySchemaType = z.infer<typeof ProfileSchema.shape.languageProficiency._def.innerType._def.innerType._def.type>;
 
 // Helper function to sync profile data to the Vector Store
 const syncProfileToVectorStore = async (profileData: UserProfile, vectorStoreId: string): Promise<string> => {
@@ -154,7 +160,7 @@ export default function ProfileDashboard() {
   const [editedProfile, setEditedProfile] = useState<UserProfile | null>(null);
   const [editingEducationIndex, setEditingEducationIndex] = useState<number | null>(null);
   const [newEducationEntry, setNewEducationEntry] = useState<EducationSchemaType>({
-    degreeLevel: "",
+    degreeLevel: "__NONE__", // Update default
     institution: "",
     fieldOfStudy: "",
     graduationYear: "",
@@ -162,8 +168,17 @@ export default function ProfileDashboard() {
   });
   const [isAddEducationModalOpen, setIsAddEducationModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [editingLanguageIndex, setEditingLanguageIndex] = useState<number | null>(null); // State for editing language
+  const [newLanguageEntry, setNewLanguageEntry] = useState<LanguageProficiencySchemaType>({ // State for adding new language
+    language: "",
+    proficiencyLevel: "__NONE__",
+    testType: "",
+    score: ""
+  });
+  const [isAddLanguageModalOpen, setIsAddLanguageModalOpen] = useState(false); // State for language modal
   const router = useRouter();
   const { user, loading: authLoading, vectorStoreId: authVectorStoreId } = useAuth();
+  const { toast } = useToast();
   
   // Add animation for decorative elements
   useEffect(() => {
@@ -223,6 +238,7 @@ export default function ProfileDashboard() {
     if (editSection === section) {
       setEditSection(null);
       setEditingEducationIndex(null);
+      setEditingLanguageIndex(null); // Reset language editing index
     } else {
       setEditSection(section);
       setEditedProfile(JSON.parse(JSON.stringify(userProfile)));
@@ -334,6 +350,7 @@ export default function ProfileDashboard() {
     setEditSection(null);
     setEditedProfile(userProfile);
     setEditingEducationIndex(null);
+    setEditingLanguageIndex(null); // Reset language editing index
   };
   
   // Update editedProfile when a field changes (handles nested objects and arrays)
@@ -366,6 +383,16 @@ export default function ProfileDashboard() {
                current[key][index] = {}; // Ensure object exists at index
             }
          }
+         // Special handling for nested objects in preferences
+         if (key === 'preferences' && !current[key]) {
+             current[key] = {}; // Ensure preferences object exists
+         }
+         if (key === 'preferredDuration' && !current?.min && !current?.max) {
+            current[key] = { min: undefined, max: undefined, unit: undefined }; // Ensure duration object exists
+         }
+         if (key === 'livingExpensesBudget' && !current?.min && !current?.max) {
+            current[key] = { min: undefined, max: undefined, currency: "USD" }; // Ensure budget object exists
+         }
         current = current[key];
       }
       
@@ -376,6 +403,12 @@ export default function ProfileDashboard() {
           current[finalKey] = value.split(',').map((item: string) => item.trim()).filter(Boolean);
       } else if (fieldPath.startsWith('preferences.budgetRange')) {
           current[finalKey] = parseInt(value, 10) || 0;
+      } else if (fieldPath.startsWith('preferences.preferredDuration')) {
+          current[finalKey] = parseInt(value, 10) || undefined; // Store as number or undefined
+      } else if (fieldPath.startsWith('preferences.livingExpensesBudget')) {
+          current[finalKey] = parseInt(value, 10) || undefined; // Store as number or undefined
+      } else if (fieldPath === 'preferences.residencyInterest') {
+          current[finalKey] = value; // Boolean value from Checkbox
       } else {
           current[finalKey] = value;
       }
@@ -418,7 +451,7 @@ export default function ProfileDashboard() {
       });
       setIsAddEducationModalOpen(false); 
       // Reset using the derived type's structure
-      setNewEducationEntry({ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "", gpa: undefined }); 
+      setNewEducationEntry({ degreeLevel: "__NONE__", institution: "", fieldOfStudy: "", graduationYear: "", gpa: undefined }); // Update default
   };
 
   const handleNewEducationEntryChange = (field: keyof EducationSchemaType, value: string) => {
@@ -426,6 +459,44 @@ export default function ProfileDashboard() {
   };
 
   // --- End Education Specific Handlers ---
+
+  // --- Language Proficiency Specific Handlers ---
+
+  const handleLanguageItemChange = (index: number, field: keyof LanguageProficiencySchemaType, value: string) => {
+    // Fix Linter Error 2: Explicitly convert 'field' (which could be a symbol) to a string
+    handleFieldChange(`languageProficiency.${index}.${String(field)}`, value);
+  };
+
+  const handleRemoveLanguage = (index: number) => {
+    if (!editedProfile) return;
+    setEditedProfile(prev => {
+        if (!prev || !prev.languageProficiency) return prev;
+        const updatedLanguages = prev.languageProficiency.filter((_, i) => i !== index);
+        return { ...prev, languageProficiency: updatedLanguages };
+    });
+  };
+
+  const handleAddNewLanguage = () => {
+      if (!editedProfile) return;
+      setEditedProfile(prev => {
+          if (!prev) return null;
+          const currentLanguages = prev.languageProficiency || [];
+          const entryToAdd: LanguageProficiencySchemaType = { ...newLanguageEntry };
+          return {
+              ...prev,
+              languageProficiency: [...currentLanguages, entryToAdd]
+          };
+      });
+      setIsAddLanguageModalOpen(false);
+      setNewLanguageEntry({ language: "", proficiencyLevel: "__NONE__", testType: "", score: "" }); // Reset form
+  };
+
+  const handleNewLanguageEntryChange = (field: keyof LanguageProficiencySchemaType, value: string) => {
+      // Fix Linter Error 3: Add explicit type for 'prev' parameter
+      setNewLanguageEntry((prev: LanguageProficiencySchemaType) => ({ ...prev, [field]: value }));
+  };
+
+  // --- End Language Proficiency Specific Handlers ---
 
   // Calculate profile completion percentage
   const calculateCompletion = () => {
@@ -439,7 +510,9 @@ export default function ProfileDashboard() {
     if (userProfile.lastName) completed++;
     if (userProfile.email) completed++;
     if (userProfile.phone) completed++;
-    total += 4;
+    if (userProfile.currentLocation) completed++; // Added
+    if (userProfile.nationality) completed++; // Added
+    total += 6; // Updated total
     
     // Education
     userProfile.education?.forEach(edu => {
@@ -466,7 +539,13 @@ export default function ProfileDashboard() {
     if (userProfile.preferences?.studyMode) completed++;
     if (userProfile.preferences?.startDate) completed++;
     if (userProfile.preferences?.budgetRange?.max > 0) completed++;
-    total += 4;
+    // Removed targetStudyLevel from Preferences total calculation
+    if (userProfile.preferences?.preferredDuration?.min || userProfile.preferences?.preferredDuration?.max) completed++; // Added
+    if (userProfile.preferences?.preferredStudyLanguage) completed++; // Added
+    if (userProfile.preferences?.livingExpensesBudget?.min || userProfile.preferences?.livingExpensesBudget?.max) completed++; // Added // Corrected typo userProfile -> profileData
+    if (userProfile.preferences?.residencyInterest !== undefined) completed++; // Added (assuming default is false)
+    // Removed languageProficiency from Preferences total calculation
+    total += 8; // Updated total (was 10, removed 2)
     
     // Documents - handle both formats
     if (getDocumentFileId(userProfile.documents?.resume)) completed++;
@@ -630,31 +709,19 @@ export default function ProfileDashboard() {
         console.error("Error from delete API:", result.error);
         setError(result.error);
         setIsDeleteDialogOpen(false);
+        toast({ title: "Deletion Failed", description: result.error, variant: "destructive" });
       } else {
         console.log("Profile deletion result:", result);
+        toast({ title: "Profile Deleted", description: "Your profile has been deleted.", variant: "default" });
         
-        // Check if auth user was deleted or just profile data
-        if (result.authUserDeleted === false) {
-          console.log("Warning: Only profile data was deleted, auth user remains");
-          // We'll still sign out and redirect the user, but we can optionally show a warning
-          
-          // Consider showing a toast notification here if your UI supports it
-          // toast.warning("Profile data deleted, but your account remains. Contact support for complete account deletion.");
-        } else {
-          console.log("Profile and auth user deleted successfully");
-        }
-        
-        // Sign out the user after successful deletion (even if only partial)
+        // Sign out and redirect
         try {
           const supabase = createClient();
           await supabase.auth.signOut();
           console.log("User signed out successfully");
-          
-          // Redirect to login page
           router.push('/login');
         } catch (signOutError) {
           console.error("Error during sign out:", signOutError);
-          // Even if sign out fails, still redirect to login
           router.push('/login');
         }
       }
@@ -662,6 +729,7 @@ export default function ProfileDashboard() {
       console.error("Error deleting profile:", error);
       setError("Failed to delete profile. Please try again later.");
       setIsDeleteDialogOpen(false);
+       toast({ title: "Deletion Failed", description: "An unexpected error occurred.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -766,6 +834,23 @@ export default function ProfileDashboard() {
             onChange={(e) => handleFieldChange('phone', e.target.value)} 
           />
         </div>
+        {/* Added Location and Nationality */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Current Location</label>
+            <Input
+              value={editedProfile.currentLocation || ''}
+              onChange={(e) => handleFieldChange('currentLocation', e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Nationality</label>
+            <Input
+              value={editedProfile.nationality || ''}
+              onChange={(e) => handleFieldChange('nationality', e.target.value)}
+            />
+          </div>
+        </div>
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={handleCancelEdit}>
             <X className="h-4 w-4 mr-2" />
@@ -803,6 +888,15 @@ export default function ProfileDashboard() {
           />
         </div>
         <div className="space-y-2">
+          <label className="text-sm font-medium">Achievements & Extracurricular Interests</label>
+          <Textarea 
+            value={editedProfile.careerGoals?.achievements || ''} 
+            onChange={(e) => handleFieldChange('careerGoals.achievements', e.target.value)} 
+            rows={4}
+            placeholder="Enter your notable achievements, awards, and extracurricular interests"
+          />
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-medium">Skills (comma-separated)</label>
           <Input 
             value={editedProfile.skills?.join(', ') || ''} 
@@ -837,7 +931,7 @@ export default function ProfileDashboard() {
     );
   };
 
-  // Render edit mode for Preferences
+  // Replace the renderPreferencesEdit function with this version that doesn't include Language Proficiency
   const renderPreferencesEdit = () => {
     if (!editedProfile) return null;
     
@@ -893,19 +987,132 @@ export default function ProfileDashboard() {
              />
            </div>
          </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={handleCancelEdit}>
-            <X className="h-4 w-4 mr-2" />
-            Cancel
-          </Button>
-          <Button onClick={handleSaveChanges}>
-            <Save className="h-4 w-4 mr-2" />
-            Save Changes
-          </Button>
+         {/* --- Added Fields --- */}
+         <div className="space-y-2">
+            <label className="text-sm font-medium">Target Study Level</label>
+            <Select
+                value={editedProfile.targetStudyLevel || '__NONE__'}
+                onValueChange={(value) => handleFieldChange('targetStudyLevel', value)}
+            >
+                <SelectTrigger><SelectValue placeholder="Select target level" /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="Bachelor's">Bachelor's</SelectItem>
+                    <SelectItem value="Master's">Master's</SelectItem>
+                    <SelectItem value="Doctorate">Doctorate</SelectItem>
+                    <SelectItem value="Postgraduate Diploma/Certificate">Postgraduate Diploma/Certificate</SelectItem>
+                    <SelectItem value="Vocational/Trade">Vocational/Trade</SelectItem>
+                    <SelectItem value="Undecided">Undecided</SelectItem>
+                    <SelectItem value="__NONE__">None specified</SelectItem>
+                </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+             <label className="text-sm font-medium">Preferred Duration</label>
+             <div className="grid grid-cols-3 gap-2 items-end">
+               <div>
+                 <Label htmlFor="prefDurationMin" className="text-xs">Min</Label>
+                 <Input
+                   id="prefDurationMin"
+                   type="number"
+                   value={editedProfile.preferences?.preferredDuration?.min || ''}
+                   onChange={(e) => handleFieldChange('preferences.preferredDuration.min', e.target.value)}
+                   placeholder="e.g., 1"
+                 />
+               </div>
+               <div>
+                 <Label htmlFor="prefDurationMax" className="text-xs">Max</Label>
+                 <Input
+                   id="prefDurationMax"
+                   type="number"
+                   value={editedProfile.preferences?.preferredDuration?.max || ''}
+                   onChange={(e) => handleFieldChange('preferences.preferredDuration.max', e.target.value)}
+                   placeholder="e.g., 4"
+                 />
+               </div>
+               <div>
+                 <Label htmlFor="prefDurationUnit" className="text-xs">Unit</Label>
+                 <Select
+                    value={editedProfile.preferences?.preferredDuration?.unit || 'years'}
+                    onValueChange={(value) => handleFieldChange('preferences.preferredDuration.unit', value)}
+                  >
+                    <SelectTrigger id="prefDurationUnit">
+                      <SelectValue placeholder="Unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="years">Years</SelectItem>
+                      <SelectItem value="months">Months</SelectItem>
+                    </SelectContent>
+                  </Select>
+               </div>
+             </div>
+           </div>
+           <div className="space-y-2">
+             <label className="text-sm font-medium">Preferred Study Language</label>
+             <Input
+               value={editedProfile.preferences?.preferredStudyLanguage || ''}
+               onChange={(e) => handleFieldChange('preferences.preferredStudyLanguage', e.target.value)}
+               placeholder="e.g., English, German"
+             />
+           </div>
+           <div className="space-y-2">
+             <label className="text-sm font-medium">Living Expenses Budget (per month)</label>
+             <div className="grid grid-cols-3 gap-2 items-end">
+               <div>
+                 <Label htmlFor="livingBudgetMin" className="text-xs">Min</Label>
+                 <Input
+                   id="livingBudgetMin"
+                   type="number"
+                   value={editedProfile.preferences?.livingExpensesBudget?.min || ''}
+                   onChange={(e) => handleFieldChange('preferences.livingExpensesBudget.min', e.target.value)}
+                   placeholder="e.g., 500"
+                 />
+               </div>
+               <div>
+                 <Label htmlFor="livingBudgetMax" className="text-xs">Max</Label>
+                 <Input
+                   id="livingBudgetMax"
+                   type="number"
+                   value={editedProfile.preferences?.livingExpensesBudget?.max || ''}
+                   onChange={(e) => handleFieldChange('preferences.livingExpensesBudget.max', e.target.value)}
+                   placeholder="e.g., 1500"
+                 />
+               </div>
+               <div>
+                 <Label htmlFor="livingBudgetCurrency" className="text-xs">Currency</Label>
+                  <Input
+                      id="livingBudgetCurrency"
+                      value={editedProfile.preferences?.livingExpensesBudget?.currency || 'USD'}
+                      onChange={(e) => handleFieldChange('preferences.livingExpensesBudget.currency', e.target.value)}
+                      placeholder="e.g., USD"
+                  />
+               </div>
+             </div>
+           </div>
+           <div className="flex items-center space-x-2 pt-2">
+             <Checkbox
+               id="residencyInterest"
+               checked={editedProfile.preferences?.residencyInterest || false}
+               onCheckedChange={(checked) => handleFieldChange('preferences.residencyInterest', checked)}
+             />
+             <label htmlFor="residencyInterest" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+               Interested in long-term residency/migration options?
+             </label>
+           </div>
+         {/* --- End Added Fields --- */}
+
+         <div className="flex justify-end gap-2 mt-6 border-t pt-4">
+           <Button variant="outline" onClick={handleCancelEdit}>
+             <X className="h-4 w-4 mr-2" />
+             Cancel Section Edit
+           </Button>
+           <Button onClick={handleSaveChanges} disabled={isLoading}>
+             {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+             Save All Preference Changes
+           </Button>
         </div>
       </div>
     );
-  };
+};
 
   // --- Render Functions for Education ---
 
@@ -1036,6 +1243,97 @@ export default function ProfileDashboard() {
   );
 
   // --- End Render Functions for Education ---
+
+  // --- Render Functions for Language Proficiency ---
+
+  const renderLanguageDisplayItem = (lang: LanguageProficiencySchemaType, index: number) => (
+      <motion.div
+          key={`display-lang-${index}`}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 * index }}
+          className="p-4 border rounded-md bg-white border-purple-100 shadow-sm mb-2 relative group"
+      >
+          {/* Edit/Remove buttons appear on hover when section is in edit mode */}
+          {editSection === 'education' && ( // Changed from 'preferences' to 'education'
+              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-purple-600 hover:bg-purple-100"
+                      onClick={() => setEditingLanguageIndex(index)}
+                   >
+                      <Edit size={14} />
+                   </Button>
+                   <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-red-600 hover:bg-red-100"
+                      onClick={() => handleRemoveLanguage(index)}
+                   >
+                      <Trash2 size={14} />
+                   </Button>
+              </div>
+          )}
+          <h4 className="font-medium text-purple-800 mb-2">Language #{index + 1}</h4>
+          <div className="space-y-2 text-sm">
+            <p><span className="text-gray-500">Language:</span> {lang.language}</p>
+            <p><span className="text-gray-500">Level:</span> {lang.proficiencyLevel !== "__NONE__" ? lang.proficiencyLevel : "Not Specified"}</p>
+            {lang.testType && <p><span className="text-gray-500">Test:</span> {lang.testType}</p>}
+            {lang.score && <p><span className="text-gray-500">Score:</span> {lang.score}</p>}
+          </div>
+      </motion.div>
+  );
+
+  const renderLanguageEditItem = (lang: LanguageProficiencySchemaType, index: number) => (
+      <div key={`edit-lang-${index}`} className="p-4 border rounded-md bg-purple-50 border-purple-200 mb-4">
+          <h3 className="text-md font-medium mb-4 text-purple-800">Editing Language #{index + 1}</h3>
+          <div className="space-y-4">
+              {/* Language */}
+              <div className="space-y-2">
+                  <Label htmlFor={`language-${index}`} className="text-sm">Language</Label>
+                  <Input id={`language-${index}`} value={lang.language} onChange={(e) => handleLanguageItemChange(index, "language", e.target.value)} />
+              </div>
+              {/* Proficiency Level */}
+              <div className="space-y-2">
+                  <Label htmlFor={`proficiencyLevel-${index}`} className="text-sm">Proficiency Level</Label>
+                  <Select
+                      value={lang.proficiencyLevel || "__NONE__"}
+                      onValueChange={(value) => handleLanguageItemChange(index, "proficiencyLevel", value)}
+                  >
+                      <SelectTrigger id={`proficiencyLevel-${index}`}><SelectValue placeholder="Select level" /></SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="Beginner">Beginner</SelectItem>
+                          <SelectItem value="Elementary">Elementary</SelectItem>
+                          <SelectItem value="Intermediate">Intermediate</SelectItem>
+                          <SelectItem value="Upper Intermediate">Upper Intermediate</SelectItem>
+                          <SelectItem value="Advanced">Advanced</SelectItem>
+                          <SelectItem value="Proficient">Proficient</SelectItem>
+                          <SelectItem value="Native">Native</SelectItem>
+                          <SelectItem value="__NONE__">Not Specified</SelectItem>
+                      </SelectContent>
+                  </Select>
+              </div>
+               {/* Test Type & Score */}
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                      <Label htmlFor={`testType-${index}`} className="text-sm">Test Type (Optional)</Label>
+                      <Input id={`testType-${index}`} value={lang.testType || ""} onChange={(e) => handleLanguageItemChange(index, "testType", e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                      <Label htmlFor={`score-${index}`} className="text-sm">Score (Optional)</Label>
+                      <Input id={`score-${index}`} value={lang.score || ""} onChange={(e) => handleLanguageItemChange(index, "score", e.target.value)} />
+                  </div>
+              </div>
+              {/* Action Buttons for this item */}
+              <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setEditingLanguageIndex(null)}>Cancel Edit</Button>
+              </div>
+          </div>
+      </div>
+  );
+
+  // --- End Render Functions for Language Proficiency ---
 
   return (
     <div className="relative min-h-screen pb-10">
@@ -1185,6 +1483,17 @@ export default function ProfileDashboard() {
                       <p className="text-xs text-zinc-500">Phone</p>
                       <p className="font-medium">{userProfile.phone || "Not provided"}</p>
                     </div>
+                    {/* Added Location and Nationality Display */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-zinc-500">Current Location</p>
+                        <p className="font-medium">{userProfile.currentLocation || "Not provided"}</p>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-zinc-500">Nationality</p>
+                        <p className="font-medium">{userProfile.nationality || "Not provided"}</p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </AccordionContent>
@@ -1197,116 +1506,206 @@ export default function ProfileDashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.3 }}
           >
-            <AccordionItem value="education" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-purple-50/50 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-purple-100/50 data-[state=open]:to-purple-50/30 transition-all duration-300">
+            <AccordionItem value="education" className="border border-primary/20 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-purple-50 to-background data-[state=open]:bg-purple-100/50 transition-all duration-300">
                 <div className="flex items-center gap-3 w-full">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-purple-100 to-background border border-purple-200/50 text-purple-600 shadow-sm">
+                  <div className="p-2 rounded-full bg-purple-100 text-purple-600">
                     <BookOpen className="h-5 w-5" />
                   </div>
                   <div className="text-left">
-                    <span className="font-semibold text-lg text-purple-800">Education History</span>
-                    <p className="text-xs text-purple-600/70 mt-0.5">Your academic background and qualifications</p>
+                    <span className="font-medium text-base">Education History</span>
+                    <p className="text-xs text-zinc-500 mt-0.5">Your academic background and qualifications</p>
                   </div>
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-purple-50/30">
-                {editSection === 'education' ? (
-                  <div className="pl-10 space-y-4 py-2">
+              <AccordionContent className="px-6 py-4 bg-white">
+                {editSection === "education" ? (
+                  <div className="pl-10 space-y-4">
+                    {/* Target Study Level */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Target Study Level</label>
+                      <Select
+                        value={editedProfile?.targetStudyLevel || "__NONE__"}
+                        onValueChange={(value) => handleFieldChange('targetStudyLevel', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select target level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Bachelor's">Bachelor's</SelectItem>
+                          <SelectItem value="Master's">Master's</SelectItem>
+                          <SelectItem value="Doctorate">Doctorate</SelectItem>
+                          <SelectItem value="Postgraduate Diploma/Certificate">Postgraduate Diploma/Certificate</SelectItem>
+                          <SelectItem value="Vocational/Trade">Vocational/Trade</SelectItem>
+                          <SelectItem value="Undecided">Undecided</SelectItem>
+                          <SelectItem value="__NONE__">None specified</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Existing education fields editing */}
                     {editedProfile?.education?.map((edu, index) => 
                         editingEducationIndex === index 
                             ? renderEducationEditItem(edu, index) 
                             : renderEducationDisplayItem(edu, index)
                     )}
-
+                    
+                    {/* Add Education Button and Dialog */}
                     <Dialog open={isAddEducationModalOpen} onOpenChange={setIsAddEducationModalOpen}>
                       <DialogTrigger asChild>
-                         <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full mt-4 border-dashed border-purple-400 text-purple-600 hover:bg-purple-50"
-                         >
-                            <Plus size={16} className="mr-2" /> Add Education Entry
-                         </Button>
+                        <Button 
+                          type="button"
+                          variant="outline" 
+                          className="w-full mt-4 border-dashed border-purple-400 text-purple-600 hover:bg-purple-50"
+                        >
+                          <Plus size={16} className="mr-2" /> Add Education Entry
+                        </Button>
                       </DialogTrigger>
                       <DialogContent>
-                         <DialogHeader>
-                            <DialogTitle>Add New Education Entry</DialogTitle>
-                         </DialogHeader>
-                         <div className="space-y-4 py-4">
-                             <div className="space-y-2">
-                                 <Label htmlFor="new-degreeLevel">Degree Level</Label>
-                                 <Select 
-                                     value={newEducationEntry.degreeLevel}
-                                     onValueChange={(value) => handleNewEducationEntryChange("degreeLevel", value)}
-                                 >
-                                     <SelectTrigger id="new-degreeLevel"><SelectValue placeholder="Select degree" /></SelectTrigger>
-                                     <SelectContent>
-                                         <SelectItem value="High School">High School</SelectItem>
-                                         <SelectItem value="Associate's">Associate's Degree</SelectItem>
-                                         <SelectItem value="Bachelor's">Bachelor's Degree</SelectItem>
-                                         <SelectItem value="Master's">Master's Degree</SelectItem>
-                                         <SelectItem value="Doctorate">Doctorate/PhD</SelectItem>
-                                         <SelectItem value="Certificate">Certificate/Diploma</SelectItem>
-                                         <SelectItem value="Other">Other</SelectItem>
-                                     </SelectContent>
-                                 </Select>
-                             </div>
-                             <div className="space-y-2">
-                                 <Label htmlFor="new-institution">Institution</Label>
-                                 <Input id="new-institution" value={newEducationEntry.institution} onChange={(e) => handleNewEducationEntryChange("institution", e.target.value)} />
-                             </div>
-                             <div className="space-y-2">
-                                 <Label htmlFor="new-fieldOfStudy">Field of Study</Label>
-                                 <Input id="new-fieldOfStudy" value={newEducationEntry.fieldOfStudy} onChange={(e) => handleNewEducationEntryChange("fieldOfStudy", e.target.value)} />
-                             </div>
-                             <div className="grid grid-cols-2 gap-4">
-                                 <div className="space-y-2">
-                                     <Label htmlFor="new-graduationYear">Graduation Year</Label>
-                                     <Input id="new-graduationYear" value={newEducationEntry.graduationYear} onChange={(e) => handleNewEducationEntryChange("graduationYear", e.target.value)} />
-                                 </div>
-                                 <div className="space-y-2">
-                                     <Label htmlFor="new-gpa">GPA (Optional)</Label>
-                                     <Input id="new-gpa" value={newEducationEntry.gpa || ""} onChange={(e) => handleNewEducationEntryChange("gpa", e.target.value)} />
-                                 </div>
-                             </div>
-                         </div>
-                         <DialogFooter>
-                            <DialogClose asChild>
-                               <Button variant="outline">Cancel</Button>
-                            </DialogClose>
-                            <Button onClick={handleAddNewEducation}>Add Entry</Button>
-                         </DialogFooter>
+                        <DialogHeader>
+                          <DialogTitle>Add New Education Entry</DialogTitle>
+                        </DialogHeader>
+                        {/* Modal content for adding education */}
                       </DialogContent>
                     </Dialog>
 
-                    <div className="flex justify-end gap-2 mt-6 border-t pt-4">
+                    {/* Add the Language Proficiency section right here */}
+                    {/* Language Proficiency Edit Section */}
+                    <div className="mt-6 border-t pt-4">
+                      <h3 className="text-md font-medium mb-3 text-purple-800">Language Proficiency</h3>
+                      {editedProfile?.languageProficiency?.map((lang, index) =>
+                        editingLanguageIndex === index
+                          ? renderLanguageEditItem(lang, index)
+                          : renderLanguageDisplayItem(lang, index)
+                      )}
+
+                      <Dialog open={isAddLanguageModalOpen} onOpenChange={setIsAddLanguageModalOpen}>
+                        <DialogTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full mt-4 border-dashed border-purple-400 text-purple-600 hover:bg-purple-50"
+                          >
+                            <Plus size={16} className="mr-2" /> Add Language Proficiency
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Add Language Proficiency</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            {/* Language */}
+                            <div className="space-y-2">
+                              <Label htmlFor="new-language">Language</Label>
+                              <Input id="new-language" value={newLanguageEntry.language} onChange={(e) => handleNewLanguageEntryChange("language", e.target.value)} placeholder="e.g., English" />
+                            </div>
+                            {/* Proficiency Level */}
+                            <div className="space-y-2">
+                              <Label htmlFor="new-proficiencyLevel">Proficiency Level</Label>
+                              <Select
+                                value={newLanguageEntry.proficiencyLevel || "__NONE__"}
+                                onValueChange={(value) => handleNewLanguageEntryChange("proficiencyLevel", value)}
+                              >
+                                <SelectTrigger id="new-proficiencyLevel"><SelectValue placeholder="Select level" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Beginner">Beginner</SelectItem>
+                                  <SelectItem value="Elementary">Elementary</SelectItem>
+                                  <SelectItem value="Intermediate">Intermediate</SelectItem>
+                                  <SelectItem value="Upper Intermediate">Upper Intermediate</SelectItem>
+                                  <SelectItem value="Advanced">Advanced</SelectItem>
+                                  <SelectItem value="Proficient">Proficient</SelectItem>
+                                  <SelectItem value="Native">Native</SelectItem>
+                                  <SelectItem value="__NONE__">Not Specified</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {/* Test Type & Score */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="new-testType">Test Type (Optional)</Label>
+                                <Input id="new-testType" value={newLanguageEntry.testType || ""} onChange={(e) => handleNewLanguageEntryChange("testType", e.target.value)} placeholder="e.g., IELTS, TOEFL" />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="new-score">Score (Optional)</Label>
+                                <Input id="new-score" value={newLanguageEntry.score || ""} onChange={(e) => handleNewLanguageEntryChange("score", e.target.value)} placeholder="e.g., 7.5, 100" />
+                              </div>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button variant="outline">Cancel</Button>
+                            </DialogClose>
+                            <Button onClick={handleAddNewLanguage}>Add Language</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                    {/* End Language Proficiency Edit Section */}
+                    
+                    <div className="flex justify-end gap-2 mt-4">
                       <Button variant="outline" onClick={handleCancelEdit}>
                         <X className="h-4 w-4 mr-2" />
-                        Cancel Section Edit
+                        Cancel
                       </Button>
-                      <Button onClick={handleSaveChanges} disabled={isLoading}>
-                        {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                        Save All Education Changes
+                      <Button onClick={handleSaveChanges}>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
                       </Button>
-                   </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="pl-10 space-y-4 py-2">
-                    <div className="flex justify-end">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleEditToggle('education')}
+                    {/* Display Target Study Level */}
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <p className="text-xs text-purple-500">Target Study Level</p>
+                      <p className="font-medium">{userProfile?.targetStudyLevel && userProfile.targetStudyLevel !== "__NONE__" ? userProfile.targetStudyLevel : "Not specified"}</p>
+                    </div>
+                    
+                    {/* Display Education History Section Title */}
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium text-sm text-purple-700">Education History</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditToggle("education")}
                         className="text-purple-600 hover:bg-purple-50"
                       >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Education Section
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
                       </Button>
                     </div>
-                    {userProfile?.education?.length > 0 ? (
-                       userProfile.education.map(renderEducationDisplayItem)
+                    
+                    {/* Display Education Items */}
+                    {userProfile?.education?.map((edu, index) => renderEducationDisplayItem(edu, index))}
+                    {(!userProfile?.education || userProfile.education.length === 0) && <p className="text-sm text-zinc-500">No education history provided.</p>}
+                    
+                    {/* Display Language Proficiency Section Title */}
+                    <h4 className="font-medium text-sm text-purple-700 mt-6 mb-2">Language Proficiency</h4>
+                    
+                    {/* Display Language Proficiency Items */}
+                    {userProfile?.languageProficiency && userProfile.languageProficiency.length > 0 ? (
+                      userProfile.languageProficiency.map((lang, index) => (
+                        <motion.div
+                          key={`lang-display-${index}`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: index * 0.05 }}
+                          className="p-3 bg-purple-50 rounded-lg mb-2 flex justify-between items-center flex-wrap gap-2"
+                        >
+                          <div>
+                            <span className="font-medium text-sm mr-2">{lang.language}:</span>
+                            <span className="text-sm text-purple-700">{lang.proficiencyLevel && lang.proficiencyLevel !== "__NONE__" ? lang.proficiencyLevel : 'Not specified'}</span>
+                          </div>
+                          {(lang.testType || lang.score) && (
+                            <div className="text-xs text-zinc-500">
+                              {lang.testType && <span>Test: {lang.testType}</span>}
+                              {lang.score && <span className="ml-2">Score: {lang.score}</span>}
+                            </div>
+                          )}
+                        </motion.div>
+                      ))
                     ) : (
-                       <p className="text-sm text-zinc-500 italic">No education history provided.</p>
+                      <p className="text-sm text-zinc-500">No language proficiency provided.</p>
                     )}
                   </div>
                 )}
@@ -1358,6 +1757,12 @@ export default function ProfileDashboard() {
                       <p className="text-xs text-zinc-500">Long-term Goals</p>
                       <p className="font-medium whitespace-pre-wrap">
                         {userProfile.careerGoals?.longTerm || "Not provided"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500 mb-2">Achievements & Extracurricular Interests</p>
+                      <p className="font-medium whitespace-pre-wrap">
+                        {userProfile.careerGoals?.achievements || "Not provided"}
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
@@ -1476,12 +1881,42 @@ export default function ProfileDashboard() {
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-zinc-500">Budget Range</p>
+                      <p className="text-xs text-zinc-500">Budget Range (Tuition)</p>
                       <p className="font-medium">
                         ${userProfile.preferences?.budgetRange?.min?.toLocaleString() || 0} - $
                           {userProfile.preferences?.budgetRange?.max?.toLocaleString() || 'Any'}
                       </p>
                     </div>
+                    {/* --- Added Fields Display --- */}
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Preferred Duration</p>
+                      <p className="font-medium">
+                          {userProfile.preferences?.preferredDuration?.min || userProfile.preferences?.preferredDuration?.max
+                            ? `${userProfile.preferences.preferredDuration.min || '?'} - ${userProfile.preferences.preferredDuration.max || '?'} ${userProfile.preferences.preferredDuration.unit || 'units'}`
+                            : "Not specified"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Preferred Study Language</p>
+                      <p className="font-medium">
+                          {userProfile.preferences?.preferredStudyLanguage || "Not specified"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Living Expenses Budget (per month)</p>
+                      <p className="font-medium">
+                          {userProfile.preferences?.livingExpensesBudget?.min || userProfile.preferences?.livingExpensesBudget?.max
+                            ? `${userProfile.preferences.livingExpensesBudget.min?.toLocaleString() || '?'} - ${userProfile.preferences.livingExpensesBudget.max?.toLocaleString() || '?'} ${userProfile.preferences.livingExpensesBudget.currency || 'USD'}`
+                            : "Not specified"}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-zinc-500">Interest in Residency/Migration</p>
+                      <p className="font-medium">
+                          {userProfile.preferences?.residencyInterest ? "Yes" : "No"}
+                      </p>
+                    </div>
+                    {/* --- End Added Fields Display --- */}
                   </div>
                 )}
               </AccordionContent>
@@ -1494,21 +1929,22 @@ export default function ProfileDashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.6 }}
           >
-            <AccordionItem value="documents" className="border border-primary/20 rounded-xl mb-5 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-amber-50/50 to-background/80 data-[state=open]:bg-gradient-to-r data-[state=open]:from-amber-100/50 data-[state=open]:to-amber-50/30 transition-all duration-300">
+            <AccordionItem value="documents" className="border border-primary/20 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-amber-50 to-background data-[state=open]:bg-amber-100/50 transition-all duration-300">
                 <div className="flex items-center gap-3 w-full">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-amber-100 to-background border border-amber-200/50 text-amber-600 shadow-sm">
+                  <div className="p-2 rounded-full bg-amber-100 text-amber-600">
                     <FileText className="h-5 w-5" />
                   </div>
                   <div className="text-left">
-                    <span className="font-semibold text-lg text-amber-800">Documents</span>
-                    <p className="text-xs text-amber-600/70 mt-0.5">Uploaded files that enhance your recommendations</p>
+                    <span className="font-medium text-base">Documents</span>
+                    <p className="text-xs text-zinc-500 mt-0.5">Uploaded files that enhance your recommendations</p>
                   </div>
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="px-6 py-5 bg-gradient-to-b from-white to-amber-50/30">
+              <AccordionContent className="px-6 py-4 bg-white">
                 <div className="pl-10 space-y-4 py-2">
                   <div className="space-y-3">
+                    {/* Resume */}
                     <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white rounded-md border border-gray-200">
@@ -1520,7 +1956,7 @@ export default function ProfileDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {getDocumentFileId(userProfile.documents?.resume) ? (
+                        {userProfile?.documents?.resume ? (
                           <>
                             <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                               <Check size={14} className="mr-1" />
@@ -1530,8 +1966,8 @@ export default function ProfileDashboard() {
                               onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
                               allowedFileTypes={['.pdf', '.docx', '.doc']}
                               className="h-8"
-                              vectorStoreId={userProfile.vectorStoreId || ''}
-                              disabled={!userProfile.vectorStoreId}
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
                             >
                               <div className="flex items-center justify-center h-full p-1 text-center">
                                 <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
@@ -1549,8 +1985,8 @@ export default function ProfileDashboard() {
                               onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
                               allowedFileTypes={['.pdf', '.docx', '.doc']}
                               className="h-8"
-                              vectorStoreId={userProfile.vectorStoreId || ''}
-                              disabled={!userProfile.vectorStoreId}
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
                             >
                               <div className="flex items-center justify-center h-full p-1 text-center">
                                 <Button variant="outline" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
@@ -1563,6 +1999,7 @@ export default function ProfileDashboard() {
                       </div>
                     </div>
                     
+                    {/* Transcripts */}
                     <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white rounded-md border border-gray-200">
@@ -1574,7 +2011,7 @@ export default function ProfileDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {getDocumentFileId(userProfile.documents?.transcripts) ? (
+                        {userProfile?.documents?.transcripts ? (
                           <>
                             <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                               <Check size={14} className="mr-1" />
@@ -1584,8 +2021,8 @@ export default function ProfileDashboard() {
                               onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
                               allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
                               className="h-8"
-                              vectorStoreId={userProfile.vectorStoreId || ''}
-                              disabled={!userProfile.vectorStoreId}
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
                             >
                               <div className="flex items-center justify-center h-full p-1 text-center">
                                 <Button variant="ghost" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
@@ -1603,8 +2040,8 @@ export default function ProfileDashboard() {
                               onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
                               allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
                               className="h-8"
-                              vectorStoreId={userProfile.vectorStoreId || ''}
-                              disabled={!userProfile.vectorStoreId}
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
                             >
                               <div className="flex items-center justify-center h-full p-1 text-center">
                                 <Button variant="outline" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
@@ -1617,6 +2054,7 @@ export default function ProfileDashboard() {
                       </div>
                     </div>
                     
+                    {/* Statement of Purpose */}
                     <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white rounded-md border border-gray-200">
@@ -1628,7 +2066,7 @@ export default function ProfileDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {getDocumentFileId(userProfile.documents?.statementOfPurpose) ? (
+                        {userProfile?.documents?.statementOfPurpose ? (
                           <>
                             <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                               <Check size={14} className="mr-1" />
@@ -1638,8 +2076,8 @@ export default function ProfileDashboard() {
                               onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
                               allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
                               className="h-8"
-                              vectorStoreId={userProfile.vectorStoreId || ''}
-                              disabled={!userProfile.vectorStoreId}
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
                             >
                               <div className="flex items-center justify-center h-full p-1 text-center">
                                 <Button variant="ghost" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
@@ -1657,8 +2095,8 @@ export default function ProfileDashboard() {
                               onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
                               allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
                               className="h-8"
-                              vectorStoreId={userProfile.vectorStoreId || ''}
-                              disabled={!userProfile.vectorStoreId}
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
                             >
                               <div className="flex items-center justify-center h-full p-1 text-center">
                                 <Button variant="outline" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
@@ -1668,6 +2106,88 @@ export default function ProfileDashboard() {
                             </DocumentUpload>
                           </>
                         )}
+                      </div>
+                    </div>
+                    
+                    {/* Language Tests / Other */}
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <Languages size={20} className="text-cyan-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Language Tests / Other</p>
+                          <p className="text-xs text-gray-500">Additional supporting documents</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(userProfile?.documents?.otherDocuments && userProfile.documents.otherDocuments.length > 0) ? (
+                          <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                            <Check size={14} className="mr-1" />
+                            {userProfile.documents.otherDocuments.length} Uploaded
+                          </span>
+                        ) : (
+                          <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                            Not uploaded
+                          </span>
+                        )}
+                        <DocumentUpload
+                          onSuccess={(fileId) => {
+                            // Create a function to handle multiple documents
+                            // This is a simplified version that just appends to the array
+                            const updatedDocs = userProfile?.documents?.otherDocuments || [];
+                            const newDoc = {
+                              fileId: fileId,
+                              vectorStoreId: userProfile?.vectorStoreId || '',
+                              uploadedAt: new Date().toISOString(),
+                              status: 'uploaded'
+                            };
+                            
+                            // Update user profile with new other document
+                            if (userProfile) {
+                              const updatedDocuments = { ...userProfile.documents };
+                              updatedDocuments.otherDocuments = [...updatedDocs, newDoc];
+                              
+                              const updatedProfile = {
+                                ...userProfile,
+                                documents: updatedDocuments
+                              };
+                              
+                              // Update in database and state
+                              fetch('/api/profile/update', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(updatedProfile),
+                              }).then(response => {
+                                if (response.ok) {
+                                  setUserProfile(updatedProfile);
+                                  toast({ 
+                                    title: "Document Uploaded", 
+                                    description: "Your additional document has been uploaded successfully.", 
+                                    variant: "default" 
+                                  });
+                                }
+                              }).catch(error => {
+                                console.error("Error uploading other document:", error);
+                                toast({ 
+                                  title: "Upload Failed", 
+                                  description: "Failed to upload document. Please try again.", 
+                                  variant: "destructive" 
+                                });
+                              });
+                            }
+                          }}
+                          allowedFileTypes={['.pdf', '.docx', '.doc', '.jpg', '.jpeg', '.png']}
+                          className="h-8"
+                          vectorStoreId={userProfile?.vectorStoreId || ''}
+                          disabled={!userProfile?.vectorStoreId}
+                        >
+                          <div className="flex items-center justify-center h-full p-1 text-center">
+                            <Button variant="outline" size="sm" className="h-8 text-cyan-600 hover:text-cyan-800">
+                              <Plus size={14} className="mr-1" /> Upload
+                            </Button>
+                          </div>
+                        </DocumentUpload>
                       </div>
                     </div>
                   </div>

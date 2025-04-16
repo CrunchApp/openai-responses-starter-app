@@ -16,6 +16,7 @@ import {
   CheckCircle,
   GraduationCap,
   ScrollText,
+  Languages,
   Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -45,10 +46,12 @@ export default function ImportOptionsStep({
     resume: boolean;
     transcripts: boolean;
     statementOfPurpose: boolean;
+    otherDocuments: boolean;
   }>({
     resume: !!profileData.documents.resume?.fileId,
     transcripts: !!profileData.documents.transcripts?.fileId,
     statementOfPurpose: !!profileData.documents.statementOfPurpose?.fileId,
+    otherDocuments: !!profileData.documents.otherDocuments && profileData.documents.otherDocuments.length > 0,
   });
   
   // Get vectorStoreId AND hydration state from store
@@ -128,18 +131,35 @@ export default function ImportOptionsStep({
 
   // Handle when a file is added to the vector store
   const handleFileUploaded = (fileId: string, type: string) => {
-    setProfileData((prevData) => ({
-      ...prevData,
-      documents: {
-        ...prevData.documents,
-        [type]: {
-          fileId: fileId,
-          vectorStoreId: storeVectorStoreId,
-          uploadedAt: new Date().toISOString(),
-          status: 'uploaded'
-        },
-      },
-    }));
+    setProfileData((prevData) => {
+      const newDocument = {
+        fileId: fileId,
+        vectorStoreId: storeVectorStoreId ?? undefined,
+        uploadedAt: new Date().toISOString(),
+        status: 'uploaded'
+      };
+
+      if (type === 'otherDocuments') {
+        // Handle array update for otherDocuments
+        const existingDocs = prevData.documents?.otherDocuments || [];
+        return {
+          ...prevData,
+          documents: {
+            ...prevData.documents,
+            otherDocuments: [...existingDocs, newDocument],
+          },
+        };
+      } else {
+        // Handle single document update for resume, transcripts, sop
+        return {
+          ...prevData,
+          documents: {
+            ...prevData.documents,
+            [type]: newDocument,
+          },
+        };
+      }
+    });
 
     setUploadedFiles((prev) => ({
       ...prev,
@@ -179,21 +199,16 @@ export default function ImportOptionsStep({
           throw new Error("Vector store not found. Please complete the welcome step first.");
         }
         
-        // Collect document IDs
-        const documentIds = Object.entries(profileData.documents)
-          .filter(([key, value]) => !!value && key !== 'otherDocuments')
-          .map(([, value]) => {
-            // Check if value is the new document object structure with fileId property
-            if (typeof value === 'object' && value !== null && 'fileId' in value) {
-              return value.fileId;
-            }
-            // For backward compatibility, if value is directly a string (old format)
-            if (typeof value === 'string') {
-              return value;
-            }
-            return null;
-          })
-          .filter((id): id is string => id !== null);
+        // Collect document IDs (Updated to include otherDocuments)
+        const documentIds: string[] = [];
+        if (profileData.documents.resume?.fileId) documentIds.push(profileData.documents.resume.fileId);
+        if (profileData.documents.transcripts?.fileId) documentIds.push(profileData.documents.transcripts.fileId);
+        if (profileData.documents.statementOfPurpose?.fileId) documentIds.push(profileData.documents.statementOfPurpose.fileId);
+        if (profileData.documents.otherDocuments) {
+          profileData.documents.otherDocuments.forEach(doc => {
+            if (doc?.fileId) documentIds.push(doc.fileId);
+          });
+        }
         
         if (documentIds.length === 0) {
           throw new Error("No document IDs found.");
@@ -284,6 +299,7 @@ export default function ImportOptionsStep({
               careerGoals: {
                 shortTerm: prevData.careerGoals.shortTerm || extractedProfile.careerGoals?.shortTerm || '',
                 longTerm: prevData.careerGoals.longTerm || extractedProfile.careerGoals?.longTerm || '',
+                achievements: prevData.careerGoals.achievements || extractedProfile.careerGoals?.achievements || '',
                 desiredIndustry: mergeArrays(
                   prevData.careerGoals.desiredIndustry, 
                   extractedProfile.careerGoals?.desiredIndustry || []
@@ -511,7 +527,7 @@ export default function ImportOptionsStep({
             )}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             {/* Resume Upload */}
             <DocumentUpload
               onSuccess={(fileId) => handleFileUploaded(fileId, 'resume')}
@@ -565,6 +581,26 @@ export default function ImportOptionsStep({
                 <p className="font-medium text-sm">Statement of Purpose</p>
                 <p className="text-xs text-zinc-500 mt-1">PDF, DOCX, TXT</p>
                 {uploadedFiles.statementOfPurpose && (
+                  <div className="mt-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
+                    <CheckCircle className="h-3 w-3 mr-1" /> Uploaded
+                  </div>
+                )}
+              </div>
+            </DocumentUpload>
+
+            {/* NEW: Other Documents Upload */}
+            <DocumentUpload
+              onSuccess={(fileId) => handleFileUploaded(fileId, 'otherDocuments')}
+              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt', '.jpg', '.jpeg', '.png']}
+              className="h-36"
+              vectorStoreId={storeVectorStoreId || ''}
+              disabled={!isDocumentUploadEnabled}
+            >
+              <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                <Languages className="mb-2 h-8 w-8 text-blue-500" />
+                <p className="font-medium text-sm">Language Tests / Other</p>
+                <p className="text-xs text-zinc-500 mt-1">PDF, DOCX, JPG, etc.</p>
+                {uploadedFiles.otherDocuments && (
                   <div className="mt-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
                     <CheckCircle className="h-3 w-3 mr-1" /> Uploaded
                   </div>

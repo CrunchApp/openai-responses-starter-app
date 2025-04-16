@@ -1576,6 +1576,10 @@ export async function generateMorePathwaysAction(
       email: profileData.email || '',
       phone: profileData.phone || undefined,
       preferredName: profileData.preferred_name || undefined,
+      currentLocation: profileData.current_location || '',
+      nationality: profileData.nationality || '',
+      targetStudyLevel: profileData.target_study_level || '',
+      languageProficiency: profileData.language_proficiency || [],
       linkedInProfile: profileData.linkedin_profile || undefined,
       goal: profileData.goal || undefined,
       desiredField: profileData.desired_field || undefined,
@@ -1583,16 +1587,32 @@ export async function generateMorePathwaysAction(
       careerGoals: profileData.career_goals ? {
         shortTerm: profileData.career_goals.shortTerm !== undefined ? profileData.career_goals.shortTerm : '',
         longTerm: profileData.career_goals.longTerm !== undefined ? profileData.career_goals.longTerm : '',
+        achievements: profileData.career_goals.achievements !== undefined ? profileData.career_goals.achievements : '',
         desiredIndustry: Array.isArray(profileData.career_goals.desiredIndustry) ? profileData.career_goals.desiredIndustry : [],
         desiredRoles: Array.isArray(profileData.career_goals.desiredRoles) ? profileData.career_goals.desiredRoles : []
-      } : { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
+      } : { shortTerm: '', longTerm: '', achievements: '', desiredIndustry: [], desiredRoles: [] },
       skills: profileData.skills || [],
       preferences: profileData.preferences ? {
         preferredLocations: Array.isArray(profileData.preferences.preferredLocations) ? profileData.preferences.preferredLocations : [],
         studyMode: profileData.preferences.studyMode !== undefined ? profileData.preferences.studyMode : '',
         startDate: profileData.preferences.startDate !== undefined ? profileData.preferences.startDate : '',
-        budgetRange: profileData.preferences.budgetRange || { min: 0, max: 0 }
-      } : { preferredLocations: [], studyMode: '', startDate: '', budgetRange: { min: 0, max: 0 } },
+        budgetRange: profileData.preferences.budgetRange || { min: 0, max: 0 },
+        // Add new preference fields from DB profile data
+        preferredDuration: profileData.preferences.preferredDuration || undefined,
+        preferredStudyLanguage: profileData.preferences.preferredStudyLanguage || '',
+        livingExpensesBudget: profileData.preferences.livingExpensesBudget || undefined,
+        residencyInterest: profileData.preferences.residencyInterest !== undefined ? profileData.preferences.residencyInterest : false
+      } : { 
+        // Ensure default structure matches the type if preferences is null/undefined in DB
+        preferredLocations: [], 
+        studyMode: '', 
+        startDate: '', 
+        budgetRange: { min: 0, max: 0 },
+        preferredDuration: undefined, 
+        preferredStudyLanguage: '', 
+        livingExpensesBudget: undefined, 
+        residencyInterest: false 
+      },
       documents: profileData.documents || { resume: null, transcripts: null, statementOfPurpose: null, otherDocuments: [] },
       vectorStoreId: vectorStoreId || undefined,
       profileFileId: profileData.profile_file_id || undefined,

@@ -85,10 +85,15 @@ const initialProfileData: UserProfile = {
   phone: "",
   preferredName: "",
   linkedInProfile: "",
-  education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "" }],
+  currentLocation: "",
+  nationality: "",
+  targetStudyLevel: "__NONE__",
+  languageProficiency: [],
+  education: [{ degreeLevel: "__NONE__", institution: "", fieldOfStudy: "", graduationYear: "" }],
   careerGoals: {
     shortTerm: "",
     longTerm: "",
+    achievements: "",
     desiredIndustry: [],
     desiredRoles: [],
   },
@@ -101,6 +106,10 @@ const initialProfileData: UserProfile = {
       min: 0,
       max: 100000,
     },
+    preferredStudyLanguage: "",
+    residencyInterest: false,
+    preferredDuration: undefined,
+    livingExpensesBudget: undefined,
   },
   documents: {},
 };
@@ -227,7 +236,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       component: EducationStep 
     },
     { 
-      name: "Career Goals", 
+      name: "Goals & Interests", 
       description: "Your professional aspirations", 
       component: CareerGoalsStep 
     },

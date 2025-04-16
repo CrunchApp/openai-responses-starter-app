@@ -10,7 +10,7 @@ const EducationSchema = z.object({
     "Doctorate", 
     "Certificate", 
     "Other",
-    "" // Empty string for initial state
+    "__NONE__" // Use non-empty placeholder instead of ""
   ]),
   institution: z.string(),
   fieldOfStudy: z.string(),
@@ -22,6 +22,7 @@ const EducationSchema = z.object({
 const CareerGoalsSchema = z.object({
   shortTerm: z.string(),
   longTerm: z.string(),
+  achievements: z.string().optional().default(""),
   desiredIndustry: z.array(z.string()),
   desiredRoles: z.array(z.string()),
 });
@@ -35,10 +36,39 @@ const PreferencesSchema = z.object({
     min: z.number(),
     max: z.number(),
   }),
+  preferredDuration: z.object({
+    min: z.number().optional(),
+    max: z.number().optional(),
+    unit: z.enum(["years", "months"]).optional(),
+  }).optional(),
+  preferredStudyLanguage: z.string().optional().default(""),
+  livingExpensesBudget: z.object({
+    min: z.number().optional(),
+    max: z.number().optional(),
+    currency: z.string().optional().default("USD"),
+  }).optional(),
+  residencyInterest: z.boolean().optional().default(false),
+});
+
+// Define language proficiency schema
+const LanguageProficiencySchema = z.object({
+  language: z.string(),
+  proficiencyLevel: z.enum([
+    "Beginner", 
+    "Elementary", 
+    "Intermediate", 
+    "Upper Intermediate", 
+    "Advanced", 
+    "Proficient", 
+    "Native",
+    "__NONE__"
+  ]).optional().default("__NONE__"),
+  testType: z.string().optional().nullable().default(""),
+  score: z.string().optional().nullable().default(""),
 });
 
 // Define document file schema
-const DocumentFileSchema = z.object({
+export const DocumentFileSchema = z.object({
   fileId: z.string(),
   vectorStoreId: z.string().optional(),
   uploadedAt: z.string().optional(),
@@ -61,6 +91,8 @@ export const ProfileSchema = z.object({
   email: z.string(),
   phone: z.string().optional().default(""),
   preferredName: z.string().optional().default(""),
+  currentLocation: z.string().optional().default(""),
+  nationality: z.string().optional().default(""),
   
   // LinkedIn profile
   linkedInProfile: z.string().optional().nullable().default(""),
@@ -73,6 +105,16 @@ export const ProfileSchema = z.object({
   education: z.array(EducationSchema),
   careerGoals: CareerGoalsSchema,
   skills: z.array(z.string()),
+  targetStudyLevel: z.enum([
+    "Bachelor's", 
+    "Master's", 
+    "Doctorate", 
+    "Postgraduate Diploma/Certificate", 
+    "Vocational/Trade", 
+    "Undecided", 
+    "__NONE__" // Use non-empty placeholder instead of ""
+  ]).optional().default("__NONE__"),
+  languageProficiency: z.array(LanguageProficiencySchema).optional().default([]),
   
   // Preferences and documents
   preferences: PreferencesSchema,

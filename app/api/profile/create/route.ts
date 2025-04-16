@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
         phone: profileData.phone || null,
         preferred_name: profileData.preferredName || null,
         linkedin_profile: profileData.linkedInProfile || null, // Note: changed from linkedin_url
+        // Add new direct fields
+        current_location: profileData.currentLocation || null,
+        nationality: profileData.nationality || null,
+        target_study_level: profileData.targetStudyLevel || null,
+        language_proficiency: profileData.languageProficiency || [], // Mapped to Json[]
         goal: profileData.goal || null,
         desired_field: profileData.desiredField || null,
         

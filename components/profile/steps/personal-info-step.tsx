@@ -78,6 +78,29 @@ export default function PersonalInfoStep({
           placeholder="Your phone number"
         />
       </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="currentLocation">Current Location</Label>
+          <Input
+            id="currentLocation"
+            name="currentLocation"
+            value={profileData.currentLocation || ''}
+            onChange={handleChange}
+            placeholder="City, Country"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="nationality">Nationality</Label>
+          <Input
+            id="nationality"
+            name="nationality"
+            value={profileData.nationality || ''}
+            onChange={handleChange}
+            placeholder="Your nationality"
+          />
+        </div>
+      </div>
     </div>
   );
 } 

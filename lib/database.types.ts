@@ -18,6 +18,10 @@ export interface Database {
           phone: string | null
           preferred_name: string | null
           linkedin_profile: string | null
+          current_location: string | null
+          nationality: string | null
+          target_study_level: string | null
+          language_proficiency: Json[] | null
           goal: string | null
           desired_field: string | null
           education: Json[] | null
@@ -39,6 +43,10 @@ export interface Database {
           phone?: string | null
           preferred_name?: string | null
           linkedin_profile?: string | null
+          current_location?: string | null
+          nationality?: string | null
+          target_study_level?: string | null
+          language_proficiency?: Json[] | null
           goal?: string | null
           desired_field?: string | null
           education?: Json[] | null
@@ -60,6 +68,10 @@ export interface Database {
           phone?: string | null
           preferred_name?: string | null
           linkedin_profile?: string | null
+          current_location?: string | null
+          nationality?: string | null
+          target_study_level?: string | null
+          language_proficiency?: Json[] | null
           goal?: string | null
           desired_field?: string | null
           education?: Json[] | null

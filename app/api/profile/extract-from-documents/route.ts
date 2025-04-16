@@ -17,6 +17,46 @@ const profileJsonSchema = {
     phone: { type: "string" },
     preferredName: { type: "string" },
     linkedInProfile: { type: ["string", "null"] },
+    currentLocation: { type: "string" },
+    nationality: { type: "string" },
+    targetStudyLevel: {
+      type: "string",
+      enum: [
+        "Bachelor\'s", 
+        "Master\'s", 
+        "Doctorate", 
+        "Postgraduate Diploma/Certificate", 
+        "Vocational/Trade", 
+        "Undecided", 
+        ""
+      ]
+    },
+    languageProficiency: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          language: { type: "string" },
+          proficiencyLevel: { 
+            type: "string",
+            enum: [
+              "Beginner", 
+              "Elementary", 
+              "Intermediate", 
+              "Upper Intermediate", 
+              "Advanced", 
+              "Proficient", 
+              "Native",
+              ""
+            ]
+          },
+          testType: { type: ["string", "null"] },
+          score: { type: ["string", "null"] }
+        },
+        required: ["language"],
+        additionalProperties: false
+      }
+    },
     education: {
       type: "array",
       items: {
@@ -49,6 +89,7 @@ const profileJsonSchema = {
       properties: {
         shortTerm: { type: "string" },
         longTerm: { type: "string" },
+        achievements: { type: "string" },
         desiredIndustry: { 
           type: "array", 
           items: { type: "string" } 
@@ -83,6 +124,28 @@ const profileJsonSchema = {
           required: ["min", "max"],
           additionalProperties: false,
         },
+        preferredDuration: {
+          type: "object",
+          properties: {
+            min: { type: "number" },
+            max: { type: "number" },
+            unit: { type: "string", enum: ["years", "months"] }
+          },
+          required: [],
+          additionalProperties: false
+        },
+        preferredStudyLanguage: { type: "string" },
+        livingExpensesBudget: {
+          type: "object",
+          properties: {
+            min: { type: "number" },
+            max: { type: "number" },
+            currency: { type: "string" }
+          },
+          required: [],
+          additionalProperties: false
+        },
+        residencyInterest: { type: "boolean" }
       },
       required: ["preferredLocations", "studyMode", "startDate", "budgetRange"],
       additionalProperties: false,
@@ -103,7 +166,8 @@ const profileJsonSchema = {
   },
   required: [
     "firstName", "lastName", "email", "phone", "preferredName",
-    "education", "careerGoals", "skills", "preferences", "documents"
+    "education", "careerGoals", "skills", "preferences", "documents",
+    "currentLocation", "nationality", "targetStudyLevel", "languageProficiency"
   ],
   additionalProperties: false,
 };
@@ -161,8 +225,8 @@ Your task is to analyze the user's documents (which may include resumes, transcr
 and extract as much relevant information as possible to populate a user profile.
 
 Please extract the following information:
-- Personal details (name, email, phone)
-- Educational background (degrees, institutions, fields of study, graduation years, GPA if available)
+- Personal details (name, email, phone, current location, nationality, preferred name, LinkedIn profile URL)
+- Educational background (degrees, institutions, fields of study, graduation years, GPA if available). Also identify the target level of study the user is aiming for (e.g., Master's, PhD).
   * For degree level, you MUST select ONE of these exact options:
     - "High School"
     - "Associate's"
@@ -171,11 +235,20 @@ Please extract the following information:
     - "Doctorate"
     - "Certificate"
     - "Other"
-- Career goals (short and long term goals, industries and roles of interest)
+  * For target study level, you MUST select ONE of these exact options:
+    - "Bachelor's" 
+    - "Master's" 
+    - "Doctorate" 
+    - "Postgraduate Diploma/Certificate" 
+    - "Vocational/Trade" 
+    - "Undecided" 
+    - ""
+- Language Proficiency: Identify languages spoken, proficiency level (Beginner, Elementary, Intermediate, Upper Intermediate, Advanced, Proficient, Native), and any test results (e.g., IELTS score, TOEFL score).
+- Career goals (short and long term goals, achievements, industries and roles of interest)
 - Skills and competencies
-- Any preferences mentioned (locations, study mode, timing, budget)
+- Any preferences mentioned (preferred study locations, study mode, preferred start date, overall budget range for tuition/fees, preferred course duration, preferred language of study, budget for living expenses, interest in long-term residency/migration).
 
-If you cannot find specific information, use reasonable placeholder values or provide empty strings/arrays as appropriate.
+If you cannot find specific information, use reasonable placeholder values or provide empty strings/arrays/objects or null/false where appropriate according to the schema.
 First, search through the documents to find relevant information for each section of the profile.
 
 Format your response as a valid JSON object with the following structure:
@@ -186,6 +259,17 @@ Format your response as a valid JSON object with the following structure:
   "phone": "string",
   "preferredName": "string",
   "linkedInProfile": "string or null",
+  "currentLocation": "string",
+  "nationality": "string",
+  "targetStudyLevel": "one of the target level options",
+  "languageProficiency": [
+    {
+      "language": "string",
+      "proficiencyLevel": "one of the proficiency level options",
+      "testType": "string or null",
+      "score": "string or null"
+    }
+  ],
   "education": [
     {
       "degreeLevel": "one of the exact options listed above",
@@ -198,6 +282,7 @@ Format your response as a valid JSON object with the following structure:
   "careerGoals": {
     "shortTerm": "string",
     "longTerm": "string",
+    "achievements": "string",
     "desiredIndustry": ["string"],
     "desiredRoles": ["string"]
   },
@@ -209,7 +294,19 @@ Format your response as a valid JSON object with the following structure:
     "budgetRange": {
       "min": number,
       "max": number
-    }
+    },
+    "preferredDuration": {
+      "min": number (optional),
+      "max": number (optional),
+      "unit": "'years' or 'months'" (optional)
+    },
+    "preferredStudyLanguage": "string",
+    "livingExpensesBudget": {
+      "min": number (optional),
+      "max": number (optional),
+      "currency": "string" (optional, default 'USD')
+    },
+    "residencyInterest": boolean
   },
   "documents": {
     "resume": "string or null",
@@ -367,13 +464,17 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
               phone: "",
               preferredName: "",
               education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "", gpa: null }],
-              careerGoals: { shortTerm: "", longTerm: "", desiredIndustry: [], desiredRoles: [] },
+              careerGoals: { shortTerm: "", longTerm: "", achievements: "", desiredIndustry: [], desiredRoles: [] },
               skills: [],
               preferences: {
                 preferredLocations: [],
                 studyMode: "Full-time",
                 startDate: "",
-                budgetRange: { min: 0, max: 100000 }
+                budgetRange: { min: 0, max: 100000 },
+                preferredDuration: { min: undefined, max: undefined, unit: undefined },
+                preferredStudyLanguage: "",
+                livingExpensesBudget: { min: undefined, max: undefined, currency: "USD" },
+                residencyInterest: false
               },
               documents: {
                 resume: null,
@@ -399,13 +500,17 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
           phone: "",
           preferredName: "",
           education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "", gpa: null }],
-          careerGoals: { shortTerm: "", longTerm: "", desiredIndustry: [], desiredRoles: [] },
+          careerGoals: { shortTerm: "", longTerm: "", achievements: "", desiredIndustry: [], desiredRoles: [] },
           skills: [],
           preferences: {
             preferredLocations: [],
             studyMode: "Full-time",
             startDate: "",
-            budgetRange: { min: 0, max: 100000 }
+            budgetRange: { min: 0, max: 100000 },
+            preferredDuration: { min: undefined, max: undefined, unit: undefined },
+            preferredStudyLanguage: "",
+            livingExpensesBudget: { min: undefined, max: undefined, currency: "USD" },
+            residencyInterest: false
           },
           documents: {
             resume: null,
@@ -498,6 +603,18 @@ function preprocessProfileData(data: any) {
     }];
   }
   
+  // Handle language proficiency
+  if (Array.isArray(processed.languageProficiency)) {
+    processed.languageProficiency = processed.languageProficiency.map((lang: any) => ({
+      language: lang.language || "",
+      proficiencyLevel: lang.proficiencyLevel || "",
+      testType: lang.testType === undefined ? null : lang.testType,
+      score: lang.score === undefined ? null : lang.score,
+    }));
+  } else {
+    processed.languageProficiency = [];
+  }
+  
   // Handle documents
   if (!processed.documents) {
     processed.documents = {};
@@ -516,20 +633,22 @@ function preprocessProfileData(data: any) {
     processed.careerGoals = {
       shortTerm: "",
       longTerm: "",
+      achievements: "",
       desiredIndustry: [],
-      desiredRoles: []
+      desiredRoles: [],
     };
   } else {
     processed.careerGoals = {
       ...processed.careerGoals,
       shortTerm: processed.careerGoals.shortTerm || "",
       longTerm: processed.careerGoals.longTerm || "",
+      achievements: processed.careerGoals.achievements || "",
       desiredIndustry: Array.isArray(processed.careerGoals.desiredIndustry) 
         ? processed.careerGoals.desiredIndustry 
         : [],
       desiredRoles: Array.isArray(processed.careerGoals.desiredRoles) 
         ? processed.careerGoals.desiredRoles 
-        : []
+        : [],
     };
   }
   
@@ -547,7 +666,11 @@ function preprocessProfileData(data: any) {
       budgetRange: {
         min: 0,
         max: 100000
-      }
+      },
+      preferredDuration: { min: undefined, max: undefined, unit: undefined },
+      preferredStudyLanguage: "",
+      livingExpensesBudget: { min: undefined, max: undefined, currency: "USD" },
+      residencyInterest: false
     };
   } else {
     processed.preferences = {
@@ -557,7 +680,11 @@ function preprocessProfileData(data: any) {
         : [],
       studyMode: processed.preferences.studyMode || "",
       startDate: processed.preferences.startDate || "",
-      budgetRange: processed.preferences.budgetRange || { min: 0, max: 100000 }
+      budgetRange: processed.preferences.budgetRange || { min: 0, max: 100000 },
+      preferredDuration: processed.preferences.preferredDuration || { min: undefined, max: undefined, unit: undefined },
+      preferredStudyLanguage: processed.preferences.preferredStudyLanguage || "",
+      livingExpensesBudget: processed.preferences.livingExpensesBudget || { min: undefined, max: undefined, currency: "USD" },
+      residencyInterest: processed.preferences.residencyInterest === undefined ? false : processed.preferences.residencyInterest,
     };
   }
   
@@ -568,6 +695,9 @@ function preprocessProfileData(data: any) {
   processed.phone = processed.phone || "";
   processed.preferredName = processed.preferredName || "";
   processed.linkedInProfile = processed.linkedInProfile || null;
+  processed.currentLocation = processed.currentLocation || "";
+  processed.nationality = processed.nationality || "";
+  processed.targetStudyLevel = processed.targetStudyLevel || "";
   
   return processed;
 } 

@@ -56,6 +56,10 @@ export async function GET(
       phone: profile.phone || '',
       preferredName: profile.preferred_name || '',
       linkedInProfile: profile.linkedin_profile || '',
+      currentLocation: profile.current_location || '',
+      nationality: profile.nationality || '',
+      targetStudyLevel: profile.target_study_level || '',
+      languageProficiency: profile.language_proficiency || [],
       goal: profile.goal || '',
       desiredField: profile.desired_field || '',
       

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { UserProfile } from "@/app/types/profile-schema";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronRight, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award, Loader2 } from "lucide-react";
+import { Check, ChevronRight, FileText, User, BookOpen, Briefcase, AlertCircle, Settings, Award, Loader2, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import useToolsStore from "@/stores/useToolsStore";
 import { motion } from "framer-motion";
@@ -85,9 +85,13 @@ export default function ReviewStep({
     if (profileData.lastName) completed++;
     if (profileData.email) completed++;
     if (profileData.phone) completed++;
-    total += 4;
+    if (profileData.currentLocation) completed++;
+    if (profileData.nationality) completed++;
+    total += 6;
     
     // Education
+    if (profileData.targetStudyLevel) completed++;
+    total += 1;
     profileData.education.forEach(edu => {
       if (edu.degreeLevel) completed++;
       if (edu.institution) completed++;
@@ -95,13 +99,16 @@ export default function ReviewStep({
       if (edu.graduationYear) completed++;
       total += 4;
     });
+    if (profileData.languageProficiency && profileData.languageProficiency.length > 0) completed++;
+    total += 1;
     
     // Career Goals
     if (profileData.careerGoals.shortTerm) completed++;
     if (profileData.careerGoals.longTerm) completed++;
+    if (profileData.careerGoals.achievements) completed++;
     if (profileData.careerGoals.desiredIndustry.length > 0) completed++;
     if (profileData.careerGoals.desiredRoles.length > 0) completed++;
-    total += 4;
+    total += 5;
     
     // Skills
     if (profileData.skills.length > 0) completed++;
@@ -112,13 +119,17 @@ export default function ReviewStep({
     if (profileData.preferences.studyMode) completed++;
     if (profileData.preferences.startDate) completed++;
     if (profileData.preferences.budgetRange.max > 0) completed++;
-    total += 4;
+    if (profileData.preferences.preferredDuration?.unit) completed++;
+    if (profileData.preferences.preferredStudyLanguage) completed++;
+    if (profileData.preferences.livingExpensesBudget?.max) completed++;
+    total += 7;
     
     // Documents
     if (profileData.documents.resume) completed++;
     if (profileData.documents.transcripts) completed++;
     if (profileData.documents.statementOfPurpose) completed++;
-    total += 3;
+    if (profileData.documents.otherDocuments && profileData.documents.otherDocuments.length > 0) completed++;
+    total += 4;
     
     return Math.round((completed / total) * 100);
   };
@@ -218,6 +229,16 @@ export default function ReviewStep({
                   <p className="text-xs text-zinc-500">Phone</p>
                   <p className="font-medium">{profileData.phone || "Not provided"}</p>
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs text-zinc-500">Current Location</p>
+                    <p className="font-medium">{profileData.currentLocation || "Not provided"}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs text-zinc-500">Nationality</p>
+                    <p className="font-medium">{profileData.nationality || "Not provided"}</p>
+                  </div>
+                </div>
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -243,6 +264,11 @@ export default function ReviewStep({
             </AccordionTrigger>
             <AccordionContent className="px-6 py-4 bg-white">
               <div className="pl-10 space-y-4 py-2">
+                <div className="p-3 bg-purple-50 rounded-lg mb-4">
+                  <p className="text-xs text-purple-500">Target Study Level</p>
+                  <p className="font-medium">{profileData.targetStudyLevel || "Not specified"}</p>
+                </div>
+                <h4 className="font-medium text-sm text-purple-700 mb-2">Education History</h4>
                 {profileData.education.map((edu, index) => (
                   <motion.div
                     key={index}
@@ -290,6 +316,32 @@ export default function ReviewStep({
                     </div>
                   </motion.div>
                 ))}
+                {profileData.education.length === 0 && <p className="text-sm text-zinc-500">No education history provided.</p>}
+                <h4 className="font-medium text-sm text-purple-700 mt-6 mb-2">Language Proficiency</h4>
+                {(profileData.languageProficiency && profileData.languageProficiency.length > 0) ? (
+                  profileData.languageProficiency.map((lang, index) => (
+                     <motion.div
+                        key={`lang-review-${index}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                        className="p-3 bg-purple-50 rounded-lg mb-2 flex justify-between items-center flex-wrap gap-2"
+                      >
+                       <div>
+                          <span className="font-medium text-sm mr-2">{lang.language}:</span>
+                          <span className="text-sm text-purple-700">{lang.proficiencyLevel || '-'}</span>
+                        </div>
+                        {(lang.testType || lang.score) && (
+                          <div className="text-xs text-zinc-500">
+                            {lang.testType && <span>Test: {lang.testType}</span>}
+                            {lang.score && <span className="ml-2">Score: {lang.score}</span>}
+                          </div>
+                        )}
+                      </motion.div>
+                  ))
+                ) : (
+                  <p className="text-sm text-zinc-500">No language proficiency provided.</p>
+                )}
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -325,6 +377,12 @@ export default function ReviewStep({
                   <p className="text-xs text-zinc-500">Long-term Goals</p>
                   <p className="font-medium">
                     {profileData.careerGoals.longTerm || "Not provided"}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-zinc-500">Achievements & Extracurricular Interests</p>
+                  <p className="font-medium">
+                    {profileData.careerGoals.achievements || "Not provided"}
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
@@ -448,11 +506,30 @@ export default function ReviewStep({
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-zinc-500">Budget Range</p>
+                  <p className="text-xs text-zinc-500">Budget Range (Program Fees/Year)</p>
                   <p className="font-medium">
-                    ${profileData.preferences.budgetRange.min.toLocaleString()} - $
-                    {profileData.preferences.budgetRange.max.toLocaleString()}
+                     ${profileData.preferences.budgetRange.min.toLocaleString()} - ${profileData.preferences.budgetRange.max.toLocaleString()} USD
                   </p>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg">
+                   <p className="text-xs text-zinc-500">Preferred Course Duration</p>
+                   <p className="font-medium">
+                    {profileData.preferences.preferredDuration?.min || '-'} to {profileData.preferences.preferredDuration?.max || '-'} {profileData.preferences.preferredDuration?.unit || ''}
+                   </p>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-xs text-zinc-500">Preferred Language of Studies</p>
+                  <p className="font-medium">{profileData.preferences.preferredStudyLanguage || "Not specified"}</p>
+                </div>
+                 <div className="p-3 bg-green-50 rounded-lg">
+                   <p className="text-xs text-zinc-500">Living Expenses Budget (Per Year)</p>
+                   <p className="font-medium">
+                    {profileData.preferences.livingExpensesBudget?.min ? `$${profileData.preferences.livingExpensesBudget.min.toLocaleString()}` : '-'} to {profileData.preferences.livingExpensesBudget?.max ? `$${profileData.preferences.livingExpensesBudget.max.toLocaleString()}` : '-'} {profileData.preferences.livingExpensesBudget?.currency || 'USD'}
+                   </p>
+                </div>
+                 <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-xs text-zinc-500">Interest in Residency/Migration Post-Study</p>
+                  <p className="font-medium">{profileData.preferences.residencyInterest ? "Yes" : "No"}</p>
                 </div>
               </div>
             </AccordionContent>
@@ -543,6 +620,30 @@ export default function ReviewStep({
                         <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
                           <Check size={14} className="mr-1" />
                           Uploaded
+                        </span>
+                      ) : (
+                        <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                          Not uploaded
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white rounded-md border border-gray-200">
+                        <Languages size={20} className="text-cyan-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">Language Tests / Other</p>
+                        <p className="text-xs text-gray-500">Additional supporting documents</p>
+                      </div>
+                    </div>
+                    <div>
+                      {(profileData.documents.otherDocuments && profileData.documents.otherDocuments.length > 0) ? (
+                        <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                          <Check size={14} className="mr-1" />
+                          {profileData.documents.otherDocuments.length} Uploaded
                         </span>
                       ) : (
                         <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">

@@ -40,6 +40,11 @@ export async function POST(request: NextRequest) {
       linkedin_profile: profileData.linkedInProfile,
       goal: profileData.goal,
       desired_field: profileData.desiredField,
+      // Add new direct fields
+      current_location: profileData.currentLocation,
+      nationality: profileData.nationality,
+      target_study_level: profileData.targetStudyLevel,
+      language_proficiency: profileData.languageProficiency,
       // Map complex types directly if column names match or transform if needed
       education: profileData.education,
       career_goals: profileData.careerGoals,

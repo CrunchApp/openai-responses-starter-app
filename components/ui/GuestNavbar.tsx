@@ -50,7 +50,7 @@ export function GuestNavbar() {
                 }`}
               >
                 <MessageSquare className="h-4 w-4 mr-2" />
-                AI Assistant
+                Vista Assistant
               </Link>
             </nav>
           </div>
@@ -93,7 +93,7 @@ export function GuestNavbar() {
               }`}
             >
               <MessageSquare className="h-4 w-4 mr-2" />
-              AI Assistant
+              Vista Assistant
             </Link>
           </div>
         </div>

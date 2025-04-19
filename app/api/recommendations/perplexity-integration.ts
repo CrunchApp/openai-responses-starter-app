@@ -42,6 +42,8 @@
 import { RecommendationProgram, UserProfile } from '@/app/recommendations/types';
 // Import the new evaluation function from the planning agent
 import { evaluateAndScorePrograms } from '@/lib/ai/planningAgent';
+// Import Supabase client for logging Perplexity queries
+import { createClient as createSupabaseClient } from '@/lib/supabase/server';
 
 interface PerplexityRequestOptions {
   model: string;
@@ -151,6 +153,14 @@ function detectTruncatedResponse(response: string): boolean {
  * Calls the Perplexity API with a structured query
  */
 export async function callPerplexityApi(query: string): Promise<string> {
+  // --- Log the query to Supabase for auditing ---
+  try {
+    const supabase = await createSupabaseClient();
+    await supabase.from('perplexity_query_logs')
+      .insert([{ query_text: query }]);
+  } catch (logError) {
+    console.error('Failed to log Perplexity query to DB:', logError);
+  }
   // Get the API key from environment variables
   const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
   
@@ -362,16 +372,16 @@ async function fallbackToOpenAI(query: string): Promise<string> {
     
     // Enhanced system message for OpenAI
     const systemMessage = `You are an expert educational researcher with deep knowledge of global higher education programs, universities, and admission requirements. 
-Your task is to provide comprehensive details on specific educational programs matching the user's query.
+  our task is to provide comprehensive details on specific educational programs matching the user's query.
 
-Follow these key guidelines:
-1. Be thorough and provide complete information for at least 5 distinct programs
-2. Include exact URLs to program websites
-3. Include specific admission requirements, costs, deadlines, and duration
-4. Include scholarship and financial aid information when available
-5. Structure your response as a clearly numbered list of programs (1, 2, 3, etc.)
-6. Provide comprehensive, detailed information about each program
-7. Never truncate or abbreviate your response`;
+  Follow these key guidelines:
+  1. Be thorough and provide complete information for at least 5 distinct programs
+  2. Include exact URLs to program websites
+  3. Include specific admission requirements, costs, deadlines, and duration
+  4. Include scholarship and financial aid information when available
+  5. Structure your response as a clearly numbered list of programs (1, 2, 3, etc.)
+  6. Provide comprehensive, detailed information about each program
+  7. Never truncate or abbreviate your response`;
     
     // Use GPT-4o for better results
     const completion = await openai.chat.completions.create({
@@ -428,7 +438,7 @@ function createSimulatedProgramList(query: string): string {
   // Create a simulated program list
   return `PROGRAM LIST:
 
-1. ${type} in ${field} - University of ${location.split(',')[0]}
+  1. ${type} in ${field} - University of ${location.split(',')[0]}
    - Institution: University of ${location.split(',')[0]}
    - Degree Type: ${type}
    - Field of Study: ${field}
@@ -443,7 +453,7 @@ function createSimulatedProgramList(query: string): string {
    - Program URL: https://www.example.edu/programs/${field.toLowerCase().replace(/\s+/g, '-')}
    - Scholarships: Merit scholarships available from $5,000-$15,000 per year based on academic achievement
 
-2. Advanced ${type} in ${field} - ${location.split(',')[0]} State University
+  2. Advanced ${type} in ${field} - ${location.split(',')[0]} State University
    - Institution: ${location.split(',')[0]} State University
    - Degree Type: ${type}
    - Field of Study: ${field} with specialization in Applied Research
@@ -458,7 +468,7 @@ function createSimulatedProgramList(query: string): string {
    - Program URL: https://www.stateuniv.edu/${field.toLowerCase().replace(/\s+/g, '')}
    - Scholarships: Graduate assistantships available, covering tuition and providing $12,000 stipend
 
-3. International ${type} in ${field} - Global Institute of ${location.split(',')[0]}
+  3. International ${type} in ${field} - Global Institute of ${location.split(',')[0]}
    - Institution: Global Institute of ${location.split(',')[0]}
    - Degree Type: ${type}
    - Field of Study: International ${field}
@@ -473,7 +483,7 @@ function createSimulatedProgramList(query: string): string {
    - Program URL: https://globalinstitute.org/programs/${field.toLowerCase().replace(/\s+/g, '-')}
    - Scholarships: International student scholarships up to $10,000 per year
 
-4. Professional ${type} in ${field} - ${location.split(',')[0]} Professional School
+  4. Professional ${type} in ${field} - ${location.split(',')[0]} Professional School
    - Institution: ${location.split(',')[0]} Professional School
    - Degree Type: Professional ${type}
    - Field of Study: Applied ${field}
@@ -488,7 +498,7 @@ function createSimulatedProgramList(query: string): string {
    - Program URL: https://www.profschool.edu/programs/${field.toLowerCase().replace(/\s+/g, '-')}
    - Scholarships: Employer tuition matching program, Early application discount
 
-5. Research-based ${type} in ${field} - ${location.split(',')[0]} Research University
+  5. Research-based ${type} in ${field} - ${location.split(',')[0]} Research University
    - Institution: ${location.split(',')[0]} Research University
    - Degree Type: Research ${type}
    - Field of Study: Advanced ${field}

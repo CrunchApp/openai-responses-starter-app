@@ -119,48 +119,59 @@ Please take this feedback into account when finding specific programs.
   const targetRegions = Array.isArray(pathway.targetRegions) ? pathway.targetRegions.join(', ') : pathway.targetRegions;
   const duration = pathway.duration;
   
-  // Create a structured query based on the pathway and user profile
-  const query = `
-${pathway.queryString || ''}
-I need a comprehensive list of educational programs matching the following criteria:
+  // ----------  Construct the research prompt  ----------
+  // Use the pathway-supplied boolean search string when available so that
+  // the LLM starts its reasoning with an information‑dense query.
+  // If it is missing (edge‑case), build a minimal fallback.
 
-TYPE: ${qualificationType} programs 
-FIELD: ${fieldOfStudy}${subfields ? ` with specializations in ${subfields}` : ''}
-LOCATION: ${targetRegions}
-BUDGET: ${budgetRange} per year
-DURATION: ${duration.min}-${duration.max} months
+  const fallbackSearchQuery = `(${qualificationType} ${fieldOfStudy}) ${(Array.isArray(targetRegions) ? targetRegions.join(" OR ") : targetRegions)}`.trim();
+
+  const searchQuery = (pathway.queryString && pathway.queryString.length > 10)
+    ? pathway.queryString.trim()
+    : fallbackSearchQuery;
+
+  // Safely access duration values
+  const durationMin = typeof duration === 'object' && duration?.min !== undefined ? duration.min : 6;
+  const durationMax = typeof duration === 'object' && duration?.max !== undefined ? duration.max : 36;
+
+  const query = `SEARCH_QUERY: ${searchQuery}
+
+Use the above boolean search query verbatim when performing web searches.
+
+Now, based on the search results, provide a comprehensive list of educational programs that match **ALL** of the following structured filters:
+  • TYPE: ${qualificationType}
+  • FIELD: ${fieldOfStudy}${subfields ? ` (specialisations: ${subfields})` : ''}
+  • LOCATION: ${targetRegions}
+  • ANNUAL TUITION: ${budgetRange} USD (or lower)
+  • DURATION: ${durationMin}-${durationMax} months
 
 USER PREFERENCES:
-- Preferred locations: ${preferredLocations}
-- Study mode preference: ${userProfile.preferences.studyMode}
-- Target start date: ${userProfile.preferences.startDate}
+  – Preferred study locations: ${preferredLocations || 'no strong preference'}
+  – Study mode: ${userProfile.preferences.studyMode}
+  – Preferred start date: ${userProfile.preferences.startDate || 'flexible'}
 
 ${feedbackNotes}
 
-IMPORTANT INSTRUCTIONS:
-1. List AT LEAST 5 different programs - preferably 8-10 if available.
-2. List them in a numbered format (1. First Program, 2. Second Program, etc.)
-3. For EACH program, provide comprehensive details including:
-   - Program name and degree/certificate type
-   - Institution name
-   - Field of study and specializations
-   - Detailed program description
-   - Annual cost in USD
-   - Program duration in months
-   - Location (city, country, or online)
-   - Application deadlines and start dates
-   - Key admission requirements
-   - Program highlights and unique features
-   - Direct URL to the program webpage
-   - Available scholarships and financial aid options
+OUTPUT GUIDELINES:
+1. Return **at least 5** distinct programs (8‑10 preferred) in a numbered list.
+2. For **each** program include **all** of the following fields:
+     - Program name and degree/certificate type
+     - Institution name
+     - Field of study / specialisations
+     - Detailed program description
+     - Annual tuition cost (USD)
+     - Program duration in months
+     - Location (city, country or online)
+     - Typical start dates & application deadlines
+     - Key admission requirements (bullet list)
+     - Program highlights / unique features (bullet list)
+     - Direct **URL** to the program webpage (NOT the general university site)
+     - Available scholarships / financial aid options
+3. Ensure URLs are valid and up‑to‑date.
+4. Prioritise programs that match the stated budget and preferred locations.
+5. **Do NOT** truncate or omit details – provide complete entries.
 
-4. Continue providing programs until you've listed at least 5 complete program profiles.
-5. Make sure to provide accurate URLs for each program that are currently active and up to date and link to the program's webpage not the university's website.
-6. Prioritize programs that match the user's budget and location preferences.
-7. DO NOT abbreviate or truncate your response. List all programs in full detail.
-
-Begin your response with "PROGRAM LIST:" followed by the complete numbered list of programs.
-`;
+Begin your response exactly with the token "PROGRAM LIST:" then the numbered programs.`;
 
   return query;
 } 

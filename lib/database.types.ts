@@ -481,7 +481,24 @@ export interface Database {
           file_type?: string
           created_at?: string
         }
-      }
+      },
+      perplexity_query_logs: {
+        Row: {
+          id: string
+          query_text: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          query_text: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          query_text?: string
+          created_at?: string
+        }
+      },
     },
     Functions: {
       get_user_recommendations: {

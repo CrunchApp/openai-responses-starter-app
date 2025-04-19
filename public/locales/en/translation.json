@@ -1,0 +1,18 @@
+{
+  "welcomeStep": {
+    "title": "Hey there, welcome to Vista!",
+    "subtitle": "Vista is your smart, friendly education adviser. Let's get started by learning a bit about you.",
+    "createAdvisor": {
+      "title": "Meet Your Personal AI Adviser",
+      "description": "We'll use your info to build an AI assistant that really gets your background, goals, and what you care about."
+    },
+    "nameLabel": "What should we call you?",
+    "namePlaceholder": "Type your name here",
+    "nameError": "Please tell us your name so we can personalize your experience!",
+    "storeError": "Oops, something went wrong setting up your profile: {{error}}",
+    "storeErrorHelp": "Try again, or reach out to support if you keep having trouble.",
+    "continueButton": "Start My Journey",
+    "settingUp": "Setting things up for you...",
+    "languageInfo": "🌍 Vista is built for students everywhere!\n\nYou can upload your documents in ANY language during the next step—our AI will read them and automatically fill out your profile, so you don't have to do it all by hand (especially if English isn't your thing).\n\nPlus, our AI assistant can chat with you in any language you prefer, even if the app's menus are in English. Just talk to Vista however you're most comfortable!"
+  }
+} 

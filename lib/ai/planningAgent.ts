@@ -342,50 +342,102 @@ ${existingPathways.map((pathway, index) => {
       ).join(', ')
       : 'Not specified';
 
-    // Simplified prompt - removed the detailed OUTPUT FORMAT as it's now in the schema
-    const prompt = `
-Your task is to analyze a user's profile and generate 4 creative, tailored education pathway suggestions.
+    // NEW: Build richer context strings for additional profile attributes
+    const targetStudyLevel = userProfile.targetStudyLevel || 'Not specified';
 
-SPECIFIC DETAILS TO CONSIDER:
-1. Educational Background:
-   - Current education level: ${educationHistory}
-   - Academic performance: ${userProfile.education && Array.isArray(userProfile.education) && userProfile.education.some((edu) => edu.gpa) ? userProfile.education.map((edu) => edu.gpa ? `${edu.gpa} GPA` : '').filter(Boolean).join(', ') : 'Not specified'}
+    const languageProficiencySummary = Array.isArray(userProfile.languageProficiency) && userProfile.languageProficiency.length > 0
+      ? userProfile.languageProficiency.map((lp) => {
+          const testInfo = lp.testType && lp.score ? `, ${lp.testType}: ${lp.score}` : '';
+          return `${lp.language} (${lp.proficiencyLevel}${testInfo})`;
+        }).join(', ')
+      : 'Not specified';
 
-2. Career Goals:
-   - Short-term goals: ${shortTermGoal}
-   - Long-term goals: ${longTermGoal}
-   - Target industries: ${desiredIndustry}
-   - Desired roles: ${desiredRoles}
+    const preferredDurationSummary = userProfile.preferences?.preferredDuration
+      ? `${userProfile.preferences.preferredDuration.min ?? 'n/a'} - ${userProfile.preferences.preferredDuration.max ?? 'n/a'} ${userProfile.preferences.preferredDuration.unit ?? ''}`
+      : 'Not specified';
 
-3. Skills & Competencies:
-   - ${Array.isArray(userProfile.skills) ? userProfile.skills.join(', ') : 'Not specified'}
+    const preferredStudyLanguage = userProfile.preferences?.preferredStudyLanguage || 'Not specified';
 
-4. Program Preferences:
-   - Preferred locations: ${userProfile.preferences?.preferredLocations?.join(', ') || 'Not specified'}
-   - Study mode: ${userProfile.preferences?.studyMode || 'Not specified'}
-   - Target start: ${userProfile.preferences?.startDate || 'Not specified'}
-   - Budget constraints: $${(userProfile.preferences?.budgetRange?.min ?? 0).toLocaleString()} - $${(userProfile.preferences?.budgetRange?.max ?? 0).toLocaleString()} per year
-${existingPathwaysContext}
-${feedbackContextString}
+    const livingExpensesBudgetSummary = userProfile.preferences?.livingExpensesBudget
+      ? `$${(userProfile.preferences.livingExpensesBudget.min ?? 0).toLocaleString()} - $${(userProfile.preferences.livingExpensesBudget.max ?? 0).toLocaleString()} ${userProfile.preferences.livingExpensesBudget.currency || 'USD'}`
+      : 'Not specified';
 
-INSTRUCTIONS:
-1. Analyze the user's background, education history, career goals, skills, preferences and constraints.
-2. Consider their budget constraints, location preferences, and time limitations carefully.
-3. Think outside the box - don't just suggest the most obvious educational paths.
-4. If budget is low, consider alternative routes (e.g., certificates first, then degrees; online options; countries with free/cheaper education).
-5. If the user already has degrees, consider if they need additional qualifications or could benefit from specialized certificates instead.
-6. Consider both immediate next steps and longer-term educational journeys.
-7. If existing pathways are provided, do not repeat them - suggest entirely new alternatives.
-8. If user feedback is provided, learn from it to create better, more personalized recommendations.
+    const residencyInterest = userProfile.preferences?.residencyInterest ? 'Yes' : 'No';
 
-Think carefully about each suggestion and ensure they truly fit the user's unique circumstances and goals. Be creative but practical. Respond using the required JSON schema.
-`;
+    // ---------------- Developer & User messages ----------------
+    const developerPrompt = `You are an expert career and education pathway planner.
+
+TASK: Generate exactly 4 distinct, creative education pathway suggestions that strictly adhere to the \"education_pathways\" JSON schema provided via the request. Do **NOT** return any keys that are not part of the schema and do **NOT** output anything outside of the single JSON object.
+
+IMPORTANT GUIDELINES (read carefully):
+1. For every pathway you propose, you **MUST** populate the \\"queryString\\" field with a concise but information‑rich boolean style search query that can be fed directly into downstream research agents.  Build this string so that it can be copied verbatim into a web search.
+    • Incorporate the key pathway attributes where relevant:
+      – qualificationType (include common synonyms, e.g. "Master OR MSc" or "Bachelor OR BSc").
+      – fieldOfStudy and any subfields/specialisations (wrap multi‑word terms in quotes).
+      – targetRegions or specific countries/cities (use OR to enumerate alternatives).
+      – budgetRange limits, e.g. "tuition under $15,000 per year" when a max budget is present.
+      – expected duration descriptors, e.g. "duration 12‑24 months".
+      – preferred study mode keywords (online, on‑campus, hybrid) if implied by the pathway.
+      – start date or intake season keywords when specified.
+    • Use boolean operators (AND / OR), parentheses, quotes and comparative phrases ("under $X", "less than 2 years") to narrow results.
+    • Aim for < 300 characters while still being expressive.
+    • Example pattern: (\"Master of Data Science\" OR \"MSc Data Science\") AND (UK OR \"United Kingdom\") AND (tuition under $20k) AND (duration 12‑24 months).
+
+2. The \"alignment\" field should *explicitly* state why this pathway matches the **specific** user profile attributes supplied (skills, goals, location, budget, etc.). The downstream UI surfaces this text to the user.
+
+3. Ensure that \"alternatives\" provides at least 2 plausible variations or neighbouring options (e.g. related degree types, adjacent specialisations, different study regions) so the system can pivot if no programs are found.
+
+4. Think step‑by‑step but only return the final JSON object.`;
+
+    // USER context (full profile & feedback) with explicit delimiters
+    const prompt = `<USER_PROFILE>
+### Personal Details
+- Preferred name: ${userProfile.preferredName || userProfile.firstName}
+- Current location: ${userProfile.currentLocation || 'Not specified'}
+- Nationality: ${userProfile.nationality || 'Not specified'}
+- Target study level: ${targetStudyLevel}
+
+### Education History
+${educationHistory}
+
+### Career Goals
+- Short‑term: ${shortTermGoal}
+- Long‑term: ${longTermGoal}
+- Desired industries: ${desiredIndustry}
+- Desired roles: ${desiredRoles}
+- Achievements: ${careerGoals.achievements || 'Not specified'}
+
+### Skills
+${Array.isArray(userProfile.skills) && userProfile.skills.length > 0 ? userProfile.skills.join(', ') : 'Not specified'}
+
+### Language Proficiency
+${languageProficiencySummary}
+
+### Preferences
+- Preferred locations: ${userProfile.preferences?.preferredLocations?.join(', ') || 'Not specified'}
+- Study mode: ${userProfile.preferences?.studyMode || 'Not specified'}
+- Preferred start date: ${userProfile.preferences?.startDate || 'Not specified'}
+- Preferred duration: ${preferredDurationSummary}
+- Preferred study language: ${preferredStudyLanguage}
+- Tuition budget (annual): $${(userProfile.preferences?.budgetRange?.min ?? 0).toLocaleString()} - $${(userProfile.preferences?.budgetRange?.max ?? 0).toLocaleString()}
+- Living expenses budget: ${livingExpensesBudgetSummary}
+- Post‑study residency interest: ${residencyInterest}
+</USER_PROFILE>
+
+<EXISTING_PATHWAYS>
+${existingPathwaysContext || 'None'}
+</EXISTING_PATHWAYS>
+
+<FEEDBACK_CONTEXT>
+${feedbackContextString || 'None'}
+</FEEDBACK_CONTEXT>`;
   
     // Use OpenAI responses API with JSON Schema for structured output
     const requestOptions: any = {
-      model: "o3-mini-2025-01-31", // Ensure this model supports json_schema
+      model: "o4-mini-2025-04-16", // Latest reasoning model with json_schema support
+      reasoning: { effort: "medium" },
       input: [
-        { role: "system", content: "You are an expert career and education pathway planner. Respond strictly according to the provided JSON schema." },
+        { role: "developer", content: developerPrompt },
         { role: "user", content: prompt }
       ],
       text: { 
@@ -531,7 +583,7 @@ Think carefully about each suggestion and ensure they truly fit the user's uniqu
 }
 
 /**
- * Evaluates programs found by a research tool (like Perplexity) against
+ * Evaluates programs found by programResearchAgent against
  * a specific education pathway and user profile, calculating match scores.
  */
 export async function evaluateAndScorePrograms(

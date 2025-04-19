@@ -241,37 +241,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign out
   async function signOut() {
     try {
-      // First set loading to true to indicate the operation is in progress
       setLoading(true);
       setError(null);
       
-      // Clear local auth state first - this is most important for the UI
+      // First, sign out from Supabase and wait for it to complete
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Supabase sign out error:', error);
+        throw error;
+      }
+      
+      // After successful Supabase sign out, clear local state
       setUser(null);
       setProfile(null);
       setVectorStoreId(null);
       
-      // IMPORTANT: Set loading to false immediately after clearing user
-      // This prevents the loading spinner from getting stuck
-      setLoading(false);
-      
-      // Handle sign out from Supabase - do this asynchronously without blocking the UI
-      setTimeout(async () => {
-        try {
-          const { error } = await supabase.auth.signOut();
-          if (error) {
-            console.error('Supabase sign out error:', error);
-          }
-          
-          // Navigate as the final step
-          router.push('/');
-        } catch (error) {
-          console.error('Error during Supabase sign out:', error);
-        }
-      }, 50);
+      // Navigate as the final step
+      router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
-      setError(typeof error === 'string' ? error : 'An unexpected error occurred during logout');
-      // Ensure loading is set to false in case of error
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('An unexpected error occurred during logout');
+      }
+    } finally {
       setLoading(false);
     }
   }

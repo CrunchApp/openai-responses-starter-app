@@ -353,9 +353,9 @@ export function ProgramCard({
             size="sm"
             className="text-xs h-8 px-3"
             onClick={handleAskAI}
-            title="Ask AI assistant about this program"
+            title="Ask Vista assistant about this program"
           >
-            <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Ask AI
+            <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Ask Vista
           </Button>
             
           {program.pageLink ? (

@@ -1,0 +1,18 @@
+{
+  "welcomeStep": {
+    "title": "Selam! Vista'ya hoş geldin!",
+    "subtitle": "Vista, senin akıllı ve arkadaş canlısı eğitim danışmanın. Hadi biraz seni tanıyarak başlayalım.",
+    "createAdvisor": {
+      "title": "Kişisel Yapay Zeka Danışmanınla Tanış",
+      "description": "Bilgilerini kullanarak senin geçmişini, hedeflerini ve nelere önem verdiğini gerçekten anlayan bir yapay zeka asistanı oluşturacağız."
+    },
+    "nameLabel": "Sana nasıl hitap edelim?",
+    "namePlaceholder": "Adını buraya yazabilirsin",
+    "nameError": "Deneyimini kişiselleştirebilmemiz için lütfen adını bizimle paylaş!",
+    "storeError": "Hay aksi, profilini ayarlarken bir şeyler ters gitti: {{error}}",
+    "storeErrorHelp": "Tekrar dene veya sorun devam ederse destek ekibine ulaşmaktan çekinme.",
+    "continueButton": "Yolculuğuma Başla",
+    "settingUp": "Senin için her şeyi hazırlıyoruz...",
+    "languageInfo": "🌍 Vista tüm dünyadaki öğrenciler için tasarlandı!\n\nBir sonraki adımda belgelerini İSTEDİĞİN dilde yükleyebilirsin—yapay zekamız onları okuyup profilini otomatik olarak dolduracak, böylece her şeyi elle yapmak zorunda kalmazsın (özellikle İngilizce ile aran pek iyi değilse).\n\nArtı, uygulama menüleri İngilizce olsa bile, yapay zeka asistanımız seninle tercih ettiğin herhangi bir dilde sohbet edebilir. Vista ile en rahat hissettiğin şekilde konuş yeter!"
+  }
+} 

@@ -153,7 +153,7 @@ export default function DashboardPage() {
                 >
                   <MessageSquare className="w-7 h-7 text-white" />
                 </motion.div>
-                <CardTitle className="text-xl font-semibold text-foreground">AI Assistant</CardTitle>
+                <CardTitle className="text-xl font-semibold text-foreground">Vista Assistant</CardTitle>
                 <CardDescription className="text-muted-foreground">Chat with your education adviser</CardDescription>
               </CardHeader>
               <CardContent className="relative z-10 flex-grow">

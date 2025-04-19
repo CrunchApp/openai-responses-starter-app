@@ -1,15 +1,18 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { WelcomeStepProps } from "../profile-wizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { ArrowRight, Sparkles, Brain, Loader2 } from "lucide-react";
+import { ArrowRight, Sparkles, Brain, Loader2, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import useProfileStore from "@/stores/useProfileStore";
 import useToolsStore from "@/stores/useToolsStore";
 import AnimatedLogo from "@/components/ui/AnimatedLogo";
+import LanguageSelector from "@/components/ui/LanguageSelector";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n/i18n"; // Import i18n configuration
 
 export default function WelcomeStep({
   profileData,
@@ -19,10 +22,14 @@ export default function WelcomeStep({
   const [nameError, setNameError] = useState<string | null>(null);
   const [isCreatingStore, setIsCreatingStore] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
+  const { t, i18n } = useTranslation();
   
+  // Determine text direction based on language
+  const isRtl = ['ar', 'fa'].includes(i18n.language);
+
   // Get state setters from stores
   const setVectorStoreId = useProfileStore(state => state.setVectorStoreId);
-  const setToolsVectorStore = useToolsStore(state => state.setVectorStore);
+  const setVectorStoreInTools = useToolsStore(state => state.setVectorStore);
 
   const createVectorStore = async (name: string) => {
     try {
@@ -62,7 +69,7 @@ export default function WelcomeStep({
       setVectorStoreId(data.id);
       
       // Also update tools store for immediate use
-      setToolsVectorStore({
+      setVectorStoreInTools({
         id: data.id,
         name: `${name}_VectorStore`
       });
@@ -79,7 +86,7 @@ export default function WelcomeStep({
 
   const handleContinue = async () => {
     if (!profileData.preferredName.trim()) {
-      setNameError("Please let us know what to call you");
+      setNameError(t("welcomeStep.nameError"));
       return;
     }
     
@@ -93,7 +100,7 @@ export default function WelcomeStep({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" dir={isRtl ? "rtl" : "ltr"}>
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -107,10 +114,22 @@ export default function WelcomeStep({
             </div>
           </div>
         </div>
-        <h2 className="text-3xl font-bold text-gray-900">Welcome to Vista</h2>
+        <h2 className="text-3xl font-bold text-gray-900">{t("welcomeStep.title")}</h2>
         <p className="text-zinc-500 max-w-md mx-auto">
-          Your personal education adviser, powered by AI. Let's start by getting to know you.
+          {t("welcomeStep.subtitle")}
         </p>
+        
+      {/* Language feature information card */}
+      <Card className="p-4 border border-blue-200 bg-blue-50/50">
+        <p className="text-sm text-blue-800">
+          {t("welcomeStep.languageInfo")}
+        </p>
+      </Card>
+
+        {/* Language Selector */}
+        <div className="flex justify-center pt-4">
+          <LanguageSelector />
+        </div>
       </motion.div>
 
       <Card className="p-6 border border-purple-200 bg-purple-50/50">
@@ -120,17 +139,16 @@ export default function WelcomeStep({
               <Brain className="h-6 w-6 text-purple-600" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Create Your Personal AI Adviser</h3>
+              <h3 className="text-lg font-medium text-gray-900">{t("welcomeStep.createAdvisor.title")}</h3>
               <p className="text-sm text-zinc-600 mt-1">
-                Your profile will be used to create a personalized AI assistant that understands your 
-                educational background, career goals, and preferences.
+                {t("welcomeStep.createAdvisor.description")}
               </p>
             </div>
           </div>
           
           <div className="pt-4">
             <Label htmlFor="preferredName" className="block mb-2 font-medium">
-              What would you like Vista to call you?
+              {t("welcomeStep.nameLabel")}
             </Label>
             <Input
               id="preferredName"
@@ -142,7 +160,7 @@ export default function WelcomeStep({
                 });
                 setNameError(null);
               }}
-              placeholder="Enter your preferred name"
+              placeholder={t("welcomeStep.namePlaceholder")}
               className={`bg-white ${nameError ? 'border-red-300' : ''}`}
             />
             {nameError && <p className="text-sm text-red-500 mt-1">{nameError}</p>}
@@ -150,10 +168,12 @@ export default function WelcomeStep({
         </div>
       </Card>
 
+ 
+
       {storeError && (
         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md text-sm">
-          <p>There was an error setting up your profile: {storeError}</p>
-          <p className="mt-1">Please try again or contact support if the problem persists.</p>
+          <p>{t("welcomeStep.storeError", { error: storeError })}</p>
+          <p className="mt-1">{t("welcomeStep.storeErrorHelp")}</p>
         </div>
       )}
 
@@ -172,11 +192,11 @@ export default function WelcomeStep({
           {isCreatingStore ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Setting Up Your Profile...
+              {t("welcomeStep.settingUp")}
             </>
           ) : (
             <>
-              Let's Get Started <ArrowRight className="ml-2 h-4 w-4" />
+              {t("welcomeStep.continueButton")} {isRtl ? <ArrowLeft className="mr-2 ml-0 h-4 w-4" /> : <ArrowRight className="ml-2 mr-0 h-4 w-4" />}
             </>
           )}
         </Button>

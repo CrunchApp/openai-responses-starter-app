@@ -1,0 +1,18 @@
+{
+  "welcomeStep": {
+    "title": "哈喽，欢迎来到 Vista！",
+    "subtitle": "Vista 是你的智能学习伙伴。咱们先来简单认识一下吧！",
+    "createAdvisor": {
+      "title": "遇见你的专属 AI 顾问",
+      "description": "我们会根据你的信息，为你量身打造一个超懂你的 AI 助手，了解你的背景、目标和想法。"
+    },
+    "nameLabel": "我们该怎么称呼你呢？",
+    "namePlaceholder": "在这里输入你的名字",
+    "nameError": "告诉我们你的名字吧，这样体验更个性化哦！",
+    "storeError": "哎呀，建立档案时出了点小问题：{{error}}",
+    "storeErrorHelp": "再试一次吧，如果还是不行，可以联系客服求助哦。",
+    "continueButton": "开启我的旅程",
+    "settingUp": "正在为你准备中...",
+    "languageInfo": "🌍 Vista 为全球学生服务！\n\n下一步，你可以用任何语言上传你的文档——我们的 AI 会自动读取并帮你填写资料，省去手动输入的麻烦（特别是如果你不习惯用英文的话）。\n\n而且，就算App界面是英文的，我们的 AI 助手也能用你最熟悉的语言和你交流。用你觉得最舒服的方式和 Vista 聊天就好啦！"
+  }
+} 

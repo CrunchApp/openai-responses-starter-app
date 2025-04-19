@@ -64,22 +64,29 @@ export async function exploreProgramsAction(pathwayId: string) {
       phone: dbProfile.phone || '',
       preferredName: dbProfile.preferred_name || '',
       linkedInProfile: dbProfile.linkedin_profile || '',
+      currentLocation: dbProfile.current_location || '',
+      nationality: dbProfile.nationality || '',
+      targetStudyLevel: dbProfile.target_study_level || '',
+      languageProficiency: Array.isArray(dbProfile.language_proficiency) ? dbProfile.language_proficiency : [],
       goal: dbProfile.goal || '',
       desiredField: dbProfile.desired_field || '',
       education: dbProfile.education || [],
       careerGoals: dbProfile.career_goals ? {
         shortTerm: dbProfile.career_goals.shortTerm !== undefined ? dbProfile.career_goals.shortTerm : '',
         longTerm: dbProfile.career_goals.longTerm !== undefined ? dbProfile.career_goals.longTerm : '',
+        achievements: dbProfile.career_goals.achievements !== undefined ? dbProfile.career_goals.achievements : '',
         desiredIndustry: Array.isArray(dbProfile.career_goals.desiredIndustry) ? dbProfile.career_goals.desiredIndustry : [],
         desiredRoles: Array.isArray(dbProfile.career_goals.desiredRoles) ? dbProfile.career_goals.desiredRoles : []
-      } : { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
+      } : { shortTerm: '', longTerm: '', achievements: '', desiredIndustry: [], desiredRoles: [] },
       skills: dbProfile.skills || [],
       preferences: dbProfile.preferences ? {
         preferredLocations: Array.isArray(dbProfile.preferences.preferredLocations) ? dbProfile.preferences.preferredLocations : [],
         studyMode: dbProfile.preferences.studyMode !== undefined ? dbProfile.preferences.studyMode : 'Full-time',
         startDate: dbProfile.preferences.startDate !== undefined ? dbProfile.preferences.startDate : '',
-        budgetRange: dbProfile.preferences.budgetRange || { min: 0, max: 0 }
-      } : { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 0 } },
+        budgetRange: dbProfile.preferences.budgetRange || { min: 0, max: 0 },
+        preferredStudyLanguage: dbProfile.preferences.preferredStudyLanguage !== undefined ? dbProfile.preferences.preferredStudyLanguage : '',
+        residencyInterest: dbProfile.preferences.residencyInterest !== undefined ? dbProfile.preferences.residencyInterest : false
+      } : { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 0 }, preferredStudyLanguage: '', residencyInterest: false },
       documents: dbProfile.documents || {},
       vectorStoreId: dbProfile.vector_store_id as string, // Type assertion since we've verified it exists
       profileFileId: dbProfile.profile_file_id || undefined

@@ -8,7 +8,8 @@ const PUBLIC_ROUTES = [
   '/profile', // Public profile view
   '/recommendations', // Public recommendations
   '/chat', // Public chat
-  '/images/file2.mp4'
+  '/images/file2.mp4',
+  '/locales' // Translation JSON files
 ]
 
 // Define public API routes needed for onboarding
@@ -111,6 +112,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * Feel free to modify this pattern to include more paths.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|ogg|mov)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|ogg|mov|json)$).*)',
   ],
 } 

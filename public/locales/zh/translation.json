@@ -14,5 +14,50 @@
     "continueButton": "开启我的旅程",
     "settingUp": "正在为你准备中...",
     "languageInfo": "🌍 Vista 为全球学生服务！\n\n下一步，你可以用任何语言上传你的文档——我们的 AI 会自动读取并帮你填写资料，省去手动输入的麻烦（特别是如果你不习惯用英文的话）。\n\n而且，就算App界面是英文的，我们的 AI 助手也能用你最熟悉的语言和你交流。用你觉得最舒服的方式和 Vista 聊天就好啦！"
+  },
+  "profileWizard": {
+    "steps": {
+      "welcome": {
+        "name": "欢迎！",
+        "description": "咱们开始用 Vista 吧"
+      },
+      "import": {
+        "name": "你的档案",
+        "description": "跟 Vista 说说你自己"
+      },
+      "personal": {
+        "name": "你的信息",
+        "description": "一些基本的个人情况"
+      },
+      "education": {
+        "name": "你的学习经历",
+        "description": "说说你都学了些啥"
+      },
+      "goals": {
+        "name": "目标和兴趣",
+        "description": "你未来的打算"
+      },
+      "preferences": {
+        "name": "你的偏好",
+        "description": "你对项目有啥想法"
+      },
+      "review": {
+        "name": "最后检查一下",
+        "description": "看看你的档案"
+      }
+    },
+    "editTitle": "更新你的档案",
+    "createTitle": "创建你的档案",
+    "editSubtitle": "改改你的档案，这样我们能给你更合适的升学建议。",
+    "createSubtitle": "完成这几步，建立你的个人升学档案。",
+    "resetButton": "重置",
+    "resetTitle": "确定要重置你的档案吗？",
+    "resetDescription": "这样会删掉你所有的档案信息，然后从头开始。这个操作不能撤销哦。",
+    "cancelButton": "取消",
+    "deleting": "正在删除...",
+    "resetEverything": "全部重置",
+    "completePrevious": "得先完成前面的步骤才行",
+    "previousButton": "上一步",
+    "continueButton": "继续"
   }
 } 

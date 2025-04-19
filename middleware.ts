@@ -21,7 +21,6 @@ const PUBLIC_API_ROUTES = [
   '/api/vector_stores/cleanup',
   '/api/profile/create',
   '/api/profile/extract-from-documents',
-  '/api/auth/linkedin-profile',
   '/api/recommendations/pathways/generate',
   '/api/turn_response',
   '/api/conversations',

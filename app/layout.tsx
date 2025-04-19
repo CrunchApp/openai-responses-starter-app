@@ -17,11 +17,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Vista Education Adviser",
     description: "AI-powered education and career advisor",
-    url: "https://app.vista-consultants.com", // Update with your actual domain when deployed
+    url: "https://app.vista-consultants.com",
     siteName: "Vista Education Adviser",
     images: [
       {
-        url: "/vista_logo.png", // Relative path works for OpenGraph
+        url: "/vista_logo.png",
         width: 800,
         height: 600,
       },
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Vista Education Adviser",
     description: "AI-powered education and career advisor",
-    images: ["/vista_logo.png"], // Relative path works for Twitter cards too
+    images: ["/vista_logo.png"],
   },
 };
 
@@ -43,12 +43,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className="h-full">
+      <body className={`${inter.className} flex flex-col min-h-full`}>
         <AuthProvider>
           <AuthSynchronizer />
           <I18nProvider>
-            {children}
+            <main className="flex-grow">
+              {children}
+            </main>
           </I18nProvider>
           <Toaster />
         </AuthProvider>

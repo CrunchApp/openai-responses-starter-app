@@ -19,7 +19,6 @@ import { Upload, ImagePlus } from 'lucide-react';
 const PREDEFINED_AVATARS = [
   '/images/vectors/avatars/11062b_2d0d70ae3c0e408c837dd0f42d705da5.svg',
   '/images/vectors/avatars/11062b_5667b97ac3e34738993c82dff3d07631.svg',
-  '/images/vectors/avatars/11062b_b4507c3148e34d20b4e8ae431bacb8a5.svg',
   '/images/vectors/avatars/11062b_4a6ee6561bf448fa91067b0c42f26b31.svg',
   '/images/vectors/avatars/11062b_abb199bbec7842f89e508b1cec1a5c8b.svg',
   '/images/vectors/avatars/11062b_42063412fde549bf97454aa3920511c2.svg',

@@ -20,6 +20,7 @@ import useToolsStore from "@/stores/useToolsStore";
 import { UserProfile, ProfileSchema } from "@/app/types/profile-schema";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import usePathwayStore from "@/stores/usePathwayStore";
+import { useTranslation } from "react-i18next";
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -214,41 +215,45 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       : newProfileData;
   };
 
+  const { t, i18n } = useTranslation();
+  const isRtl = ["ar", "fa"].includes(i18n.language);
+
+  // Step names and descriptions are now translated
   const steps: Step[] = [
     {
-      name: "Welcome",
-      description: "Let's get started with Vista",
+      name: t("profileWizard.steps.welcome.name", "Welcome"),
+      description: t("profileWizard.steps.welcome.description", "Let's get started with Vista"),
       component: WelcomeStep
     },
     {
-      name: "Profile Import",
-      description: "Tell Vista about yourself",
+      name: t("profileWizard.steps.import.name", "Profile Import"),
+      description: t("profileWizard.steps.import.description", "Tell Vista about yourself"),
       component: ImportOptionsStep
     },
-    { 
-      name: "Personal Information", 
-      description: "Basic personal details", 
-      component: PersonalInfoStep 
+    {
+      name: t("profileWizard.steps.personal.name", "Personal Information"),
+      description: t("profileWizard.steps.personal.description", "Basic personal details"),
+      component: PersonalInfoStep
     },
-    { 
-      name: "Education", 
-      description: "Your educational background", 
-      component: EducationStep 
+    {
+      name: t("profileWizard.steps.education.name", "Education"),
+      description: t("profileWizard.steps.education.description", "Your educational background"),
+      component: EducationStep
     },
-    { 
-      name: "Goals & Interests", 
-      description: "Your professional aspirations", 
-      component: CareerGoalsStep 
+    {
+      name: t("profileWizard.steps.goals.name", "Goals & Interests"),
+      description: t("profileWizard.steps.goals.description", "Your professional aspirations"),
+      component: CareerGoalsStep
     },
-    { 
-      name: "Preferences", 
-      description: "Program preferences", 
+    {
+      name: t("profileWizard.steps.preferences.name", "Preferences"),
+      description: t("profileWizard.steps.preferences.description", "Program preferences"),
       component: PreferencesStep
     },
-    { 
-      name: "Review", 
-      description: "Review your profile", 
-      component: ReviewStep 
+    {
+      name: t("profileWizard.steps.review.name", "Review"),
+      description: t("profileWizard.steps.review.description", "Review your profile"),
+      component: ReviewStep
     }
   ];
 
@@ -564,16 +569,16 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
+    <div className="max-w-3xl mx-auto py-8 px-4" dir={isRtl ? "rtl" : "ltr"}>
       <div className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold mb-4">
-            {isEditMode ? "Update Your Profile" : "Create Your Profile"}
+            {isEditMode ? t("profileWizard.editTitle", "Update Your Profile") : t("profileWizard.createTitle", "Create Your Profile")}
           </h1>
           <p className="text-zinc-600">
             {isEditMode 
-              ? "Make changes to your profile to refine your education recommendations."
-              : "Complete the steps below to set up your personal educational profile."
+              ? t("profileWizard.editSubtitle", "Make changes to your profile to refine your education recommendations.")
+              : t("profileWizard.createSubtitle", "Complete the steps below to set up your personal educational profile.")
             }
           </p>
         </div>
@@ -581,18 +586,18 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
           <AlertDialogTrigger asChild>
             <Button variant="outline" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
               <Trash2 className="h-4 w-4 mr-2" />
-              Reset
+              {t("profileWizard.resetButton", "Reset")}
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Reset Your Profile?</AlertDialogTitle>
+              <AlertDialogTitle>{t("profileWizard.resetTitle", "Reset Your Profile?")}</AlertDialogTitle>
               <AlertDialogDescription>
-                This will delete all your profile data and start over. This action cannot be undone.
+                {t("profileWizard.resetDescription", "This will delete all your profile data and start over. This action cannot be undone.")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={isResetting}>{t("profileWizard.cancelButton", "Cancel")}</AlertDialogCancel>
               <AlertDialogAction 
                 onClick={handleReset} 
                 className="bg-red-500 hover:bg-red-600"
@@ -601,10 +606,10 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
                 {isResetting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Deleting...
+                    {t("profileWizard.deleting", "Deleting...")}
                   </>
                 ) : (
-                  "Reset Everything"
+                  t("profileWizard.resetEverything", "Reset Everything")
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -674,7 +679,7 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
                     <p>{step.description}</p>
                     {!storedCompletedSteps.includes(idx) && idx > 0 && (
                       <p className="text-xs text-amber-600 mt-1 flex items-center">
-                        <Info className="h-3 w-3 mr-1" /> Complete previous steps first
+                        <Info className="h-3 w-3 mr-1" /> {t("profileWizard.completePrevious", "Complete previous steps first")}
                       </p>
                     )}
                   </TooltipContent>
@@ -720,9 +725,9 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
                 onClick={handlePrevious}
                 disabled={storedCurrentStep === 0}
               >
-                Previous
+                {t("profileWizard.previousButton", "Previous")}
               </Button>
-              <Button onClick={handleNext}>Continue</Button>
+              <Button onClick={handleNext}>{t("profileWizard.continueButton", "Continue")}</Button>
             </div>
           )}
         </Card>

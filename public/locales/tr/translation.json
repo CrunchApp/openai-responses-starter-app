@@ -14,5 +14,50 @@
     "continueButton": "Yolculuğuma Başla",
     "settingUp": "Senin için her şeyi hazırlıyoruz...",
     "languageInfo": "🌍 Vista tüm dünyadaki öğrenciler için tasarlandı!\n\nBir sonraki adımda belgelerini İSTEDİĞİN dilde yükleyebilirsin—yapay zekamız onları okuyup profilini otomatik olarak dolduracak, böylece her şeyi elle yapmak zorunda kalmazsın (özellikle İngilizce ile aran pek iyi değilse).\n\nArtı, uygulama menüleri İngilizce olsa bile, yapay zeka asistanımız seninle tercih ettiğin herhangi bir dilde sohbet edebilir. Vista ile en rahat hissettiğin şekilde konuş yeter!"
+  },
+  "profileWizard": {
+    "steps": {
+      "welcome": {
+        "name": "Hoş Geldin",
+        "description": "Hadi Vista'yla başlayalım"
+      },
+      "import": {
+        "name": "Profil Bilgilerin",
+        "description": "Vista'ya biraz kendinden bahset"
+      },
+      "personal": {
+        "name": "Kişisel Bilgilerin",
+        "description": "Birkaç temel kişisel detay"
+      },
+      "education": {
+        "name": "Eğitimin",
+        "description": "Şimdiye kadarki eğitimin"
+      },
+      "goals": {
+        "name": "Hedeflerin & İlgi Alanların",
+        "description": "Kariyer planların"
+      },
+      "preferences": {
+        "name": "Tercihlerin",
+        "description": "Program tercihlerin"
+      },
+      "review": {
+        "name": "Son Kontrol",
+        "description": "Profilini gözden geçir"
+      }
+    },
+    "editTitle": "Profilini Güncelle",
+    "createTitle": "Profilini Oluştur",
+    "editSubtitle": "Eğitim önerilerini daha iyi hale getirmek için profilinde değişiklikler yap.",
+    "createSubtitle": "Kişisel eğitim profilini ayarlamak için aşağıdaki adımları tamamla.",
+    "resetButton": "Sıfırla",
+    "resetTitle": "Profilini sıfırlamak ister misin?",
+    "resetDescription": "Bu işlem tüm profil verilerini silecek ve en baştan başlayacaksın. Geri dönüşü yok, ona göre.",
+    "cancelButton": "Vazgeç",
+    "deleting": "Siliniyor...",
+    "resetEverything": "Her Şeyi Sıfırla",
+    "completePrevious": "Önce önceki adımları bitirmen lazım",
+    "previousButton": "Önceki",
+    "continueButton": "Devam Et"
   }
 } 

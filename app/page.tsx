@@ -7,6 +7,7 @@ import { ArrowRight, GraduationCap, Globe, BrainCircuit, BookOpen, ChevronDown }
 import { FloatingImages } from "@/components/ui/FloatingImages";
 import { PageWrapper } from "@/components/layouts/PageWrapper";
 import { gsap } from 'gsap';
+import VistaFooter from '@/components/ui/VistaFooter';
 
 export default function Home() {
   // Refs for animation targets
@@ -387,6 +388,7 @@ export default function Home() {
           </div>
         </section>
       </div>
+      <VistaFooter />
     </PageWrapper>
   );
 }

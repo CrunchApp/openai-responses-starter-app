@@ -1,7 +1,7 @@
 {
   "welcomeStep": {
     "title": "Hey there, welcome to Vista!",
-    "subtitle": "Vista is your smart, friendly education adviser. Let's get started by learning a bit about you.",
+    "subtitle": "Vista is your experienced, friendly education adviser. Let's get started by learning a bit about you.",
     "createAdvisor": {
       "title": "Meet Your Personal AI Adviser",
       "description": "We'll use your info to build an AI assistant that really gets your background, goals, and what you care about."
@@ -14,5 +14,50 @@
     "continueButton": "Start My Journey",
     "settingUp": "Setting things up for you...",
     "languageInfo": "🌍 Vista is built for students everywhere!\n\nYou can upload your documents in ANY language during the next step—our AI will read them and automatically fill out your profile, so you don't have to do it all by hand (especially if English isn't your thing).\n\nPlus, our AI assistant can chat with you in any language you prefer, even if the app's menus are in English. Just talk to Vista however you're most comfortable!"
+  },
+  "profileWizard": {
+    "steps": {
+      "welcome": {
+        "name": "Welcome",
+        "description": "Let's get started with Vista"
+      },
+      "import": {
+        "name": "Document Import",
+        "description": "Tell Vista about yourself"
+      },
+      "personal": {
+        "name": "Personal Information",
+        "description": "Basic personal details"
+      },
+      "education": {
+        "name": "Education",
+        "description": "Your educational background"
+      },
+      "goals": {
+        "name": "Goals & Interests",
+        "description": "Your professional aspirations"
+      },
+      "preferences": {
+        "name": "Preferences",
+        "description": "Program preferences"
+      },
+      "review": {
+        "name": "Review",
+        "description": "Review your profile"
+      }
+    },
+    "editTitle": "Update Your Profile",
+    "createTitle": "Create Your Profile",
+    "editSubtitle": "Make changes to your profile to refine your education recommendations.",
+    "createSubtitle": "Complete the steps below to set up your personal educational profile.",
+    "resetButton": "Reset",
+    "resetTitle": "Reset Your Profile?",
+    "resetDescription": "This will delete all your profile data and start over. This action cannot be undone.",
+    "cancelButton": "Cancel",
+    "deleting": "Deleting...",
+    "resetEverything": "Reset Everything",
+    "completePrevious": "Complete previous steps first",
+    "previousButton": "Previous",
+    "continueButton": "Continue"
   }
 } 

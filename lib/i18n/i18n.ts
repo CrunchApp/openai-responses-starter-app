@@ -21,7 +21,7 @@ i18n
     },
     // Load the translations from the locales folder in public directory
     backend: {
-      loadPath: '/locales/{{lng}}/{{ns}}.json',
+      loadPath: `${process.env.NEXT_PUBLIC_APP_URL || ''}/locales/{{lng}}/{{ns}}.json`,
     },
     supportedLngs: ['en', 'ar', 'fa', 'tr', 'zh'],
     nonExplicitSupportedLngs: true,

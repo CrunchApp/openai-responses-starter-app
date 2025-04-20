@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { User, MessageSquare, Bookmark, MoveUpRight } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from '@/app/components/auth/AuthContext';
 import { PageWrapper } from "@/components/layouts/PageWrapper";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
+import { GradCapAssistant } from "@/components/assistant/GradCapAssistant";
 
 export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
@@ -48,56 +48,21 @@ export default function DashboardPage() {
     <PageWrapper requireAuth>
       {/* Enhanced Decorative Elements using Tailwind and pseudo-elements */}
       <div className="fixed inset-0 w-full h-full pointer-events-none overflow-hidden z-0">
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 rounded-full bg-gradient-radial from-primary/5 via-primary/10 to-transparent blur-3xl"
-        />
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
-          className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-gradient-radial from-blue-500/5 via-blue-500/10 to-transparent blur-3xl"
-        />
-         <motion.div 
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 0.07 }}
-          transition={{ duration: 1, ease: "easeOut", delay: 0.8 }}
-          className="absolute top-1/4 right-[5%] w-20 h-20 border border-dashed border-primary rounded-full animate-spin-slow" 
-        />
-        <motion.div 
-          initial={{ x: 50, opacity: 0 }}
-          animate={{ x: 0, opacity: 0.07 }}
-          transition={{ duration: 1, ease: "easeOut", delay: 1 }}
-          className="absolute bottom-[15%] left-[10%] w-16 h-16 border-2 border-dotted border-purple-500 rounded-xl transform rotate-12 animate-pulse" 
-        />
+
       </div>
       
-      <div className="container mx-auto px-4 py-16 relative z-10">
+      <div className="container mx-auto px-4 py-36 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
           className="text-center mb-16"
         >
-          {/* Position container for the cap image */}
-          <div className="text-center relative z-10 mb-[-3rem]"> 
-            {/* Motion div wrapping only the image, with tight bounds */}
-            <motion.div
-              className="inline-block" // Shrink wrap the image
-              whileHover={{ scale: 1.2, rotate: -5 }}
-              transition={{ type: "spring", stiffness: 300, damping: 10 }}
-            >
-              <Image
-                src="/images/vectors/cap.png"
-                alt="Graduation Cap"
-                width={86}
-                height={86}
-                // Removed mx-auto as centering is handled by the outer div
-                priority
-              />
-            </motion.div>
+          {/* Cap and popup positioned above greeting */}
+          <div className="flex flex-col items-center relative z-10 mb-8">
+            <GradCapAssistant
+              className="mb-2"
+            />
           </div>
           <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
             {loading ? 'Loading...' : `Hey ${displayName}!`}

@@ -9,6 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useRouter } from "next/navigation";
 import { RecommendationProgram } from "@/app/recommendations/types";
 import { cn } from "@/lib/utils";
+import { GradCapAssistant } from "@/components/assistant/GradCapAssistant";
 
 // --- Helpers ---
 function formatCurrency(amount?: number | null) {
@@ -346,17 +347,14 @@ export function ProgramCard({
           </Button>
         </div>
           
-        {/* Secondary Actions: Ask AI, Explore Program */}
+        {/* Secondary Actions: Vista Assistant widget & Explore Program */}
         <div className="flex justify-between items-center mt-4 pt-3 border-t">
-          <Button 
-            variant="secondary" 
-            size="sm"
-            className="text-xs h-8 px-3"
-            onClick={handleAskAI}
-            title="Ask Vista assistant about this program"
-          >
-            <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Ask Vista
-          </Button>
+          {/* Inline GradCapAssistant for program-specific Q&A */}
+          <GradCapAssistant
+            className="relative" // ensure proper positioning inside the card
+            contextMessage={`The user is asking about the following program: ${program.name} offered by ${program.institution}. Make sure you review user's profile and the program details, both of which you have access to within the vector store files, before responding.`}
+            placeholder="What do you want to know about this program?"
+          />
             
           {program.pageLink ? (
             <Button 

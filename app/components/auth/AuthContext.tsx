@@ -142,17 +142,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`Auth state changed: ${event}`);
       
-      if (session?.user) {
-        if (isMounted) setUser(session.user);
-        
-        // Fetch user profile
-        const profileData = await fetchProfile(session.user.id);
-        
-        // Make sure profile data is set
-        if (isMounted) {
-          setProfile(profileData);
+      // Treat INITIAL_SESSION with a valid session as SIGNED_IN for state purposes
+      if ((event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user))) {
+        if (session?.user) {
+          if (isMounted) setUser(session.user);
+          // Fetch user profile
+          const profileData = await fetchProfile(session.user.id);
+          if (isMounted) setProfile(profileData);
         }
-      } else {
+      } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session?.user)) {
         if (isMounted) {
           setUser(null);
           setProfile(null);

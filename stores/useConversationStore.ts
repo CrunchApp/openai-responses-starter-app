@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Item, MessageItem } from "@/lib/assistant";
+import { Item, MessageItem, processMessages } from "@/lib/assistant";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { INITIAL_MESSAGE } from "@/config/constants";
 
@@ -31,14 +31,15 @@ interface ConversationState {
   
   // Conversation management
   setActiveConversation: (conversationId: string | null) => void;
-  createNewConversation: (firstMessageContent?: string) => Promise<string | null>; // Accept optional first message
+  createNewConversation: (firstMessageContent?: string, firstAssistantContent?: string) => Promise<string | null>;
   loadConversation: (conversationId: string) => Promise<boolean>;
   
   // Messages management
   setChatMessages: (items: Item[]) => void;
   setConversationItems: (messages: any[]) => void;
-  addChatMessage: (item: Item, skipAddToChat?: boolean) => Promise<void>;
+  addChatMessage: (item: Item, skipAddToChat?: boolean, conversationIdOverride?: string) => Promise<void>;
   addConversationItem: (message: ChatCompletionMessageParam) => Promise<void>;
+  sendUserMessage: (message: string) => Promise<void>;
   
   // State management
   setLoading: (isLoading: boolean) => void;
@@ -123,8 +124,8 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     }
   },
   
-  createNewConversation: async (firstMessageContent?: string) => {
-    const { isAuthenticated, userId, resetState, fetchConversations, updateConversationTitleInState } = get();
+  createNewConversation: async (firstMessageContent?: string, firstAssistantContent?: string) => {
+    const { isAuthenticated, userId, resetState, fetchConversations, updateConversationTitleInState, addChatMessage, addConversationItem } = get();
 
     if (!isAuthenticated || !userId) {
       console.log('Creating local conversation only (not authenticated)');
@@ -169,6 +170,28 @@ const useConversationStore = create<ConversationState>((set, get) => ({
         conversationItems: [],
         isLoading: false, // Set loading false after initial creation
       });
+
+      // 2b. Add the first user and assistant messages if provided
+      if (firstMessageContent) {
+        // Pass newConversationId as override
+        await addChatMessage({
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: firstMessageContent }],
+        }, false, newConversationId);
+        // Also add to conversationItems for API context
+        await addConversationItem({ role: 'user', content: firstMessageContent });
+      }
+      if (firstAssistantContent) {
+        // Pass newConversationId as override
+        await addChatMessage({
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: firstAssistantContent }],
+        }, false, newConversationId);
+        // Also add to conversationItems for API context
+        await addConversationItem({ role: 'assistant', content: firstAssistantContent });
+      }
 
       // 3. Fetch updated conversation list to include the new one with placeholder
       // Use setTimeout to avoid re-render cascade
@@ -411,16 +434,19 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   
   setConversationItems: (messages) => set({ conversationItems: messages }),
   
-  addChatMessage: async (item, skipAddToChat = false) => {
+  addChatMessage: async (item, skipAddToChat = false, conversationIdOverride?: string) => {
     const { activeConversationId, isAuthenticated, userId, chatMessages, conversations, updateConversationTitleInState } = get();
     
     // Update local state immediately if not skipped
     if (!skipAddToChat) {
       set((state) => ({ chatMessages: [...state.chatMessages, item] }));
     }
+
+    // Determine which conversation ID to use for saving
+    const conversationIdToUse = conversationIdOverride ?? activeConversationId;
     
-    // If authenticated and has active conversation, save to database
-    if (isAuthenticated && userId && activeConversationId) {
+    // If authenticated and has a valid conversation ID, save to database
+    if (isAuthenticated && userId && conversationIdToUse) {
       try {
         // Extract the text content from the message
         let messageContent = '';
@@ -437,11 +463,12 @@ const useConversationStore = create<ConversationState>((set, get) => ({
               messageContent = messageItem.content[0].text || '';
               
               // Check if this is the first user message in a conversation with a placeholder title
-              const currentConversation = conversations.find((conv) => conv.id === activeConversationId);
-              if (currentConversation && currentConversation.title === "Generating title..." && chatMessages.length <= 2) {
-                // This is the first message in a conversation created with the Plus button
+              // Use conversationIdToUse here for consistency
+              const currentConversation = conversations.find((conv) => conv.id === conversationIdToUse);
+              if (currentConversation && currentConversation.title === "Generating title..." && chatMessages.filter(m => m.type === 'message').length <= 2) { 
+                // This is the first message in a conversation created with the Plus button or quick chat
                 // Trigger title generation
-                console.log(`Generating title for conversation ${activeConversationId} after first message...`);
+                console.log(`Generating title for conversation ${conversationIdToUse} after first message...`);
                 
                 // Generate title asynchronously in the background
                 (async () => {
@@ -458,10 +485,10 @@ const useConversationStore = create<ConversationState>((set, get) => ({
                     }
 
                     const { title: generatedTitle } = await titleResponse.json();
-                    console.log(`Generated title for ${activeConversationId}: "${generatedTitle}"`);
+                    console.log(`Generated title for ${conversationIdToUse}: "${generatedTitle}"`);
 
                     // Update the conversation title in the database
-                    const updateResponse = await fetch(`/api/conversations/${activeConversationId}`, {
+                    const updateResponse = await fetch(`/api/conversations/${conversationIdToUse}`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ title: generatedTitle }),
@@ -472,12 +499,12 @@ const useConversationStore = create<ConversationState>((set, get) => ({
                       return;
                     }
 
-                    console.log(`Successfully updated title for ${activeConversationId} in DB.`);
+                    console.log(`Successfully updated title for ${conversationIdToUse} in DB.`);
 
                     // Update the title in the local state for immediate UI reflection
-                    updateConversationTitleInState(activeConversationId, generatedTitle);
+                    updateConversationTitleInState(conversationIdToUse, generatedTitle);
                   } catch (err) {
-                    console.error(`Error during title generation/update for ${activeConversationId}:`, err);
+                    console.error(`Error during title generation/update for ${conversationIdToUse}:`, err);
                   }
                 })();
               }
@@ -485,15 +512,20 @@ const useConversationStore = create<ConversationState>((set, get) => ({
             // For assistant messages, get the text from output_text
             else if (messageItem.role === 'assistant' && messageItem.content[0].type === 'output_text') {
               // Store the entire content object for assistant messages to preserve formatting and annotations
-              messageContent = JSON.stringify(messageItem.content);
+              // If the content is already a string (from GradCapAssistant), use it directly
+              if (typeof messageItem.content[0].text === 'string') {
+                  messageContent = messageItem.content[0].text;
+              } else {
+                  messageContent = JSON.stringify(messageItem.content); 
+              }           
             }
           }
         }
         
         if (!messageContent || !role) return;
         
-        // Save message to the database
-        const response = await fetch(`/api/conversations/${activeConversationId}/messages`, {
+        // Save message to the database using conversationIdToUse
+        const response = await fetch(`/api/conversations/${conversationIdToUse}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -507,12 +539,15 @@ const useConversationStore = create<ConversationState>((set, get) => ({
         if (!response.ok) {
           const errorData = await response.json();
           console.error('Error saving message:', errorData.error);
+        } else {
+           console.log(`Message saved to DB for conversation ${conversationIdToUse}`);
         }
       } catch (error) {
         console.error('Error saving message to database:', error);
       }
     } else {
-      console.log('Message not saved to database (not authenticated or no active conversation)');
+      // Updated log message for clarity
+      console.log(`Message not saved to database (isAuthenticated: ${isAuthenticated}, userId: ${userId}, conversationIdToUse: ${conversationIdToUse})`);
     }
   },
   
@@ -521,6 +556,33 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     set((state) => ({
       conversationItems: [...state.conversationItems, message],
     }));
+  },
+  
+  // New function to send user message and trigger processing
+  sendUserMessage: async (message: string) => {
+    const { addChatMessage, addConversationItem } = get();
+    
+    if (!message.trim()) return; // Don't send empty messages
+    
+    // Create the user message item for the UI
+    const userMessageItem: MessageItem = {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: message }],
+    };
+    
+    // Add to UI and DB
+    await addChatMessage(userMessageItem); 
+    
+    // Add to conversation context for API call
+    const conversationItem: ChatCompletionMessageParam = {
+      role: "user",
+      content: message, // API expects just the string content here
+    };
+    await addConversationItem(conversationItem);
+    
+    // Trigger the API call and processing
+    processMessages();
   },
   
   // State management

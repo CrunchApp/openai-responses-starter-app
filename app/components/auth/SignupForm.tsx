@@ -162,7 +162,7 @@ export function SignupForm() {
             disabled={loading}
             className="w-full"
           >
-            Google
+            Google (Coming Soon)
           </Button>
           <Button
             variant="outline"
@@ -171,7 +171,7 @@ export function SignupForm() {
             disabled={loading}
             className="w-full"
           >
-            LinkedIn
+            LinkedIn (Coming Soon)
           </Button>
         </div>
       </CardContent>

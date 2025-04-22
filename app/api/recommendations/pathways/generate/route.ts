@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateEducationPathways } from '@/lib/ai/planningAgent';
+import { generateEducationPathways as planningAgentGeneratePathways } from '@/lib/ai/planningAgent';
 import { GeneratePathwaysPayload, EducationPathway } from '@/app/recommendations/types';
 import { checkUserAuthentication } from '@/app/recommendations/supabase-helpers';
 
@@ -12,30 +12,54 @@ function sanitizeUserProfile(userProfile: any) {
   
   const sanitized = {...userProfile};
   
-  // Ensure careerGoals is properly structured
+  // --- Ensure careerGoals is properly structured and preserve all provided fields ---
   if (!sanitized.careerGoals) {
-    sanitized.careerGoals = { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] };
+    sanitized.careerGoals = {
+      shortTerm: '',
+      longTerm: '',
+      achievements: '',
+      desiredIndustry: [],
+      desiredRoles: []
+    };
   } else {
-    // Preserve existing values even if empty strings
+    // Preserve existing values even if empty strings while providing sensible defaults for missing ones
     sanitized.careerGoals = {
       shortTerm: sanitized.careerGoals.shortTerm !== undefined ? sanitized.careerGoals.shortTerm : '',
       longTerm: sanitized.careerGoals.longTerm !== undefined ? sanitized.careerGoals.longTerm : '',
+      achievements: sanitized.careerGoals.achievements !== undefined ? sanitized.careerGoals.achievements : '',
       desiredIndustry: Array.isArray(sanitized.careerGoals.desiredIndustry) ? sanitized.careerGoals.desiredIndustry : [],
       desiredRoles: Array.isArray(sanitized.careerGoals.desiredRoles) ? sanitized.careerGoals.desiredRoles : []
     };
   }
   
-  // Ensure preferences is properly structured
+  // --- Ensure preferences is properly structured while preserving additional optional fields ---
   if (!sanitized.preferences) {
-    sanitized.preferences = { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 100000 } };
-  } else {
-    // Preserve existing values 
     sanitized.preferences = {
-      preferredLocations: Array.isArray(sanitized.preferences.preferredLocations) ? sanitized.preferences.preferredLocations : [],
-      studyMode: sanitized.preferences.studyMode !== undefined ? sanitized.preferences.studyMode : '',
-      startDate: sanitized.preferences.startDate !== undefined ? sanitized.preferences.startDate : '',
-      budgetRange: sanitized.preferences.budgetRange || { min: 0, max: 100000 }
+      preferredLocations: [],
+      studyMode: 'Full-time',
+      startDate: '',
+      budgetRange: { min: 0, max: 100000 },
+      preferredDuration: undefined,
+      preferredStudyLanguage: '',
+      livingExpensesBudget: undefined,
+      residencyInterest: undefined
     };
+  } else {
+    // Use spread first, then adjust properties to avoid duplicate keys in the literal
+    const prefs = sanitized.preferences;
+    const newPrefs: any = { ...prefs };
+
+    // Normalise and validate individual fields
+    newPrefs.preferredLocations = Array.isArray(prefs.preferredLocations) ? prefs.preferredLocations : [];
+    newPrefs.studyMode = prefs.studyMode !== undefined ? prefs.studyMode : '';
+    newPrefs.startDate = prefs.startDate !== undefined ? prefs.startDate : '';
+    newPrefs.budgetRange = prefs.budgetRange || { min: 0, max: 100000 };
+    newPrefs.preferredDuration = prefs.preferredDuration !== undefined ? prefs.preferredDuration : undefined;
+    newPrefs.preferredStudyLanguage = prefs.preferredStudyLanguage !== undefined ? prefs.preferredStudyLanguage : '';
+    newPrefs.livingExpensesBudget = prefs.livingExpensesBudget !== undefined ? prefs.livingExpensesBudget : undefined;
+    newPrefs.residencyInterest = typeof prefs.residencyInterest === 'boolean' ? prefs.residencyInterest : prefs.residencyInterest !== undefined ? prefs.residencyInterest : undefined;
+
+    sanitized.preferences = newPrefs;
   }
   
   return sanitized;
@@ -108,15 +132,15 @@ export async function POST(request: NextRequest) {
     }
     
     // Generate education pathways
-    let pathwaysResult;
+    let planningAgentResult;
     try {
-      pathwaysResult = await generateEducationPathways(
+      planningAgentResult = await planningAgentGeneratePathways(
         userProfile,
         previousResponseId,
         existingPathways,
         feedbackContext
       );
-      console.log('Education pathways generated successfully');
+      console.log('Education pathways generated successfully by planning agent');
     } catch (error) {
       console.error('Error generating education pathways:', error);
       clearTimeout(timeoutId);
@@ -131,17 +155,44 @@ export async function POST(request: NextRequest) {
     const executionTime = Date.now() - startTime;
     console.log(`Pathways generated in ${executionTime}ms`);
     
-    // Check if we have valid pathways
-    if (!pathwaysResult?.pathways || !Array.isArray(pathwaysResult.pathways) || pathwaysResult.pathways.length === 0) {
+    // Check if we have valid pathways from the agent
+    if (!planningAgentResult?.pathways || !Array.isArray(planningAgentResult.pathways) || planningAgentResult.pathways.length === 0) {
       return NextResponse.json({ 
         error: "Failed to generate valid education pathways. Please try again."
       }, { status: 500 });
     }
     
+    // --- Map pathways to frontend EducationPathway structure ---
+    const mappedPathways: EducationPathway[] = planningAgentResult.pathways.map((agentPathway: any) => ({
+      // Assuming EducationPathway type has these fields (adjust if needed)
+      id: '', // No ID from agent, will be assigned by DB/frontend
+      user_id: '', // No user ID from agent
+      title: agentPathway.title || 'Untitled Pathway',
+      qualification_type: agentPathway.qualificationType || 'Unknown Qualification',
+      field_of_study: agentPathway.fieldOfStudy || 'Unknown Field',
+      subfields: Array.isArray(agentPathway.subfields) ? agentPathway.subfields : [],
+      target_regions: Array.isArray(agentPathway.targetRegions) ? agentPathway.targetRegions : [],
+      budget_range_usd: {
+        min: agentPathway.budgetRange?.min ?? 0,
+        max: agentPathway.budgetRange?.max ?? 0,
+      },
+      // Map duration to a single number (max duration) to match expected type
+      duration_months: agentPathway.duration?.max ?? 0,
+      alignment_rationale: agentPathway.alignment || 'No rationale provided',
+      alternatives: Array.isArray(agentPathway.alternatives) ? agentPathway.alternatives : [],
+      query_string: agentPathway.queryString || '',
+      is_deleted: false, // Default value
+      is_explored: false, // Default value
+      created_at: new Date().toISOString(), // Add created_at
+      updated_at: new Date().toISOString(), // Add updated_at
+      last_explored_at: undefined, // Use undefined instead of null
+      user_feedback: null // Default value
+    }));
+    // --- End Mapping ---
+    
     return NextResponse.json({ 
-      pathways: pathwaysResult.pathways,
-      // Return the response ID so it can be used for future conversation turns
-      responseId: pathwaysResult.responseId
+      pathways: mappedPathways, // Return the mapped pathways
+      responseId: planningAgentResult.responseId
     });
     
   } catch (error) {

@@ -61,6 +61,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import SignupModal from "@/app/auth/SignupModal";
+import useProfileStore from "@/stores/useProfileStore";
+import { UserProfile } from "@/app/types/profile-schema";
 
 export function PathwayExplorer({ 
   userProfile, 
@@ -74,7 +77,7 @@ export function PathwayExplorer({
   onStopGeneration?: (success: boolean) => void;
 }) {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshSession } = useAuth();
   const { 
     pathways, 
     isLoading, 
@@ -100,6 +103,9 @@ export function PathwayExplorer({
     generateMorePathways,
     deleteProgram
   } = usePathwayStore();
+  const { profileData: guestProfileData } = useProfileStore();
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
+  const [isConvertingGuest, setIsConvertingGuest] = useState(false);
   
   const [generating, setGenerating] = useState(false);
   const [newPathwayIds, setNewPathwayIds] = useState<string[]>([]);
@@ -111,7 +117,7 @@ export function PathwayExplorer({
   
   const handleGeneratePathways = async () => {
     if (!userProfile) {
-      setError("User profile is required to generate pathways");
+      setError("User profile is required to generate pathways. Please visit the profile wizard to create your profile.");
       return;
     }
     
@@ -186,9 +192,11 @@ export function PathwayExplorer({
       setError("Failed to generate pathways. Please try again later.");
     } finally {
       setGenerating(false);
-      // Stop progress modal (success is implied if no error was thrown)
-      // The actual pathways might be empty, but the *generation attempt* completed
-      if (onStopGeneration && !error) onStopGeneration(true);
+      // Stop progress modal, passing true if no error was set, false otherwise.
+      // Ensure the callback is always called if it exists.
+      if (onStopGeneration) {
+        onStopGeneration(!error); // Pass the success state based on whether error is set
+      }
       // Clear new pathway IDs after a short delay
       setTimeout(() => setNewPathwayIds([]), 5000); 
     }
@@ -270,8 +278,81 @@ export function PathwayExplorer({
     return <PathwaysLoadingSkeleton />;
   }
   
+  const handleGuestSignupClick = () => {
+    if (!userProfile) {
+      // If guest profile is missing, route to wizard
+      console.log("Guest profile missing, routing to wizard.");
+      router.push('/profile-wizard');
+    } else {
+      // If guest profile exists, open signup modal for conversion
+      console.log("Guest profile found, opening signup modal.");
+      setIsSignupModalOpen(true);
+    }
+  };
+
+  const handleGuestSignupComplete = async (userId?: string) => {
+    setIsSignupModalOpen(false);
+    if (!userId) {
+      console.log("Signup skipped or failed.");
+      return; 
+    }
+
+    setIsConvertingGuest(true);
+    console.log("Starting guest conversion from PathwayExplorer for user:", userId);
+
+    try {
+      // Get guest data from stores
+      const profileToConvert = guestProfileData || {} as UserProfile;
+      const { pathways: guestPathways, programsByPathway: guestPrograms } = usePathwayStore.getState();
+
+      const conversionResponse = await fetch('/api/auth/convert-guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          profileData: profileToConvert,
+          pathways: guestPathways || [],
+          programsByPathway: guestPrograms || {},
+        }),
+      });
+
+      if (!conversionResponse.ok) {
+        const errorData = await conversionResponse.json();
+        throw new Error(errorData.error || 'Failed to convert guest data.');
+      }
+
+      console.log("Guest conversion successful from PathwayExplorer for user:", userId);
+
+      // Clear guest data from local storage and stores
+      localStorage.removeItem('userProfileData'); 
+      localStorage.removeItem('vista-profile-storage'); // Assuming this is used by profile store
+      localStorage.removeItem('pathway-store'); // Assuming this is used by pathway store
+      
+      // Clear Zustand stores
+      useProfileStore.getState().clearStore();
+      usePathwayStore.getState().clearStore();
+
+      await refreshSession(); // Refresh auth state to log the user in
+
+    } catch (error) {
+      console.error("Error during guest conversion from PathwayExplorer:", error);
+      alert(`Failed to save your data during signup: ${error instanceof Error ? error.message : String(error)}`);
+      // Potentially add more robust error handling for the user
+    } finally {
+      setIsConvertingGuest(false);
+    }
+  };
+  
   return (
     <div className="space-y-6">
+      <SignupModal
+        isOpen={isSignupModalOpen}
+        onClose={() => setIsSignupModalOpen(false)}
+        onComplete={handleGuestSignupComplete}
+        isLoading={isConvertingGuest}
+        profileData={guestProfileData || {} as UserProfile}
+      />
+
       <div className="flex flex-col space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold">Your Education Pathways</h2>
@@ -362,8 +443,13 @@ export function PathwayExplorer({
             <AlertTitle>Guest limit reached</AlertTitle>
             <AlertDescription className="flex items-center justify-between">
               <span>You've reached the limit for generating pathways as a guest.</span>
-              <Button size="sm" onClick={() => router.push('/signup')} className="ml-2">
-                Sign up for more
+              <Button 
+                size="sm" 
+                onClick={handleGuestSignupClick} 
+                className="ml-2"
+                disabled={isConvertingGuest || isSignupModalOpen}
+              >
+                {isConvertingGuest ? 'Saving...' : 'Sign up for more'}
               </Button>
             </AlertDescription>
           </Alert>
@@ -375,8 +461,14 @@ export function PathwayExplorer({
             <AlertTitle>Guest mode</AlertTitle>
             <AlertDescription>
               You're using Vista as a guest. You can generate pathways {maxGuestPathwayGenerations} time. 
-              <Button variant="link" size="sm" className="px-1 h-auto" onClick={() => router.push('/signup')}>
-                Sign up to save your progress and generate unlimited pathways.
+              <Button 
+                variant="link" 
+                size="sm" 
+                className="px-1 h-auto" 
+                onClick={handleGuestSignupClick}
+                disabled={isConvertingGuest || isSignupModalOpen}
+              >
+                {isConvertingGuest ? 'Saving...' : 'Sign up to save your progress and generate unlimited pathways.'}
               </Button>
             </AlertDescription>
           </Alert>

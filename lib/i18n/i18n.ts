@@ -24,7 +24,7 @@ i18n
       loadPath: `${process.env.NEXT_PUBLIC_APP_URL || ''}/locales/{{lng}}/{{ns}}.json`,
     },
     supportedLngs: ['en', 'ar', 'fa', 'tr', 'zh'],
-    nonExplicitSupportedLngs: true,
+    nonExplicitSupportedLngs: false,
     // Language detection options
     detection: {
       order: ['querystring', 'cookie', 'localStorage', 'navigator', 'htmlTag'],

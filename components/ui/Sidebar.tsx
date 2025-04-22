@@ -214,11 +214,12 @@ export function Sidebar() {
               initial={false}
               animate={isCollapsed ? 'collapsed' : 'expanded'}
               variants={contentVariants}
+              className="overflow-hidden"
             >
-              <p className="font-medium line-clamp-1 text-foreground">
+              <p className="font-medium text-foreground truncate whitespace-nowrap">
                 {profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}` : user.email}
               </p>
-              <p className="text-xs text-foreground/60 line-clamp-1">{user.email}</p>
+              <p className="text-xs text-foreground/60 truncate whitespace-nowrap">{user.email}</p>
             </motion.div>
           </div>
         ) : (

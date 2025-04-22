@@ -52,6 +52,8 @@ import { SavedProgramsView } from "./SavedProgramsView";
 import { RecommendationProgressModal, RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
 import Image from "next/image";
 import { HowItWorksModal, RecommendationOptionsModal } from "./_components";
+import SignupModal from "@/app/auth/SignupModal";
+import { UserProfile } from "@/app/types/profile-schema";
 
 // Add interface for Supabase profile to fix type issues
 interface SupabaseProfile {
@@ -151,10 +153,10 @@ function mapSupabaseProfileToUserProfile(profile: SupabaseProfile | null): any {
 
 export default function RecommendationsPage() {
   const { vectorStore, fileSearchEnabled, setFileSearchEnabled } = useToolsStore();
-  const { isProfileComplete, vectorStoreId, setProfileComplete, setVectorStoreId, resetProfile } = useProfileStore();
+  const { isProfileComplete, vectorStoreId, setProfileComplete, setVectorStoreId, resetProfile, profileData: guestProfileData } = useProfileStore();
   const { resetAllPathways, isActionLoading, actionError } = usePathwayStore();
   const router = useRouter();
-  const { user, profile: authProfile, loading: authLoading } = useAuth();
+  const { user, profile: authProfile, loading: authLoading, refreshSession } = useAuth();
   
   // Type assertion for authProfile
   const typedProfile = authProfile as SupabaseProfile | null;
@@ -174,6 +176,12 @@ export default function RecommendationsPage() {
 
   const [isGuestResetting, setIsGuestResetting] = useState(false);
   const [isAuthResetting, setIsAuthResetting] = useState(false);
+
+  // Get guest data from stores for potential conversion
+  const { pathways: guestPathways, programsByPathway: guestPrograms } = usePathwayStore(); 
+  
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
+  const [isConvertingGuest, setIsConvertingGuest] = useState(false); // Loading state for conversion
 
   useEffect(() => {
     if (authLoading) {
@@ -217,32 +225,152 @@ export default function RecommendationsPage() {
   
   }, [authLoading, user, typedProfile, router, isProfileComplete, setVectorStoreId, setProfileComplete, vectorStoreId, fileSearchEnabled, setFileSearchEnabled]);
 
-  const handleGuestReset = async () => {
-    if (user) {
-       console.warn("Authenticated user attempting guest 'Start Over'. Action unclear.");
-       alert("Please manage your profile and data from the settings page.");
-       return; 
+  const handleGuestSignupClick = () => {
+    if (!isProfileComplete) {
+      // If guest profile is missing, route to wizard
+      console.log("Guest profile missing, routing to wizard.");
+      router.push('/profile-wizard');
+    } else {
+      // If guest profile exists, open signup modal for conversion
+      console.log("Guest profile found, opening signup modal.");
+      setIsSignupModalOpen(true);
+    }
+  };
+
+  const handleGuestSignupComplete = async (userId?: string) => {
+    setIsSignupModalOpen(false);
+    if (!userId) {
+      console.log("Signup skipped or failed.");
+      return; 
     }
 
-    try {
-      setIsGuestResetting(true);
-      
-      const { setVectorStore } = useToolsStore.getState();
-      setVectorStore({ id: "", name: "" }); 
-      resetProfile();
-      
-      // Use clearGuestData instead of clearStore to specifically clean guest data
-      const { clearGuestData } = await import("@/stores/usePathwayStore").then(mod => mod.default.getState());
-      clearGuestData(); 
+    setIsConvertingGuest(true);
+    console.log("Starting guest conversion for user:", userId);
 
-      setVectorStoreId(null);
-      setProfileComplete(false);
-      
-      console.log("[RecPage] Guest reset complete. Redirecting to wizard.");
-      router.push('/profile-wizard');
+    try {
+      const profileToConvert = guestProfileData || {} as UserProfile;
+      const pathwaysToConvert = guestPathways || [];
+      const programsToConvert = guestPrograms || {};
+
+      const conversionResponse = await fetch('/api/auth/convert-guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          profileData: profileToConvert,
+          pathways: pathwaysToConvert,
+          programsByPathway: programsToConvert,
+        }),
+      });
+
+      if (!conversionResponse.ok) {
+        const errorData = await conversionResponse.json();
+        throw new Error(errorData.error || 'Failed to convert guest data.');
+      }
+
+      console.log("Guest conversion successful for user:", userId);
+
+      localStorage.removeItem('userProfileData'); 
+      localStorage.removeItem('vista-profile-storage');
+      localStorage.removeItem('pathway-store');
+
+      await refreshSession(); 
+
     } catch (error) {
-      console.error('Error resetting guest profile:', error);
-      setPageError("Failed to reset profile. Please try again.");
+      console.error("Error during guest conversion:", error);
+      alert(`Failed to save your data during signup: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsConvertingGuest(false);
+    }
+  };
+
+  const handleGuestReset = async () => {
+    setIsGuestResetting(true);
+    console.log("Initiating guest profile reset...");
+
+    try {
+      // Get profile data and vector store ID from the profile store for the guest
+      const { profileData: guestProfile, vectorStoreId: guestVectorStoreId, clearStore: clearProfileWizardStore } = useProfileStore.getState();
+      const { clearStore: clearPathwayStore } = usePathwayStore.getState();
+
+      // *** VECTOR STORE CLEANUP START ***
+      if (guestVectorStoreId) {
+        console.log("Cleaning up guest vector store:", guestVectorStoreId);
+        try { 
+          // Clean up document file IDs from guest profile data
+          const docFileIds: string[] = [];
+          if (guestProfile && guestProfile.documents) {
+            Object.entries(guestProfile.documents).forEach(([key, value]) => {
+              // Check if value is a valid document object with fileId
+              if (value && typeof value === 'object' && 'fileId' in value && typeof value.fileId === 'string') {
+                docFileIds.push(value.fileId); 
+              }
+            });
+          }
+          
+          // Add profile file ID if it exists in guest data
+          if (guestProfile && guestProfile.profileFileId) {
+            docFileIds.push(guestProfile.profileFileId);
+          }
+          
+          console.log("Cleaning up guest document file IDs:", docFileIds);
+          
+          // Delete each file individually
+          for (const fileId of docFileIds) {
+            try {
+              await fetch(`/api/vector_stores/delete_file?file_id=${fileId}`, { method: "DELETE" });
+              console.log(`Deleted guest file ${fileId}`);
+            } catch (fileError) {
+              console.error(`Error deleting guest file ${fileId}:`, fileError);
+              // Continue trying to delete other files and the store
+            }
+          }
+          
+          // Clean up the whole vector store
+          const cleanupResponse = await fetch(`/api/vector_stores/cleanup?vector_store_id=${guestVectorStoreId}`, {
+            method: 'DELETE'
+          });
+          
+          if (!cleanupResponse.ok) {
+            console.error('Failed to clean up guest vector store:', cleanupResponse.statusText);
+          } else {
+            console.log("Guest vector store cleanup successful for:", guestVectorStoreId);
+          }
+        } catch (cleanupError) {
+           console.error("Error during guest vector store cleanup:", cleanupError);
+           // Still try to clear local state even if backend cleanup fails partially
+        }
+      } else {
+        console.log("No guest vector store ID found, skipping backend cleanup.");
+      }
+      // *** VECTOR STORE CLEANUP END ***
+
+      // 1. Clear Zustand profile store
+      clearProfileWizardStore(); 
+      console.log("Cleared profile store.");
+
+      // 2. Clear Zustand pathway store
+      clearPathwayStore();
+      console.log("Cleared pathway store.");
+
+      // 3. Clear LocalStorage (important for guest persistence)
+      localStorage.removeItem('userProfileData');
+      localStorage.removeItem('pathwayData'); // Assuming you store pathway data here too
+      console.log("Cleared localStorage.");
+
+      // 4. Reset Tools Store state related to guest (redundant if store cleared, but safe)
+      const { setVectorStore, setFileSearchEnabled } = useToolsStore.getState();
+      setVectorStore({ id: "", name: "" }); // Clear vector store info
+      setFileSearchEnabled(false); // Disable file search
+      console.log("Reset tools store state.");
+
+      // 5. Redirect to the profile wizard start page
+      router.push("/profile-wizard"); 
+      console.log("Redirecting to profile wizard...");
+
+    } catch (error) {
+      console.error("Error resetting guest profile:", error);
+      setPageError("Failed to reset your profile. Please try again.");
     } finally {
       setIsGuestResetting(false);
     }
@@ -351,17 +479,28 @@ export default function RecommendationsPage() {
     setSelectedTab(tab);
   }
   
+  // Determine the profile to pass based on auth state
+  const profileForExplorer = user 
+    ? mapSupabaseProfileToUserProfile(typedProfile) 
+    : guestProfileData;
+
   return (
     <PageWrapper allowGuest>
-      {/* Render the Progress Modal */}
       <RecommendationProgressModal
         isOpen={isModalOpen}
-        progressStages={RECOMMENDATION_STAGES_ENHANCED.slice(0, 5)} // Adjust based on used stages
+        progressStages={RECOMMENDATION_STAGES_ENHANCED.slice(0, 5)}
         currentStageIndex={currentStageIndex}
         isComplete={isGenerationComplete}
       />
 
-      {/* Add decorative background elements similar to dashboard */}
+      <SignupModal
+        isOpen={isSignupModalOpen}
+        onClose={() => setIsSignupModalOpen(false)}
+        onComplete={handleGuestSignupComplete}
+        isLoading={isConvertingGuest}
+        profileData={guestProfileData || {} as UserProfile}
+      />
+
       <div className="fixed inset-0 w-full h-full pointer-events-none overflow-hidden z-0">
         <motion.div 
           initial={{ scale: 0.8, opacity: 0 }}
@@ -387,7 +526,6 @@ export default function RecommendationsPage() {
       <TooltipProvider>
         <div className="container mx-auto py-6 md:py-10 px-4 max-w-6xl relative z-10">
           <>
-            {/* Enhanced header with illustrations */}
             <div className="mb-12">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
               <motion.div
@@ -413,8 +551,14 @@ export default function RecommendationsPage() {
                   >
                     <Shield className="h-4 w-4 mr-2 text-amber-500" />
                     <span>You're browsing in guest mode with limited features.</span>
-                      <Button variant="link" size="sm" className="p-0 h-auto text-sm ml-1 text-amber-700 font-medium" onClick={() => router.push('/profile-wizard')}>
-                      Sign up for full access →
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="p-0 h-auto text-sm ml-1 text-amber-700 font-medium" 
+                      onClick={handleGuestSignupClick}
+                      disabled={isConvertingGuest}
+                    >
+                      {isConvertingGuest ? 'Saving...' : 'Sign up for full access →'}
                     </Button>
                   </motion.div>
                 )}
@@ -427,7 +571,6 @@ export default function RecommendationsPage() {
                 )}
               </motion.div>
               
-                {/* Add SVG illustrations with speech/thought bubbles */}
                 <motion.div 
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -435,7 +578,6 @@ export default function RecommendationsPage() {
                   className="flex justify-center relative order-first md:order-last"
                 >
                   <div className="relative w-full h-[300px] flex items-center justify-center">
-                    {/* Girl SVG */}
                     <motion.div 
                       className="absolute right-0 md:right-10 top-0 md:top-10 w-1/2 h-[200px] flex flex-col items-end justify-end"
                       whileHover={{ scale: 1.05, rotate: -2 }}
@@ -448,7 +590,6 @@ export default function RecommendationsPage() {
                         style={{ objectFit: "contain" }}
                         priority
                       />
-                      {/* Move speech bubble to bottom */}
                       <div className="w-full flex justify-end mt-2 relative z-10">
                         <div className="bg-blue-100 rounded-lg p-2 pl-3 shadow-sm flex items-center gap-2">
                           <p className="text-xs font-medium text-blue-700 mb-0 max-w-[140px]">Learn how recommendations work!</p>
@@ -456,7 +597,6 @@ export default function RecommendationsPage() {
                         </div>
                       </div>
                     </motion.div>
-                    {/* Boy SVG */}
                     <motion.div 
                       className="absolute left-0 md:left-10 bottom-0 md:bottom-10 w-1/2 h-[200px] flex flex-col items-start justify-end"
                       whileHover={{ scale: 1.05, rotate: 2 }}
@@ -469,7 +609,6 @@ export default function RecommendationsPage() {
                         style={{ objectFit: "contain" }}
                         priority
                       />
-                      {/* Move thought bubble to bottom */}
                       <div className="w-full flex justify-start mt-2 relative z-10">
                         <div className="bg-amber-100 rounded-lg p-2 pl-3 shadow-sm flex items-center gap-2">
                           <p className="text-xs font-medium text-amber-700 mb-0 max-w-[140px]">Not seeing what you expected?</p>
@@ -561,7 +700,7 @@ export default function RecommendationsPage() {
                 className="mt-0 animate-in fade-in-50 duration-300 data-[state=inactive]:animate-out data-[state=inactive]:fade-out-0 data-[state=inactive]:duration-150"
               >
                 <PathwayExplorer 
-                  userProfile={mapSupabaseProfileToUserProfile(typedProfile)} 
+                  userProfile={profileForExplorer}
                   onStartGeneration={startProgressSimulation} 
                   onStopGeneration={stopProgressSimulation} 
                 /> 
@@ -580,12 +719,6 @@ export default function RecommendationsPage() {
                       <p className="text-slate-600 mb-6 max-w-md mx-auto">
                         Create an account to save your favorite programs and access them anytime, anywhere.
                       </p>
-                      <Button 
-                        onClick={() => router.push('/profile-wizard')}
-                        className="px-6 py-2"
-                      >
-                        Create Account
-                      </Button>
                     </div>
                   )}
                 </div>

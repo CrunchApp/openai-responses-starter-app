@@ -1,28 +1,67 @@
 "use client";
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SendHorizontal, Loader2, Lightbulb, CheckCircle2 } from 'lucide-react';
+import { SendHorizontal, Loader2, Lightbulb, CheckCircle2, Search, FunctionSquare } from 'lucide-react';
 import useConversationStore from '@/stores/useConversationStore';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Item, MessageItem, ToolCallItem } from '@/lib/assistant'; // Import Item types
+import Message from '../message'; // Import Message component
 
 interface GradCapAssistantProps {
   className?: string;
   contextMessage?: string; // Additional system context sent before user message
   placeholder?: string;    // Custom placeholder for the input
+  size?: 'default' | 'small'; // Size variant
+  onOpen?: () => void;
+  onClose?: () => void;
 }
 
 // Local storage keys for the hint popup
 const POPUP_SEEN_KEY = 'hasSeenGradCapHintPopup';
 const POPUP_DONT_SHOW_KEY = 'dontShowGradCapHintPopup';
 
+// Simplified display for tool calls within the popup
+const ToolCallDisplay: React.FC<{ toolCall: ToolCallItem, size: 'default' | 'small' }> = ({ toolCall, size }) => {
+  let icon = <FunctionSquare className={cn("mr-1.5", size === 'small' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />;
+  let text = `Calling tool: ${toolCall.name || toolCall.tool_type}`;
+
+  if (toolCall.tool_type === 'web_search_call') {
+    icon = <Search className={cn("mr-1.5", size === 'small' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />;
+    text = "Searching the web...";
+  } else if (toolCall.tool_type === 'file_search_call') {
+    icon = <Search className={cn("mr-1.5", size === 'small' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />;
+    text = "Searching files...";
+  }
+
+  if (toolCall.status === 'completed' || toolCall.status === 'failed') {
+     text = toolCall.tool_type === 'function_call'
+        ? `Tool ${toolCall.name} ${toolCall.status}`
+        : `${toolCall.tool_type.replace('_call', '')} ${toolCall.status}`;
+  }
+
+  return (
+    <div className={cn("mt-2 flex items-center p-2 bg-muted/50 border border-border rounded text-muted-foreground", size === 'small' ? 'text-[10px]' : 'text-xs')}>
+      {toolCall.status === 'in_progress' || toolCall.status === 'searching' ? (
+        <Loader2 className={cn("mr-1.5 animate-spin", size === 'small' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+      ) : (
+        icon
+      )}
+      <span>{text}</span>
+    </div>
+  );
+};
+
 export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   className,
   contextMessage,
   placeholder,
+  size = 'default', // Default size
+  onOpen,
+  onClose,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [message, setMessage] = useState('');
@@ -31,6 +70,7 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   const [assistantResponse, setAssistantResponse] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [userMessageIndex, setUserMessageIndex] = useState<number | null>(null); // Track user message index
   const sendUserMessage = useConversationStore((state) => state.sendUserMessage);
   const addConversationItem = useConversationStore((state) => state.addConversationItem);
   const createNewConversation = useConversationStore((state) => state.createNewConversation);
@@ -45,40 +85,77 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
 
   const constraintsRef = useRef(null);
 
-  // Track the last user message sent from this component
+  // New Effect to detect completion based on chatMessages updates
   useEffect(() => {
-    if (!lastUserMessage) return;
-    // Find the user message index
-    const userIdx = chatMessages.findIndex(
-      (msg) => msg.type === 'message' && msg.role === 'user' && msg.content[0]?.text === lastUserMessage
-    );
-    if (userIdx === -1) return;
-    // Find the next assistant message after the user message
-    const assistantMsg = chatMessages
-      .slice(userIdx + 1)
-      .find((msg) => msg.type === 'message' && msg.role === 'assistant') as any;
-    if (!assistantMsg) return;
-    const text = assistantMsg.content[0]?.text ?? '';
-    setAssistantResponse(text); // This will update as the stream progresses
-
-    // Set loading false and show save prompt *after* response is received
-    if (text.length > 0 && isLoading) { // Check isLoading to ensure this runs only once after loading finishes
-      setIsLoading(false);
-      setShowSavePrompt(true); // Show the prompt to save
+    // Only run logic if we are in a loading state initiated by this component
+    if (!isLoading || userMessageIndex === null) {
+        return;
     }
-  }, [chatMessages, lastUserMessage, isLoading]); // Added isLoading dependency
+    console.log(`GradCapAssistant Effect [chatMessages]: isLoading=${isLoading}, userMessageIndex=${userMessageIndex}`);
 
-  // Focus input when box opens
+    const relevantItems = chatMessages.slice(userMessageIndex + 1);
+    console.log(`GradCapAssistant Effect [chatMessages]: relevantItems count: ${relevantItems.length}`);
+
+    if (relevantItems.length > 0) {
+      const lastRelevantItem = relevantItems[relevantItems.length - 1];
+      console.log(`GradCapAssistant Effect [chatMessages]: Last relevant item:`, lastRelevantItem);
+
+      // Check if the last item indicates the end of a turn
+      const turnSeemsComplete = (
+        (lastRelevantItem.type === 'message' && lastRelevantItem.role === 'assistant') ||
+        (lastRelevantItem.type === 'tool_call' && (lastRelevantItem.status === 'completed' || lastRelevantItem.status === 'failed'))
+      );
+
+      console.log(`GradCapAssistant Effect [chatMessages]: Turn seems complete? ${turnSeemsComplete}`);
+
+      if (turnSeemsComplete) {
+        // Extract final assistant text response for simplified saving
+        const finalAssistantMsg = [...relevantItems].reverse().find(
+          item => item.type === 'message' && item.role === 'assistant'
+        ) as MessageItem | undefined;
+
+        if (finalAssistantMsg && finalAssistantMsg.content[0]?.text) {
+          console.log('GradCapAssistant Effect [chatMessages]: Found final assistant text for saving.');
+          setAssistantResponse(finalAssistantMsg.content[0].text);
+        } else {
+          console.log('GradCapAssistant Effect [chatMessages]: No final assistant text message found for saving.');
+          setAssistantResponse(null); // Ensure it's null if no text found
+        }
+
+        // Mark loading as finished and show the prompt
+        console.log('GradCapAssistant Effect [chatMessages]: Setting isLoading false, showSavePrompt true.');
+        setIsLoading(false);
+        setShowSavePrompt(true);
+      }
+       // If not complete, do nothing and wait for the next chatMessages update
+       else {
+           console.log('GradCapAssistant Effect [chatMessages]: Turn not yet complete.');
+       }
+    }
+     // If no relevant items yet, do nothing and wait for updates
+     else {
+         console.log('GradCapAssistant Effect [chatMessages]: No relevant items yet.');
+     }
+
+  }, [chatMessages, isLoading, userMessageIndex]); // Rerun whenever chatMessages changes while loading
+
+  // Focus input when box opens (adjusted dependencies)
   useEffect(() => {
     if (isHovered && inputRef.current) {
       inputRef.current.focus();
+      if (onOpen) onOpen();
     }
-  }, [isHovered]);
+    // Close condition: not hovered, not loading, AND no message index (i.e., no active quick chat)
+    if (!isHovered && !isLoading && userMessageIndex === null && onClose) {
+      onClose();
+    }
+  }, [isHovered, isLoading, userMessageIndex, onOpen, onClose]);
 
-  // On new question, clear save prompt and localStorage
+  // On new question, clear save prompt, user message index and localStorage
   useEffect(() => {
     if (isLoading) {
       setShowSavePrompt(false);
+      setConversationId(null); // Clear any previous saved conversation ID
       localStorage.removeItem('vista_quick_response');
     }
   }, [isLoading]);
@@ -126,29 +203,47 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   };
 
   const handleSendMessage = async () => {
-    if (!message.trim()) return;
-    // Reset context to ensure quick chat is isolated
+    if (!message.trim() || isLoading) return; // Prevent sending while loading
+
+    const userMessageContent = message; // Store message content before clearing
+    setMessage(''); // Clear input immediately
+
+    // Reset state for a new quick chat interaction
+    setIsLoading(true);
+    setShowSavePrompt(false);
+    setAssistantResponse(null);
+    setLastUserMessage(userMessageContent); // Store the text of the message being sent
+    setConversationId(null);
+    setUserMessageIndex(null); // Reset user message index
+
+    // Reset context in store for isolated quick chat
     const {
       setActiveConversation,
       setConversationItems,
+      setChatMessages, // Get access to setChatMessages
+      chatMessages: currentChatMessages // Get current messages to find index later
     } = useConversationStore.getState();
-    // Detach from any existing conversation so the quick chat starts fresh
+
     setActiveConversation(null);
-    // Clear any leftover conversation items to avoid leaking prior context
-    setConversationItems([]);
+    setConversationItems([]); // Clear API context items
 
-    setIsLoading(true);
-    setAssistantResponse(null);
-    setLastUserMessage(message);
-    setConversationId(null);
+    // Find the index *before* adding the new message
+    const initialMessagesLength = currentChatMessages.length;
 
-    // If we have additional context, inject it as a system message before the user's question
+    // If we have additional context, inject it as a system message
     if (contextMessage) {
       await addConversationItem({ role: "system", content: contextMessage });
     }
 
-    await sendUserMessage(message);
-    setMessage('');
+    // Send the user message (this will trigger processing)
+    await sendUserMessage(userMessageContent);
+
+    // After sendUserMessage potentially updates chatMessages, find the index
+    // Use a slight delay or check store state directly if needed
+    // For simplicity, assume sendUserMessage updates the store synchronously enough or rely on useEffect
+    // Set the user message index based on the state *after* the message was likely added
+    // This might be slightly racy, ideally sendUserMessage would return the added item or index
+    setUserMessageIndex(initialMessagesLength); // Set index based on length before adding
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -167,19 +262,70 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
 
   // Save as conversation prompt logic
   const handleSaveAsConversation = async (save: boolean) => {
-    setShowSavePrompt(false);
-    if (save && lastUserMessage && assistantResponse) {
-      // Save as conversation: create new conversation and send both messages
-      const convId = await createNewConversation(lastUserMessage, assistantResponse);
-      setConversationId(convId || null);
-    } else if (!save && assistantResponse) {
-      // Store the response in localStorage for later retrieval
-      localStorage.setItem('vista_quick_response', JSON.stringify({
-        question: lastUserMessage,
-        response: assistantResponse,
-        timestamp: Date.now(),
-      }));
+    setShowSavePrompt(false); // Hide prompt immediately
+
+    // Find the relevant items (messages/tool calls after user's message)
+    const relevantItems = userMessageIndex !== null ? chatMessages.slice(userMessageIndex + 1) : [];
+
+    if (save) {
+      // --- Saving the conversation --- 
+      console.log('Attempting to save quick chat as new conversation...');
+
+      // Find the *last* assistant message in the relevant items
+      const finalAssistantMsg = [...relevantItems].reverse().find(
+          item => item.type === 'message' && item.role === 'assistant'
+      ) as MessageItem | undefined;
+      
+      const finalAssistantText = finalAssistantMsg?.content[0]?.text;
+
+      // Ensure we have the user message and the final assistant text
+      if (lastUserMessage && finalAssistantText) {
+          console.log(`Saving with User: "${lastUserMessage.substring(0, 50)}..." | Assistant: "${finalAssistantText.substring(0, 50)}..."`);
+          
+          // Call createNewConversation with the initial user message and the *full final* assistant text
+          const convId = await createNewConversation(lastUserMessage, finalAssistantText);
+          
+          if (convId) {
+              console.log('Saved conversation with ID:', convId);
+              setConversationId(convId); // Store the new ID locally to show "Continue in chat"
+              // **DO NOT RESET STATE HERE** - Keep the messages visible
+          } else {
+              console.error("Failed to create conversation from quick chat.");
+              // Handle error (e.g., show a toast notification)
+              // Reset state if saving fails to allow user to try again or dismiss
+              setLastUserMessage(null);
+              setAssistantResponse(null);
+              setUserMessageIndex(null);
+          }
+      } else {
+          console.warn("Cannot save conversation: missing user message or final assistant text.");
+          // Reset state if critical info is missing
+          setLastUserMessage(null);
+          setAssistantResponse(null);
+          setUserMessageIndex(null);
+      }
+    } else {
+      // --- Not saving the conversation --- 
+      console.log('Storing quick chat response locally (Not Saving Conversation)...');
+       // Store the potentially incomplete response in localStorage is fine here
+      if (lastUserMessage && assistantResponse) {
+          localStorage.setItem('vista_quick_response', JSON.stringify({
+            question: lastUserMessage,
+            response: assistantResponse, // Use state variable for local storage
+            timestamp: Date.now(),
+          }));
+      } else {
+          console.warn("Cannot store locally: missing user message or assistant response state.");
+      }
+      // **RESET STATE** when choosing not to save, clearing the display
+      setLastUserMessage(null);
+      setAssistantResponse(null);
+      setUserMessageIndex(null);
     }
+    // **REMOVE**: This reset was happening for both Yes and No
+    // setLastUserMessage(null);
+    // setAssistantResponse(null);
+    // setUserMessageIndex(null);
   };
 
   const [isDragging, setIsDragging] = useState(false);
@@ -187,30 +333,34 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   return (
     <motion.div
       ref={constraintsRef}
-      drag
-      dragControls={dragControls}
-      dragListener={false}
-      className={cn('absolute z-50 cursor-grab active:cursor-grabbing', className)}
-      style={{ touchAction: 'none' }}
-      onPointerDown={(event) => {
-        // Allow dragging from anywhere *except* interactive elements within the popup
-        const popupElement = widgetRef.current;
-        const target = event.target as HTMLElement;
-
-        // Check if the target is inside the popup AND is an interactive element
-        const isInteractiveElementInPopup = popupElement?.contains(target) && (
-          target.tagName === 'INPUT' ||
-          target.tagName === 'BUTTON' ||
-          target.closest('button') // Also check if it's inside a button
-        );
-
-        if (!isInteractiveElementInPopup) {
-          // Start dragging if the target is not an interactive element inside the popup
-          dragControls.start(event, { snapToCursor: false });
-          setIsDragging(true);
-        }
-      }}
-      onPointerUp={() => setIsDragging(false)}
+      {...(size === 'small'
+        ? {
+            className: cn('w-full', className),
+            style: { position: 'static', width: '100%' },
+          }
+        : {
+            drag: true,
+            dragControls: dragControls,
+            dragListener: false,
+            className: cn('absolute z-50 cursor-grab active:cursor-grabbing', className),
+            style: { touchAction: 'none' },
+            onPointerDown: (event: any) => {
+              // Allow dragging from anywhere *except* interactive elements within the popup
+              const popupElement = widgetRef.current;
+              const target = event.target as HTMLElement;
+              // Check if the target is inside the popup AND is an interactive element
+              const isInteractiveElementInPopup = popupElement?.contains(target) && (
+                target.tagName === 'INPUT' ||
+                target.tagName === 'BUTTON' ||
+                target.closest('button')
+              );
+              if (!isInteractiveElementInPopup) {
+                dragControls.start(event, { snapToCursor: false });
+                setIsDragging(true);
+              }
+            },
+            onPointerUp: () => setIsDragging(false),
+          })}
     >
       <motion.div
         onHoverStart={() => { setIsHovered(true); setIsCapHovered(true); }}
@@ -224,8 +374,8 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
           <Image
             src="/images/vectors/cap.png"
             alt="Vista Assistant"
-            width={86}
-            height={86}
+            width={size === 'small' ? 50 : 86} // Smaller image
+            height={size === 'small' ? 50 : 86}
             priority
             className="cursor-grab active:cursor-grabbing"
             onClick={() => {
@@ -244,7 +394,7 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
             aria-label="Show assistant info"
             type="button"
           >
-            <Lightbulb className="h-5 w-5 text-amber-400" />
+            <Lightbulb className={cn("text-amber-400", size === 'small' ? 'h-4 w-4' : 'h-5 w-5')} />
           </button>
         )}
       </motion.div>
@@ -258,7 +408,10 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
             exit={{ opacity: 0, y: -10, scale: 0.9 }}
             transition={{ duration: 0.3, ease: "backOut" }}
             // Position relative to the main draggable container
-            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-4 bg-background border border-border rounded-lg shadow-xl z-40 text-left"
+            className={cn(
+              "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 bg-background border border-border rounded-lg shadow-xl z-40 text-left",
+              size === 'small' ? 'w-60' : 'w-72' // Smaller hint popup
+            )}
             // Prevent this popup from triggering the drag
             onPointerDown={(e) => e.stopPropagation()}
           >
@@ -270,15 +423,15 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
               ×
             </button>
             <div className="flex items-start space-x-2 mb-2">
-              <Lightbulb className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <Lightbulb className={cn("text-amber-400 mt-0.5 flex-shrink-0", size === 'small' ? 'h-4 w-4' : 'h-5 w-5')} />
               <div>
-                <p className="text-sm font-medium text-foreground mb-1">Quick Chat!</p>
-                <p className="text-xs text-muted-foreground">
-                  Hover over the cap anytime to ask the Vista Assistant a quick question.
+                <p className={cn("font-medium text-foreground mb-1", size === 'small' ? 'text-[11px]' : 'text-[0.625rem]')}>Quick Chat!</p>
+                <p className={cn("text-muted-foreground", size === 'small' ? 'text-[11px]' : 'text-[0.625rem]')}>
+                  Wherever you see me on the app, you can hover over the cap to ask the Vista Assistant a quick question. You can also drag me around the screen. Just double click and hold to move me to a new location.
                 </p>
               </div>
             </div>
-            <label className="flex items-center gap-2 text-xs cursor-pointer select-none mt-2">
+            <label className={cn("flex items-center gap-2 cursor-pointer select-none mt-2", size === 'small' ? 'text-[10px]' : 'text-[0.625rem]')}>
               <input
                 type="checkbox"
                 checked={dontShowHintAgain}
@@ -300,13 +453,16 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
             className={cn(
-              'absolute top-full left-0 mt-2 -ml-4 z-20 flex flex-col gap-2 p-4 bg-card border border-border rounded-lg shadow-xl',
-              'w-[18rem] sm:w-80',
+              size === 'small'
+                ? 'relative w-full flex flex-col gap-2 p-3 bg-card border border-border rounded-lg shadow-xl'
+                : 'absolute top-full left-0 mt-2 -ml-4 z-20 flex flex-col gap-2 p-4 bg-card border border-border rounded-lg shadow-xl',
+              size === 'small' ? '' : (size === 'default' ? 'w-[18rem] sm:w-80' : '')
             )}
+            style={size === 'small' ? { minWidth: 0, maxWidth: '100%' } : {}}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full">
               <Input
                 ref={inputRef}
                 type="text"
@@ -314,46 +470,72 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="flex-grow h-9 text-sm"
+                className={cn("flex-grow w-full", size === 'small' ? 'text-[10px]' : 'h-9 text-sm')} // Full width input
                 autoFocus
               />
               <Button
                 variant="ghost"
                 size="icon"
+                className={cn("flex-shrink-0", size === 'small' ? 'h-8 w-8' : 'h-9 w-9')}
                 onClick={handleSendMessage}
                 disabled={!message.trim() || isLoading}
-                className="h-9 w-9 flex-shrink-0"
               >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+                {isLoading ? <Loader2 className={cn("animate-spin", size === 'small' ? 'h-3.5 w-3.5' : 'h-4 w-4')} /> : <SendHorizontal className={cn(size === 'small' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />}
               </Button>
             </div>
-            {assistantResponse && (
-              <div className="mt-2 p-2 bg-muted rounded text-xs text-foreground/90 border border-border max-h-64 overflow-y-auto whitespace-pre-line">
-                {assistantResponse}
-              </div>
+            {/* Render the sequence of messages/tool calls after the user's message */}
+            {userMessageIndex !== null && (
+                 <div className={cn(
+                     "mt-2 space-y-2 overflow-y-auto w-full flex flex-col",
+                     size === 'small' ? 'text-[11px] max-h-32' : 'text-xs max-h-64'
+                 )}>
+                    {chatMessages.slice(userMessageIndex + 1).map((item, index) => (
+                        <React.Fragment key={item.id || index}>
+                            {item.type === 'message' && item.role === 'assistant' ? (
+                                // Use a simplified Message display for assistant
+                                <div className="p-2 bg-muted rounded text-foreground/90 border border-border whitespace-pre-line">
+                                    {item.content[0]?.text}
+                                </div>
+                            ) : item.type === 'tool_call' ? (
+                                <ToolCallDisplay toolCall={item} size={size} />
+                            ) : null}
+                        </React.Fragment>
+                    ))}
+                 </div>
             )}
-            {showSavePrompt && (
-              <div className="mt-2 flex flex-col gap-1">
-                <span className="text-xs">Would you like to save this as a conversation?</span>
+            {showSavePrompt && !isLoading && (
+              <div className="mt-2 flex flex-col gap-1 w-full">
+                <span className={cn(size === 'small' ? 'text-[11px]' : 'text-xs')}>Would you like to save this as a conversation?</span>
                 <div className="flex gap-2 mt-1">
-                  <Button size="sm" variant="outline" onClick={() => handleSaveAsConversation(true)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={cn(size === 'small' ? 'text-[11px] h-7 px-2' : '')}
+                    onClick={() => handleSaveAsConversation(true)}
+                    disabled={isLoading} // Disable while potentially saving
+                  >
                     Yes
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleSaveAsConversation(false)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={cn(size === 'small' ? 'text-[11px] h-7 px-2' : '')}
+                    onClick={() => handleSaveAsConversation(false)}
+                    disabled={isLoading} // Disable while potentially saving
+                  >
                     No
                   </Button>
                 </div>
               </div>
             )}
-            {/* Always show Continue in chat if a conversation was created */}
-            {conversationId && !showSavePrompt && (
+            {conversationId && !showSavePrompt && !isLoading && (
               <Button
                 variant="link"
                 size="sm"
-                className="text-xs ml-auto px-1"
+                className={cn("ml-auto px-1 w-full text-left", size === 'small' ? 'text-[11px]' : 'text-xs')}
                 onClick={handleContinueInChat}
               >
-                <CheckCircle2 className="h-4 w-4 mr-1 text-green-500" /> Continue in chat
+                <CheckCircle2 className={cn("mr-1 text-green-500", size === 'small' ? 'h-3.5 w-3.5' : 'h-4 w-4')} /> Continue in chat
               </Button>
             )}
           </motion.div>

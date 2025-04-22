@@ -65,6 +65,7 @@ interface SupabaseProfile {
     longTerm: string;
     desiredIndustry: string[];
     desiredRoles: string[];
+    achievements: string;
   };
   education?: Array<{
     degreeLevel: string;
@@ -82,9 +83,25 @@ interface SupabaseProfile {
       min: number;
       max: number;
     };
+    preferredDuration?: {
+      min?: number;
+      max?: number;
+      unit?: string;
+    };
+    preferredStudyLanguage?: string;
+    livingExpensesBudget?: {
+      min?: number;
+      max?: number;
+      currency?: string;
+    };
+    residencyInterest?: boolean;
   };
   documents?: any;
   profile_file_id?: string | null;
+  current_location?: string;
+  nationality?: string;
+  target_study_level?: string;
+  language_proficiency?: string[];
   // Allow other properties
   [key: string]: any;
 }
@@ -107,16 +124,25 @@ function mapSupabaseProfileToUserProfile(profile: SupabaseProfile | null): any {
     careerGoals: profile.career_goals ? {
       shortTerm: profile.career_goals.shortTerm || '',
       longTerm: profile.career_goals.longTerm || '',
+      achievements: profile.career_goals.achievements || '',
       desiredIndustry: Array.isArray(profile.career_goals.desiredIndustry) ? profile.career_goals.desiredIndustry : [],
       desiredRoles: Array.isArray(profile.career_goals.desiredRoles) ? profile.career_goals.desiredRoles : []
-    } : { shortTerm: '', longTerm: '', desiredIndustry: [], desiredRoles: [] },
+    } : { shortTerm: '', longTerm: '', achievements: '', desiredIndustry: [], desiredRoles: [] },
     skills: profile.skills || [],
     preferences: profile.preferences ? {
       preferredLocations: Array.isArray(profile.preferences.preferredLocations) ? profile.preferences.preferredLocations : [],
       studyMode: profile.preferences.studyMode || 'Full-time',
       startDate: profile.preferences.startDate || '',
-      budgetRange: profile.preferences.budgetRange || { min: 0, max: 100000 }
-    } : { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 100000 } },
+      budgetRange: profile.preferences.budgetRange || { min: 0, max: 100000 },
+      preferredDuration: profile.preferences.preferredDuration || undefined,
+      preferredStudyLanguage: profile.preferences.preferredStudyLanguage || '',
+      livingExpensesBudget: profile.preferences.livingExpensesBudget || undefined,
+      residencyInterest: typeof profile.preferences.residencyInterest === 'boolean' ? profile.preferences.residencyInterest : false
+    } : { preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 100000 }, preferredDuration: undefined, preferredStudyLanguage: '', livingExpensesBudget: undefined, residencyInterest: false },
+    currentLocation: profile.current_location || '',
+    nationality: profile.nationality || '',
+    targetStudyLevel: profile.target_study_level || '',
+    languageProficiency: Array.isArray(profile.language_proficiency) ? profile.language_proficiency : [],
     documents: profile.documents || {},
     vectorStoreId: profile.vector_store_id || '',
     profileFileId: profile.profile_file_id || undefined

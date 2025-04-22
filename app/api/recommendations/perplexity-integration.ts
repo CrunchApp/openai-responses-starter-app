@@ -106,48 +106,48 @@ interface ParsedProgram {
 /**
  * Detects if a Perplexity response appears to be truncated
  */
-function detectTruncatedResponse(response: string): boolean {
-  // Look for common indicators of truncation
-  const truncationIndicators = [
-    // Response ends mid-sentence or with incomplete markdown
-    /[^.!?]\s*$/,
-    // Program section appears incomplete (missing URL, requirements or highlights)
-    /Program|University|College[^.!?]*$/i,
-    // Ends with numbers or bullets suggesting there should be more content
-    /\d+\.\s*$/,
-    /\-\s*$/,
-    // Check if the response doesn't have a clear concluding statement
-    /(In\s+conclusion|To\s+summarize|Overall|In\s+summary)/i
-  ];
+// function detectTruncatedResponse(response: string): boolean {
+//   // Look for common indicators of truncation
+//   const truncationIndicators = [
+//     // Response ends mid-sentence or with incomplete markdown
+//     /[^.!?]\s*$/,
+//     // Program section appears incomplete (missing URL, requirements or highlights)
+//     /Program|University|College[^.!?]*$/i,
+//     // Ends with numbers or bullets suggesting there should be more content
+//     /\d+\.\s*$/,
+//     /\-\s*$/,
+//     // Check if the response doesn't have a clear concluding statement
+//     /(In\s+conclusion|To\s+summarize|Overall|In\s+summary)/i
+//   ];
   
-  // Check if response contains fewer than expected program listings
-  // Count the number of program entries (usually numbered or with headers)
-  const programListingCount = (response.match(/\d+\.\s+|Program\s+\d+:|^\#\#\s+/gm) || []).length;
+//   // Check if response contains fewer than expected program listings
+//   // Count the number of program entries (usually numbered or with headers)
+//   const programListingCount = (response.match(/\d+\.\s+|Program\s+\d+:|^\#\#\s+/gm) || []).length;
   
-  // Check for expected section headers for the last program
-  const hasCompleteLastProgram = 
-    response.toLowerCase().includes("scholarship") || 
-    response.toLowerCase().includes("financial aid") || 
-    response.toLowerCase().includes("funding");
+//   // Check for expected section headers for the last program
+//   const hasCompleteLastProgram = 
+//     response.toLowerCase().includes("scholarship") || 
+//     response.toLowerCase().includes("financial aid") || 
+//     response.toLowerCase().includes("funding");
     
-  // Log detection information
-  console.log(`Truncation detection: Found ${programListingCount} program listings, hasCompleteLastProgram: ${hasCompleteLastProgram}`);
+//   // Log detection information
+//   console.log(`Truncation detection: Found ${programListingCount} program listings, hasCompleteLastProgram: ${hasCompleteLastProgram}`);
   
-  // If fewer than 5 programs or matches any truncation indicators
-  if (programListingCount < 5 || !hasCompleteLastProgram) {
-    return true;
-  }
+//   // If fewer than 5 programs or matches any truncation indicators
+//   if (programListingCount < 5 || !hasCompleteLastProgram) {
+//     return true;
+//   }
   
-  // Check for truncation patterns
-  for (const pattern of truncationIndicators) {
-    if (pattern.test(response.slice(-100))) {
-      console.log(`Truncation detected: matched pattern ${pattern}`);
-      return true;
-    }
-  }
+//   // Check for truncation patterns
+//   for (const pattern of truncationIndicators) {
+//     if (pattern.test(response.slice(-100))) {
+//       console.log(`Truncation detected: matched pattern ${pattern}`);
+//       return true;
+//     }
+//   }
   
-  return false;
-}
+//   return false;
+// }
 
 /**
  * Calls the Perplexity API with a structured query
@@ -177,7 +177,7 @@ export async function callPerplexityApi(query: string): Promise<string> {
 
   // Configure the request to use the sonar-reasoning-pro model for research
   const options: PerplexityRequestOptions = {
-    model: "sonar-pro", // Using the reasoning model for better analysis
+    model: "sonar",
     messages: [
       { 
         role: "system", 
@@ -189,7 +189,7 @@ export async function callPerplexityApi(query: string): Promise<string> {
       }
     ],
     temperature: 0.1, // Lower temperature for more factual responses
-    max_tokens: 8000, // Increased from 5000 to 8000 to ensure we get a full response
+    max_tokens: 10000,
     web_search_options: {
       search_context_size: "high" // Use high search context for more comprehensive results
     },
@@ -208,7 +208,12 @@ export async function callPerplexityApi(query: string): Promise<string> {
 
   // Implement retry logic with exponential backoff
   const MAX_ATTEMPTS = 3;
-  const TIMEOUT_MS = 180000; // Increased from 15s to 180s
+  // The Perplexity API can take several minutes to return large responses (especially when we request
+  // up to 8k tokens).  We therefore set a more generous timeout and allow it to be configured via an
+  // environment variable so that ops can tweak without redeploying.  Default = 360 000 ms (6 min).
+  const TIMEOUT_MS = process.env.PERPLEXITY_REQUEST_TIMEOUT_MS
+    ? Number(process.env.PERPLEXITY_REQUEST_TIMEOUT_MS)
+    : 360000; // 6 minutes
   
   let attempts = 0;
   let truncationDetections = 0; // Counter for truncation detections
@@ -226,6 +231,7 @@ export async function callPerplexityApi(query: string): Promise<string> {
       }, TIMEOUT_MS);
 
       try {
+        const attemptStart = Date.now();
         // Make the API call with timeout
         const response = await fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
@@ -238,6 +244,7 @@ export async function callPerplexityApi(query: string): Promise<string> {
         });
 
         clearTimeout(timeout); // Clear the timeout if request completes
+        console.log(`[Perplexity] Attempt ${attempts} completed in ${Date.now() - attemptStart} ms`);
         
         // Log the response status
         console.log(`Perplexity API response status: ${response.status}`);
@@ -276,44 +283,44 @@ export async function callPerplexityApi(query: string): Promise<string> {
         const content = data.choices[0].message.content;
         
         // Check if the response appears to be truncated
-        if (detectTruncatedResponse(content)) {
-          console.warn('Detected potentially truncated response from Perplexity API');
-          truncationDetections++;
+//         if (detectTruncatedResponse(content)) {
+//           console.warn('Detected potentially truncated response from Perplexity API');
+//           truncationDetections++;
           
-          // If we've detected truncation multiple times or this is the final attempt,
-          // switch to the OpenAI fallback
-          if (truncationDetections >= 2 || attempts === MAX_ATTEMPTS) {
-            console.log(`${truncationDetections} truncation detections - switching to OpenAI fallback`);
-            return fallbackToOpenAI(query);
-          }
+//           // If we've detected truncation multiple times or this is the final attempt,
+//           // switch to the OpenAI fallback
+//           if (truncationDetections >= 2 || attempts === MAX_ATTEMPTS) {
+//             console.log(`${truncationDetections} truncation detections - switching to OpenAI fallback`);
+//             return fallbackToOpenAI(query);
+//           }
           
-          // Adapt the approach based on the attempt number
-          if (attempts === 1) {
-            // First attempt - try reducing scope to fewer programs with more details
-            console.log('Modifying query for next attempt to request fewer programs with more details');
-            options.messages[1].content = query + "\n\nIMPORTANT: Focus on providing COMPLETE details for 3-5 programs rather than partial information about many programs.";
-          } else {
-            // Second attempt - try a more structured, narrower approach
-            console.log('Using more structured approach for final attempt');
-            options.messages[1].content = `Please find information on 3 specific educational programs matching these criteria:
-${query.split('\n').filter(line => line.includes(':') || line.includes('IMPORTANT')).join('\n')}
+//           // Adapt the approach based on the attempt number
+//           if (attempts === 1) {
+//             // First attempt - try reducing scope to fewer programs with more details
+//             console.log('Modifying query for next attempt to request fewer programs with more details');
+//             options.messages[1].content = query + "\n\nIMPORTANT: Focus on providing COMPLETE details for 3-5 programs rather than partial information about many programs.";
+//           } else {
+//             // Second attempt - try a more structured, narrower approach
+//             console.log('Using more structured approach for final attempt');
+//             options.messages[1].content = `Please find information on 3 specific educational programs matching these criteria:
+// ${query.split('\n').filter(line => line.includes(':') || line.includes('IMPORTANT')).join('\n')}
 
-Format EACH program with the following structure:
-1. Program Name - Institution
-   - Details about the program including:
-   - Annual cost
-   - Duration
-   - Location
-   - Requirements
-   - URL to program webpage
-   - Available scholarships
+// Format EACH program with the following structure:
+// 1. Program Name - Institution
+//    - Details about the program including:
+//    - Annual cost
+//    - Duration
+//    - Location
+//    - Requirements
+//    - URL to program webpage
+//    - Available scholarships
 
-Please keep your response complete but concise for each program.`;
-          }
+// Please keep your response complete but concise for each program.`;
+//           }
           
-          // Throw an error to trigger retry
-          throw new Error(`Truncated response detected (detection #${truncationDetections}), retrying with modified query`);
-        }
+//           // Throw an error to trigger retry
+//           throw new Error(`Truncated response detected (detection #${truncationDetections}), retrying with modified query`);
+//         }
         
         // Success! Return the content
         console.log('Perplexity API call successful, response appears complete');
@@ -322,7 +329,7 @@ Please keep your response complete but concise for each program.`;
         clearTimeout(timeout); // Ensure timeout is cleared
         
         if (fetchError.name === 'AbortError') {
-          console.error(`Perplexity API request timed out after ${TIMEOUT_MS}ms`);
+          console.error(`[Perplexity] Attempt ${attempts} aborted after ${TIMEOUT_MS} ms timeout`);
           throw new Error(`Perplexity API request timed out after ${TIMEOUT_MS}ms`);
         }
         

@@ -342,7 +342,7 @@ export function PathwayExplorer({
               ) : pathways.length === 0 ? (
                  <>Generate Pathways <Sparkles className="ml-2 h-4 w-4" /></>
               ) : (
-                 <>Regenerate Pathways <Sparkles className="ml-2 h-4 w-4" /></>
+                 <>Generate More Pathways <Sparkles className="ml-2 h-4 w-4" /></>
               )}
             </Button>
           </div>

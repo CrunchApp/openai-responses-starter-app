@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import useProfileStore from "@/stores/useProfileStore";
+import { UserProfile } from "@/app/types/profile-schema";
 
 export default function ImportOptionsStep({
   profileData,
@@ -48,10 +49,10 @@ export default function ImportOptionsStep({
     statementOfPurpose: boolean;
     otherDocuments: boolean;
   }>({
-    resume: !!profileData.documents.resume?.fileId,
-    transcripts: !!profileData.documents.transcripts?.fileId,
-    statementOfPurpose: !!profileData.documents.statementOfPurpose?.fileId,
-    otherDocuments: !!profileData.documents.otherDocuments && profileData.documents.otherDocuments.length > 0,
+    resume: !!profileData.documents?.resume?.fileId,
+    transcripts: !!profileData.documents?.transcripts?.fileId,
+    statementOfPurpose: !!profileData.documents?.statementOfPurpose?.fileId,
+    otherDocuments: !!profileData.documents?.otherDocuments && profileData.documents.otherDocuments.length > 0,
   });
   
   // Get vectorStoreId AND hydration state from store
@@ -131,7 +132,7 @@ export default function ImportOptionsStep({
 
   // Handle when a file is added to the vector store
   const handleFileUploaded = (fileId: string, type: string) => {
-    setProfileData((prevData) => {
+    setProfileData((prevData): UserProfile => {
       const newDocument = {
         fileId: fileId,
         vectorStoreId: storeVectorStoreId ?? undefined,
@@ -141,23 +142,23 @@ export default function ImportOptionsStep({
 
       if (type === 'otherDocuments') {
         // Handle array update for otherDocuments
-        const existingDocs = prevData.documents?.otherDocuments || [];
+        const existingDocs = prevData.documents?.otherDocuments ?? [];
         return {
           ...prevData,
           documents: {
-            ...prevData.documents,
+            ...(prevData.documents ?? {}),
             otherDocuments: [...existingDocs, newDocument],
           },
-        };
+        } as UserProfile;
       } else {
         // Handle single document update for resume, transcripts, sop
         return {
           ...prevData,
           documents: {
-            ...prevData.documents,
+            ...(prevData.documents ?? {}),
             [type]: newDocument,
           },
-        };
+        } as UserProfile;
       }
     });
 
@@ -201,12 +202,14 @@ export default function ImportOptionsStep({
         
         // Collect document IDs (Updated to include otherDocuments)
         const documentIds: string[] = [];
-        if (profileData.documents.resume?.fileId) documentIds.push(profileData.documents.resume.fileId);
-        if (profileData.documents.transcripts?.fileId) documentIds.push(profileData.documents.transcripts.fileId);
-        if (profileData.documents.statementOfPurpose?.fileId) documentIds.push(profileData.documents.statementOfPurpose.fileId);
-        if (profileData.documents.otherDocuments) {
+        if (profileData.documents?.resume?.fileId) documentIds.push(profileData.documents.resume.fileId);
+        if (profileData.documents?.transcripts?.fileId) documentIds.push(profileData.documents.transcripts.fileId);
+        if (profileData.documents?.statementOfPurpose?.fileId) documentIds.push(profileData.documents.statementOfPurpose.fileId);
+        if (profileData.documents?.otherDocuments) {
           profileData.documents.otherDocuments.forEach(doc => {
-            if (doc?.fileId) documentIds.push(doc.fileId);
+            if (doc?.fileId) {
+              documentIds.push(doc.fileId);
+            }
           });
         }
         
@@ -264,63 +267,186 @@ export default function ImportOptionsStep({
         
         // Update profile data with extracted information, merging with existing data
         setProfileData(prevData => {
-          const extractedProfile = data.profile;
+          const extractedProfile = data.profile as UserProfile; // Assert type for better checking
           
           // Helper function to merge arrays of strings without duplicates
-          const mergeArrays = (existing: string[], extracted: string[]) => {
-            if (!Array.isArray(extracted)) {
-              return existing;
-            }
-            const combined = [...existing];
-            extracted.forEach(item => {
-              if (item && typeof item === 'string' && !combined.includes(item)) {
-                combined.push(item);
+          const mergeStringArrays = (existing: string[] | undefined, extracted: string[] | undefined): string[] => {
+            const existingSet = new Set(existing || []);
+            (extracted || []).forEach(item => {
+              if (item && typeof item === 'string') {
+                existingSet.add(item);
               }
             });
-            return combined;
+            return Array.from(existingSet);
           };
+
+          // Helper function to check if a value is considered "empty" or default
+          const isEmptyOrNone = (value: any): boolean => {
+            return value === null || value === undefined || value === '' || value === '__NONE__' || 
+              (Array.isArray(value) && value.length === 0) ||
+              // Special case for preferences fields that might be returned as __NONE__ by the API
+              (typeof value === 'object' && value !== null && value === '__NONE__');
+          }
+          
+          // Helper function to clean __NONE__ values from strings and objects
+          const cleanNoneValues = (value: any): any => {
+            if (value === '__NONE__') {
+              return ''; // Convert __NONE__ strings to empty strings
+            } else if (Array.isArray(value)) {
+              // Filter any __NONE__ values from arrays
+              return value.filter(item => item !== '__NONE__');
+            } else if (typeof value === 'object' && value !== null) {
+              // For objects, recursively clean properties
+              const cleanedObj: any = {};
+              Object.entries(value).forEach(([k, v]) => {
+                cleanedObj[k] = cleanNoneValues(v);
+              });
+              return cleanedObj;
+            }
+            return value;
+          }
           
           try {
-            return {
-              ...prevData,
-              // Only update fields if they were empty before or if we have new info
-              firstName: prevData.firstName || extractedProfile.firstName || '',
-              lastName: prevData.lastName || extractedProfile.lastName || '',
-              email: prevData.email || extractedProfile.email || '',
-              phone: prevData.phone || extractedProfile.phone || '',
-              preferredName: prevData.preferredName || extractedProfile.preferredName || '',
+            // Create a new profile object, starting with previous data
+            const newProfileData: UserProfile = { ...prevData };
+
+            // Special handling for critical fields that aren't displaying properly
+            if (extractedProfile.currentLocation && extractedProfile.currentLocation !== '__NONE__') {
+              newProfileData.currentLocation = extractedProfile.currentLocation;
+            }
+            
+            if (extractedProfile.nationality && extractedProfile.nationality !== '__NONE__') {
+              newProfileData.nationality = extractedProfile.nationality;
+            }
+            
+            // Properly handle targetStudyLevel - this is an enum field
+            if (extractedProfile.targetStudyLevel && extractedProfile.targetStudyLevel !== '__NONE__') {
+              newProfileData.targetStudyLevel = extractedProfile.targetStudyLevel;
+            }
+            
+            // Special handling for languageProficiency array
+            if (Array.isArray(extractedProfile.languageProficiency) && extractedProfile.languageProficiency.length > 0) {
+              // Always replace with extracted languages if they exist
+              newProfileData.languageProficiency = extractedProfile.languageProficiency.map(lang => ({
+                ...lang,
+                // Convert '__NONE__' values to appropriate defaults
+                proficiencyLevel: lang.proficiencyLevel === '__NONE__' ? 'Intermediate' : lang.proficiencyLevel,
+                testType: lang.testType === '__NONE__' ? null : lang.testType,
+                score: lang.score === '__NONE__' ? null : lang.score
+              }));
+              console.log("Updated language proficiency:", newProfileData.languageProficiency);
+            }
+            
+            // Handle preferences object fields properly
+            if (extractedProfile.preferences) {
+              const extractedPrefs = extractedProfile.preferences;
               
-              // Merge education entries, preferring existing ones
-              education: prevData.education.length > 0 && prevData.education[0].institution 
-                ? prevData.education 
-                : Array.isArray(extractedProfile.education) ? extractedProfile.education : [],
-                
-              // Merge career goals, keeping any existing values
-              careerGoals: {
-                shortTerm: prevData.careerGoals.shortTerm || extractedProfile.careerGoals?.shortTerm || '',
-                longTerm: prevData.careerGoals.longTerm || extractedProfile.careerGoals?.longTerm || '',
-                achievements: prevData.careerGoals.achievements || extractedProfile.careerGoals?.achievements || '',
-                desiredIndustry: mergeArrays(
-                  prevData.careerGoals.desiredIndustry, 
-                  extractedProfile.careerGoals?.desiredIndustry || []
-                ),
-                desiredRoles: mergeArrays(
-                  prevData.careerGoals.desiredRoles, 
-                  extractedProfile.careerGoals?.desiredRoles || []
-                ),
-              },
+              // Start with previous preferences
+              newProfileData.preferences = { ...prevData.preferences };
               
-              // Merge skills without duplicates
-              skills: mergeArrays(prevData.skills, extractedProfile.skills || []),
+              // Handle preferredLocations array specially - clean out any '__NONE__' values
+              if (Array.isArray(extractedPrefs.preferredLocations)) {
+                newProfileData.preferences.preferredLocations = extractedPrefs.preferredLocations.filter(loc => loc !== '__NONE__');
+              }
               
-              // Only update preferences if they were empty
-              preferences: prevData.preferences.preferredLocations.length > 0
-                ? prevData.preferences
-                : extractedProfile.preferences || prevData.preferences,
-            };
+              // Handle studyMode
+              if (extractedPrefs.studyMode && extractedPrefs.studyMode !== '__NONE__') {
+                newProfileData.preferences.studyMode = extractedPrefs.studyMode;
+              }
+              
+              // Handle startDate
+              if (extractedPrefs.startDate && extractedPrefs.startDate !== '__NONE__') {
+                newProfileData.preferences.startDate = extractedPrefs.startDate;
+              }
+              
+              // Handle budgetRange - should be an object
+              if (extractedPrefs.budgetRange) {
+                if (typeof extractedPrefs.budgetRange === 'object' && extractedPrefs.budgetRange !== null) {
+                  // Only use if it's a valid object
+                  newProfileData.preferences.budgetRange = extractedPrefs.budgetRange;
+                }
+              }
+              
+              // Handle preferredDuration - should be an object
+              if (extractedPrefs.preferredDuration) {
+                if (typeof extractedPrefs.preferredDuration === 'object' && extractedPrefs.preferredDuration !== null) {
+                  // Only use if it's a valid object
+                  newProfileData.preferences.preferredDuration = extractedPrefs.preferredDuration;
+                }
+              }
+              
+              // Handle preferredStudyLanguage
+              if (extractedPrefs.preferredStudyLanguage && extractedPrefs.preferredStudyLanguage !== '__NONE__') {
+                newProfileData.preferences.preferredStudyLanguage = extractedPrefs.preferredStudyLanguage;
+              }
+              
+              // Handle livingExpensesBudget - should be an object
+              if (extractedPrefs.livingExpensesBudget) {
+                if (typeof extractedPrefs.livingExpensesBudget === 'object' && extractedPrefs.livingExpensesBudget !== null) {
+                  // Only use if it's a valid object
+                  newProfileData.preferences.livingExpensesBudget = extractedPrefs.livingExpensesBudget;
+                }
+              }
+              
+              // Handle residencyInterest - convert to boolean
+              if (extractedPrefs.residencyInterest !== undefined) {
+                // Convert string '__NONE__' to false, and any other value to boolean
+                const value = extractedPrefs.residencyInterest;
+                newProfileData.preferences.residencyInterest = 
+                  typeof value === 'string' && value === '__NONE__' ? 
+                    false : 
+                    Boolean(value);
+              }
+            }
+            
+            // Handle iterating through remaining keys (excluding ones we've handled specifically)
+            const handledKeys = ['currentLocation', 'nationality', 'targetStudyLevel', 'languageProficiency', 'preferences'];
+            
+            // Iterate through the keys of the extracted profile that we haven't specifically handled
+            (Object.keys(extractedProfile) as Array<keyof UserProfile>)
+              .filter(key => !handledKeys.includes(key as string))
+              .forEach(key => {
+                const extractedValue = extractedProfile[key];
+                const previousValue = prevData[key];
+
+                // Special case for nested objects/arrays
+                if (key === 'careerGoals') {
+                  const prevGoals = prevData.careerGoals || { shortTerm: '', longTerm: '', achievements: '', desiredIndustry: [], desiredRoles: [] };
+                  const extractedGoals = extractedProfile.careerGoals || {};
+                  newProfileData.careerGoals = {
+                    shortTerm: isEmptyOrNone(prevGoals.shortTerm) ? (extractedGoals.shortTerm || '') : prevGoals.shortTerm,
+                    longTerm: isEmptyOrNone(prevGoals.longTerm) ? (extractedGoals.longTerm || '') : prevGoals.longTerm,
+                    achievements: isEmptyOrNone(prevGoals.achievements) ? (extractedGoals.achievements || '') : prevGoals.achievements,
+                    desiredIndustry: mergeStringArrays(prevGoals.desiredIndustry, cleanNoneValues(extractedGoals.desiredIndustry)),
+                    desiredRoles: mergeStringArrays(prevGoals.desiredRoles, cleanNoneValues(extractedGoals.desiredRoles)),
+                  };
+                } else if (key === 'education') {
+                   // If previous education is empty or default, take extracted. Otherwise keep previous.
+                   const prevEducationIsEmpty = !prevData.education || prevData.education.length === 0 || (prevData.education.length === 1 && isEmptyOrNone(prevData.education[0].institution));
+                   newProfileData.education = prevEducationIsEmpty && Array.isArray(extractedProfile.education) ? extractedProfile.education : prevData.education;
+                } else if (key === 'skills') {
+                   newProfileData.skills = mergeStringArrays(prevData.skills, cleanNoneValues(extractedProfile.skills));
+                } else if (key === 'documents') {
+                   // Document merging might need specific logic if we add more types
+                   // For now, keep existing logic if it works, or simply keep prevData
+                   newProfileData.documents = prevData.documents;
+                } 
+                // Handle top-level simple fields
+                else if (isEmptyOrNone(previousValue) && !isEmptyOrNone(extractedValue)) {
+                    // If the previous value is empty/default and extracted value is not empty, use the extracted value
+                   (newProfileData as any)[key] = extractedValue;
+                } else {
+                   // Otherwise, keep the existing previous value
+                   (newProfileData as any)[key] = previousValue;
+                }
+              });
+
+            console.log("Final merged profile data:", JSON.stringify(newProfileData, null, 2));
+            return newProfileData;
+
           } catch (error) {
             console.error("Error merging profile data:", error);
-            // If there's an error merging, return previous data unchanged
+            // If there's an error merging, return previous data unchanged to prevent corruption
             return prevData;
           }
         });

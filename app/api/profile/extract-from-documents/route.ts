@@ -31,7 +31,7 @@ const profileJsonSchema = {
         "Postgraduate Diploma/Certificate", 
         "Vocational/Trade", 
         "Undecided", 
-        ""
+        "__NONE__"
       ]
     },
     languageProficiency: {
@@ -50,7 +50,7 @@ const profileJsonSchema = {
               "Advanced", 
               "Proficient", 
               "Native",
-              ""
+              "__NONE__"
             ]
           },
           testType: { type: ["string", "null"] },
@@ -75,7 +75,7 @@ const profileJsonSchema = {
               "Doctorate", 
               "Certificate", 
               "Other",
-              "" // Empty string for initial state
+              "__NONE__"
             ]
           },
           institution: { type: "string" },
@@ -153,23 +153,10 @@ const profileJsonSchema = {
       required: ["preferredLocations", "studyMode", "startDate", "budgetRange"],
       additionalProperties: false,
     },
-    documents: {
-      type: "object",
-      properties: {
-        resume: { type: ["string", "null"] },
-        transcripts: { type: ["string", "null"] },
-        statementOfPurpose: { type: ["string", "null"] },
-        otherDocuments: { 
-          type: ["array", "null"],
-          items: { type: "string" },
-        },
-      },
-      additionalProperties: false,
-    },
   },
   required: [
     "firstName", "lastName", "email", "phone", "preferredName",
-    "education", "careerGoals", "skills", "preferences", "documents",
+    "education", "careerGoals", "skills", "preferences",
     "currentLocation", "nationality", "targetStudyLevel", "languageProficiency"
   ],
   additionalProperties: false,
@@ -245,13 +232,22 @@ Please extract the following information:
     - "Postgraduate Diploma/Certificate" 
     - "Vocational/Trade" 
     - "Undecided" 
-    - ""
-- Language Proficiency: Identify languages spoken, proficiency level (Beginner, Elementary, Intermediate, Upper Intermediate, Advanced, Proficient, Native), and any test results (e.g., IELTS score, TOEFL score).
+    - "__NONE__" // Use this if unknown or not specified
+- Language Proficiency: Identify languages spoken, proficiency level, and any test results (e.g., IELTS score, TOEFL score).
+  * For proficiency level, you MUST select ONE of these exact options:
+    - "Beginner" 
+    - "Elementary" 
+    - "Intermediate" 
+    - "Upper Intermediate" 
+    - "Advanced" 
+    - "Proficient" 
+    - "Native"
+    - "__NONE__" // Use this if unknown or cannot be mapped clearly
 - Career goals (short and long term goals, achievements, industries and roles of interest)
 - Skills and competencies
 - Any preferences mentioned (preferred study locations, study mode, preferred start date, overall budget range for tuition/fees, preferred course duration, preferred language of study, budget for living expenses, interest in long-term residency/migration).
 
-If you cannot find specific information, infer plausible and coherent details based on typical applicant profiles. The goal is to deliver a thoughtfully enriched profile with realistic values rather than leaving fields blank. Only use empty strings/null when a value truly makes no sense to guess (e.g., document file IDs).
+If you cannot find specific information, infer plausible and coherent details based on typical applicant profiles. The goal is to deliver a thoughtfully enriched profile with realistic values rather than leaving fields blank. Only use "__NONE__" or null when a value truly makes no sense to guess or is explicitly unknown.
 First, search through the documents to find relevant information for each section of the profile.
 
 Format your response as a valid JSON object with the following structure:
@@ -268,7 +264,7 @@ Format your response as a valid JSON object with the following structure:
   "languageProficiency": [
     {
       "language": "string",
-      "proficiencyLevel": "one of the proficiency level options",
+      "proficiencyLevel": "one of the proficiency level options listed above",
       "testType": "string or null",
       "score": "string or null"
     }
@@ -310,12 +306,6 @@ Format your response as a valid JSON object with the following structure:
       "currency": "string" (optional, default 'USD')
     },
     "residencyInterest": boolean
-  },
-  "documents": {
-    "resume": "string or null",
-    "transcripts": "string or null",
-    "statementOfPurpose": "string or null",
-    "otherDocuments": ["string"] or null
   }
 }
 
@@ -466,7 +456,7 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
               email: "alex.taylor@example.com",
               phone: "+1 555-123-4567",
               preferredName: "Alex",
-              education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "", gpa: null }],
+              education: [{ degreeLevel: "__NONE__", institution: "", fieldOfStudy: "", graduationYear: "", gpa: null }],
               careerGoals: { shortTerm: "", longTerm: "", achievements: "", desiredIndustry: [], desiredRoles: [] },
               skills: [],
               preferences: {
@@ -478,12 +468,6 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
                 preferredStudyLanguage: "",
                 livingExpensesBudget: { min: undefined, max: undefined, currency: "USD" },
                 residencyInterest: false
-              },
-              documents: {
-                resume: null,
-                transcripts: null,
-                statementOfPurpose: null,
-                otherDocuments: null
               }
             };
           }
@@ -502,7 +486,7 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
           email: "alex.taylor@example.com",
           phone: "+1 555-123-4567",
           preferredName: "Alex",
-          education: [{ degreeLevel: "", institution: "", fieldOfStudy: "", graduationYear: "", gpa: null }],
+          education: [{ degreeLevel: "__NONE__", institution: "", fieldOfStudy: "", graduationYear: "", gpa: null }],
           careerGoals: { shortTerm: "", longTerm: "", achievements: "", desiredIndustry: [], desiredRoles: [] },
           skills: [],
           preferences: {
@@ -514,12 +498,6 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
             preferredStudyLanguage: "",
             livingExpensesBudget: { min: undefined, max: undefined, currency: "USD" },
             residencyInterest: false
-          },
-          documents: {
-            resume: null,
-            transcripts: null,
-            statementOfPurpose: null,
-            otherDocuments: null
           }
         };
       }
@@ -539,10 +517,10 @@ Ensure your output is formatted as a valid JSON object that can be parsed.
 // Function to map extracted degree level to valid options
 function mapToValidDegreeLevel(degree: string): string {
   // Convert to lowercase for case-insensitive matching
-  const degreeLower = degree.toLowerCase();
+  const degreeLower = degree?.toLowerCase() || ""; // Add null check
   
   // Define mappings for common variations
-  if (!degree || degree.trim() === "") return "";
+  if (!degree || degree.trim() === "" || degreeLower === "__none__") return "__NONE__"; // Match schema's __NONE__
   
   if (degreeLower.includes("high school") || degreeLower.includes("secondary")) {
     return "High School";
@@ -573,32 +551,90 @@ function mapToValidDegreeLevel(degree: string): string {
     return "Certificate";
   }
   
-  // Default to "Other" if no match is found
-  return "Other";
+  // Default to "Other" if no match is found, but return __NONE__ if it seems completely unrelated
+  // Simple check: if it contains common degree terms, maybe keep as Other, else __NONE__
+  const containsDegreeTerm = degreeLower.includes("degree") || degreeLower.includes("study") || degreeLower.includes("program");
+  return containsDegreeTerm ? "Other" : "__NONE__"; 
 }
 
-// Function to preprocess profile data to ensure proper null handling
-function preprocessProfileData(data: any) {
-  // Deep clone the data to avoid modifying the original
-  const processed = JSON.parse(JSON.stringify(data));
-  
+// NEW: Function to map extracted language proficiency level to valid options
+function mapToValidProficiencyLevel(level: string): string {
+  const levelLower = level?.toLowerCase() || ""; // Add null check
+
+  if (!level || level.trim() === "" || levelLower === "__none__") return "__NONE__";
+
+  // Direct matches
+  if (["beginner", "basic", "a1", "a2"].some(term => levelLower.includes(term))) return "Beginner";
+  if (["elementary", "pre-intermediate"].some(term => levelLower.includes(term))) return "Elementary";
+  if (["intermediate", "b1", "conversational"].some(term => levelLower.includes(term))) return "Intermediate";
+  if (["upper intermediate", "b2"].some(term => levelLower.includes(term))) return "Upper Intermediate";
+  if (["advanced", "c1", "fluent"].some(term => levelLower.includes(term))) return "Advanced";
+  if (["proficient", "c2", "professional", "full professional"].some(term => levelLower.includes(term))) return "Proficient"; // Added mapping for "Full Professional Proficiency"
+  if (["native", "mother tongue"].some(term => levelLower.includes(term))) return "Native";
+
+  // Default fallback
+  return "__NONE__";
+}
+
+// NEW: Function to map extracted target study level to valid options
+function mapToValidTargetStudyLevel(level: string): string {
+  const levelLower = level?.toLowerCase() || "";
+
+  if (!level || level.trim() === "" || levelLower === "__none__") return "__NONE__";
+
+  if (levelLower.includes("bachelor")) return "Bachelor's";
+  if (levelLower.includes("master")) return "Master's";
+  if (levelLower.includes("doctorate") || levelLower.includes("phd")) return "Doctorate";
+  if (levelLower.includes("postgrad") || levelLower.includes("post-grad") || levelLower.includes("diploma") || levelLower.includes("certificate")) return "Postgraduate Diploma/Certificate";
+  if (levelLower.includes("vocational") || levelLower.includes("trade") || levelLower.includes("technical")) return "Vocational/Trade";
+  if (levelLower.includes("undecided")) return "Undecided";
+
+  // Default fallback
+  return "__NONE__";
+}
+
+// Function to preprocess profile data to ensure proper null handling and enum mapping
+function preprocessProfileData(data: any): any {
+  // Create a deep copy to avoid modifying the original extracted data
+  const processed = JSON.parse(JSON.stringify(data || {}));
+
+  // --- Personal Information ---
+  processed.firstName = processed.firstName || "";
+  processed.lastName = processed.lastName || "";
+  processed.email = processed.email || "";
+  processed.phone = processed.phone || ""; 
+  processed.preferredName = processed.preferredName || ""; // Added preferredName back with default
+  processed.linkedInProfile = processed.linkedInProfile === undefined ? null : (processed.linkedInProfile || null); 
+  processed.currentLocation = processed.currentLocation || "";
+  processed.nationality = processed.nationality || "";
+  processed.targetStudyLevel = processed.targetStudyLevel || "__NONE__"; // Default to __NONE__
+
   // Handle education array
   if (Array.isArray(processed.education)) {
     processed.education = processed.education.map((edu: any) => ({
-      ...edu,
-      // Ensure gpa is null and not undefined
-      gpa: edu.gpa === undefined ? null : edu.gpa,
-      // Map degree level to valid option
-      degreeLevel: mapToValidDegreeLevel(edu.degreeLevel || ""),
-      // Ensure other fields have at least empty strings
       institution: edu.institution || "",
       fieldOfStudy: edu.fieldOfStudy || "",
-      graduationYear: edu.graduationYear || ""
-    }));
+      graduationYear: edu.graduationYear || "",
+      // Ensure gpa is null and not undefined
+      gpa: edu.gpa === undefined ? null : edu.gpa,
+      // Map degree level to valid option using the updated function
+      degreeLevel: mapToValidDegreeLevel(edu.degreeLevel || ""), 
+    })).filter((edu: any) => edu.institution || edu.fieldOfStudy); // Keep entries with some info
+    
+    // If filtering leaves an empty array, add a default entry
+    if (processed.education.length === 0) {
+        processed.education = [{
+          degreeLevel: "__NONE__", 
+          institution: "",
+          fieldOfStudy: "",
+          graduationYear: "",
+          gpa: null
+        }];
+    }
   } else {
-    // If education is missing, provide a default entry
+    // If education is missing or not an array, provide a default entry
     processed.education = [{
-      degreeLevel: "",
+      degreeLevel: "__NONE__", // Match schema's __NONE__
       institution: "",
       fieldOfStudy: "",
       graduationYear: "",
@@ -610,26 +646,14 @@ function preprocessProfileData(data: any) {
   if (Array.isArray(processed.languageProficiency)) {
     processed.languageProficiency = processed.languageProficiency.map((lang: any) => ({
       language: lang.language || "",
-      proficiencyLevel: lang.proficiencyLevel || "",
-      testType: lang.testType === undefined ? null : lang.testType,
-      score: lang.score === undefined ? null : lang.score,
-    }));
+      // Use the new mapping function for proficiency level
+      proficiencyLevel: mapToValidProficiencyLevel(lang.proficiencyLevel || ""), 
+      testType: lang.testType === undefined || lang.testType === "" ? null : lang.testType, // Ensure null if empty/undefined
+      score: lang.score === undefined || lang.score === "" ? null : lang.score, // Ensure null if empty/undefined
+    })).filter((lang: any) => lang.language); // Filter out entries without a language
   } else {
-    processed.languageProficiency = [];
+    processed.languageProficiency = []; // Default to empty array if missing or not an array
   }
-  
-  // Handle documents
-  if (!processed.documents) {
-    processed.documents = {};
-  }
-  
-  processed.documents = {
-    ...processed.documents,
-    resume: processed.documents.resume === undefined ? null : processed.documents.resume,
-    transcripts: processed.documents.transcripts === undefined ? null : processed.documents.transcripts,
-    statementOfPurpose: processed.documents.statementOfPurpose === undefined ? null : processed.documents.statementOfPurpose,
-    otherDocuments: processed.documents.otherDocuments === undefined ? null : processed.documents.otherDocuments
-  };
   
   // Handle career goals
   if (!processed.careerGoals) {
@@ -661,46 +685,50 @@ function preprocessProfileData(data: any) {
   }
   
   // Handle preferences
-  if (!processed.preferences) {
-    processed.preferences = {
-      preferredLocations: [],
-      studyMode: "",
-      startDate: "",
-      budgetRange: {
-        min: 0,
-        max: 100000
-      },
-      preferredDuration: { min: undefined, max: undefined, unit: undefined },
-      preferredStudyLanguage: "",
-      livingExpensesBudget: { min: undefined, max: undefined, currency: "USD" },
-      residencyInterest: false
-    };
-  } else {
-    processed.preferences = {
-      ...processed.preferences,
-      preferredLocations: Array.isArray(processed.preferences.preferredLocations)
-        ? processed.preferences.preferredLocations
-        : [],
-      studyMode: processed.preferences.studyMode || "",
-      startDate: processed.preferences.startDate || "",
-      budgetRange: processed.preferences.budgetRange || { min: 0, max: 100000 },
-      preferredDuration: processed.preferences.preferredDuration || { min: undefined, max: undefined, unit: undefined },
-      preferredStudyLanguage: processed.preferences.preferredStudyLanguage || "",
-      livingExpensesBudget: processed.preferences.livingExpensesBudget || { min: undefined, max: undefined, currency: "USD" },
-      residencyInterest: processed.preferences.residencyInterest === undefined ? false : processed.preferences.residencyInterest,
-    };
-  }
+  const prefs = processed.preferences || {};
+  processed.preferences = {
+    preferredLocations: Array.isArray(prefs.preferredLocations) 
+      ? prefs.preferredLocations.filter((loc: string) => loc && loc !== "__NONE__") // Also filter out empty strings
+      : [],
+    studyMode: prefs.studyMode === "__NONE__" ? "" : (prefs.studyMode || ""), 
+    startDate: prefs.startDate === "__NONE__" ? "" : (prefs.startDate || ""), 
+    
+    // Ensure budgetRange is an object, resetting if invalid
+    budgetRange: (typeof prefs.budgetRange === 'object' && prefs.budgetRange !== null) 
+      ? {
+          min: typeof prefs.budgetRange.min === 'number' ? prefs.budgetRange.min : 0,
+          max: typeof prefs.budgetRange.max === 'number' ? prefs.budgetRange.max : 100000, 
+        }
+      : { min: 0, max: 100000 }, // Default if not object or is null
+      
+    // Ensure preferredDuration is an object or default, resetting if invalid
+    preferredDuration: (typeof prefs.preferredDuration === 'object' && prefs.preferredDuration !== null)
+      ? {
+          min: typeof prefs.preferredDuration.min === 'number' ? prefs.preferredDuration.min : undefined,
+          max: typeof prefs.preferredDuration.max === 'number' ? prefs.preferredDuration.max : undefined,
+          unit: ["years", "months"].includes(prefs.preferredDuration.unit) ? prefs.preferredDuration.unit : undefined,
+        }
+      : { min: undefined, max: undefined, unit: undefined }, // Default if not object or is null
+      
+    preferredStudyLanguage: prefs.preferredStudyLanguage === "__NONE__" ? "" : (prefs.preferredStudyLanguage || ""), 
+    
+    // Ensure livingExpensesBudget is an object or default, resetting if invalid
+    livingExpensesBudget: (typeof prefs.livingExpensesBudget === 'object' && prefs.livingExpensesBudget !== null)
+      ? {
+         min: typeof prefs.livingExpensesBudget.min === 'number' ? prefs.livingExpensesBudget.min : undefined,
+         max: typeof prefs.livingExpensesBudget.max === 'number' ? prefs.livingExpensesBudget.max : undefined,
+         currency: prefs.livingExpensesBudget.currency || "USD",
+       }
+      : { min: undefined, max: undefined, currency: "USD" }, // Default if not object or is null
+      
+    // Ensure residencyInterest is a boolean, resetting if invalid
+    residencyInterest: typeof prefs.residencyInterest === 'boolean' 
+      ? prefs.residencyInterest 
+      : false, // Default to false if not boolean
+  };
   
-  // Handle personal information
-  processed.firstName = processed.firstName || "";
-  processed.lastName = processed.lastName || "";
-  processed.email = processed.email || "";
-  processed.phone = processed.phone || "";
-  processed.preferredName = processed.preferredName || "";
-  processed.linkedInProfile = processed.linkedInProfile || null;
-  processed.currentLocation = processed.currentLocation || "";
-  processed.nationality = processed.nationality || "";
-  processed.targetStudyLevel = processed.targetStudyLevel || "";
+  // Use the mapping function to ensure the value is valid
+  processed.targetStudyLevel = mapToValidTargetStudyLevel(processed.targetStudyLevel);
   
   return processed;
 } 

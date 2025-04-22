@@ -319,6 +319,9 @@ ${existingPathways.map((pathway, index) => {
     const longTermGoal = careerGoals.longTerm !== undefined && careerGoals.longTerm !== null 
       ? careerGoals.longTerm 
       : 'Not specified';
+    const achievements = careerGoals.achievements !== undefined && careerGoals.achievements !== null && careerGoals.achievements.trim() !== ''
+      ? careerGoals.achievements
+      : 'Not specified';
     const desiredIndustry = Array.isArray(careerGoals.desiredIndustry) && careerGoals.desiredIndustry.length > 0
       ? careerGoals.desiredIndustry.join(', ') 
       : 'Not specified';
@@ -343,7 +346,9 @@ ${existingPathways.map((pathway, index) => {
       : 'Not specified';
 
     // NEW: Build richer context strings for additional profile attributes
-    const targetStudyLevel = userProfile.targetStudyLevel || 'Not specified';
+    const targetStudyLevel = userProfile.targetStudyLevel && userProfile.targetStudyLevel !== '__NONE__' 
+      ? userProfile.targetStudyLevel 
+      : 'Not specified';
 
     const languageProficiencySummary = Array.isArray(userProfile.languageProficiency) && userProfile.languageProficiency.length > 0
       ? userProfile.languageProficiency.map((lp) => {
@@ -352,17 +357,21 @@ ${existingPathways.map((pathway, index) => {
         }).join(', ')
       : 'Not specified';
 
-    const preferredDurationSummary = userProfile.preferences?.preferredDuration
-      ? `${userProfile.preferences.preferredDuration.min ?? 'n/a'} - ${userProfile.preferences.preferredDuration.max ?? 'n/a'} ${userProfile.preferences.preferredDuration.unit ?? ''}`
+    const preferredDurationSummary = userProfile.preferences?.preferredDuration && (userProfile.preferences.preferredDuration.min || userProfile.preferences.preferredDuration.max)
+      ? `${userProfile.preferences.preferredDuration.min ?? 'any'} - ${userProfile.preferences.preferredDuration.max ?? 'any'} ${userProfile.preferences.preferredDuration.unit || 'months'}`
       : 'Not specified';
 
-    const preferredStudyLanguage = userProfile.preferences?.preferredStudyLanguage || 'Not specified';
-
-    const livingExpensesBudgetSummary = userProfile.preferences?.livingExpensesBudget
-      ? `$${(userProfile.preferences.livingExpensesBudget.min ?? 0).toLocaleString()} - $${(userProfile.preferences.livingExpensesBudget.max ?? 0).toLocaleString()} ${userProfile.preferences.livingExpensesBudget.currency || 'USD'}`
+    const preferredStudyLanguage = userProfile.preferences?.preferredStudyLanguage && userProfile.preferences?.preferredStudyLanguage !== '__NONE__'
+      ? userProfile.preferences.preferredStudyLanguage
       : 'Not specified';
 
-    const residencyInterest = userProfile.preferences?.residencyInterest ? 'Yes' : 'No';
+    const livingExpensesBudgetSummary = userProfile.preferences?.livingExpensesBudget && (userProfile.preferences.livingExpensesBudget.min || userProfile.preferences.livingExpensesBudget.max)
+      ? `$${(userProfile.preferences.livingExpensesBudget.min ?? 0).toLocaleString()} - $${(userProfile.preferences.livingExpensesBudget.max ?? 'any').toLocaleString()} ${userProfile.preferences.livingExpensesBudget.currency || 'USD'}`
+      : 'Not specified';
+
+    const residencyInterest = typeof userProfile.preferences?.residencyInterest === 'boolean'
+      ? (userProfile.preferences.residencyInterest ? 'Yes' : 'No')
+      : 'Not specified';
 
     // ---------------- Developer & User messages ----------------
     const developerPrompt = `You are an expert career and education pathway planner.
@@ -405,7 +414,7 @@ ${educationHistory}
 - Long‑term: ${longTermGoal}
 - Desired industries: ${desiredIndustry}
 - Desired roles: ${desiredRoles}
-- Achievements: ${careerGoals.achievements || 'Not specified'}
+- Achievements: ${achievements}
 
 ### Skills
 ${Array.isArray(userProfile.skills) && userProfile.skills.length > 0 ? userProfile.skills.join(', ') : 'Not specified'}
@@ -630,7 +639,7 @@ export async function evaluateAndScorePrograms(
 
     // --- Prepare Request Options ---
     const requestOptions: any = {
-      model: "o3-mini-2025-01-31",
+      model: "o4-mini-2025-04-16",
       store: true 
     };
     
@@ -705,6 +714,9 @@ Respond ONLY with the valid JSON object conforming strictly to the provided sche
         : 'Not specified';
       const longTermGoal = careerGoals.longTerm !== undefined && careerGoals.longTerm !== null 
         ? careerGoals.longTerm 
+        : 'Not specified';
+      const achievements = careerGoals.achievements !== undefined && careerGoals.achievements !== null && careerGoals.achievements.trim() !== ''
+        ? careerGoals.achievements
         : 'Not specified';
       const desiredIndustry = Array.isArray(careerGoals.desiredIndustry) && careerGoals.desiredIndustry.length > 0
         ? careerGoals.desiredIndustry.join(', ') 

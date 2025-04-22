@@ -13,7 +13,7 @@ import {
   Home,
   User,
   BookOpen,
-  MessageSquare,
+  GraduationCap,
   LogOut,
   ChevronRight,
   // Settings,
@@ -95,7 +95,7 @@ export function Sidebar() {
     { href: '/dashboard', label: 'Dashboard', icon: Home },
     { href: '/profile', label: 'Profile', icon: User },
     { href: '/recommendations', label: 'Recommendations', icon: BookOpen },
-    { href: '/chat', label: 'Vista Assistant', icon: MessageSquare },
+    { href: '/chat', label: 'Vista Assistant', icon: GraduationCap },
     // { href: '/settings', label: 'Settings', icon: Settings },
   ];
 

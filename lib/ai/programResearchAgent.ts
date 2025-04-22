@@ -19,15 +19,19 @@ export async function researchSpecificPrograms(
 
     console.log(`Researching programs for pathway: ${pathway.title}`);
     
-    // Set a timeout to prevent the function from running too long
-    const timeoutMs = 240000; // 240 seconds
+    // The overall research operation can exceed 4 min when Perplexity itself takes a long time.
+    // Allow ops to control the limit via env var so we stay in sync with the Perplexity request timeout.
+    const timeoutMs = process.env.PROGRAM_RESEARCH_TIMEOUT_MS
+      ? Number(process.env.PROGRAM_RESEARCH_TIMEOUT_MS)
+      : 480000; // 8 minutes
     let hasTimedOut = false;
     
-    // Create a timeout promise
+    // Create a timeout promise with detailed logging
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
         hasTimedOut = true;
-        reject(new Error('Program research timed out after 240 seconds'));
+        console.error(`[ResearchAgent] Global research operation exceeded ${timeoutMs} ms and will be aborted.`);
+        reject(new Error(`Program research timed out after ${timeoutMs / 1000} seconds`));
       }, timeoutMs);
     });
 
@@ -40,7 +44,9 @@ export async function researchSpecificPrograms(
       targetRegions: pathway.target_regions || pathway.targetRegions || ['Global'],
       subfields: pathway.subfields || [],
       duration: pathway.duration_months || pathway.duration || { min: 12, max: 24 },
-      budgetRange: pathway.budget_range_usd || pathway.budgetRange || { min: 10000, max: 50000 }
+      budgetRange: pathway.budget_range_usd || pathway.budgetRange || { min: 10000, max: 50000 },
+      // Ensure queryString is preserved regardless of casing in DB
+      queryString: pathway.queryString || pathway.query_string || ''
     };
 
     // Construct the detailed query, incorporating any user feedback if provided
@@ -55,10 +61,13 @@ export async function researchSpecificPrograms(
     );
     
     // Race the research promise against the timeout
+    const startTime = Date.now();
     const results = await Promise.race([
       researchPromise,
       timeoutPromise
     ]);
+    
+    console.log(`[ResearchAgent] Completed in ${Date.now() - startTime} ms`);
     
     if (results.length === 0) {
       console.warn(`No programs found for pathway "${pathway.title}"`);
@@ -146,14 +155,13 @@ Now, based on the search results, provide a comprehensive list of educational pr
   • DURATION: ${durationMin}-${durationMax} months
 
 USER PREFERENCES:
-  – Preferred study locations: ${preferredLocations || 'no strong preference'}
   – Study mode: ${userProfile.preferences.studyMode}
   – Preferred start date: ${userProfile.preferences.startDate || 'flexible'}
 
 ${feedbackNotes}
 
 OUTPUT GUIDELINES:
-1. Return **at least 5** distinct programs (8‑10 preferred) in a numbered list.
+1. Return **at least 10** distinct programs (10-15 preferred) in a numbered list.
 2. For **each** program include **all** of the following fields:
      - Program name and degree/certificate type
      - Institution name

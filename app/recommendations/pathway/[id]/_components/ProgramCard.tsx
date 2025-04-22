@@ -72,6 +72,7 @@ export function ProgramCard({
   const router = useRouter();
   const hasScholarships = program.scholarships && program.scholarships.length > 0;
   const hasFeedback = program.feedbackNegative === true;
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const handleToggleFavorite = () => {
     if (isGuest) {
@@ -103,7 +104,12 @@ export function ProgramCard({
   };
 
   return (
-    <Card className="w-full overflow-hidden transition-all duration-200 hover:shadow-md">
+    <Card
+      className={cn(
+        "w-full overflow-hidden transition-all duration-200 hover:shadow-md",
+        assistantOpen ? 'min-h-[340px] pb-6' : '' // expand card when assistant is open
+      )}
+    >
       <div className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div>
@@ -351,9 +357,12 @@ export function ProgramCard({
         <div className="flex justify-between items-center mt-4 pt-3 border-t">
           {/* Inline GradCapAssistant for program-specific Q&A */}
           <GradCapAssistant
-            className="relative" // ensure proper positioning inside the card
+            className="relative"
+            size="small"
             contextMessage={`The user is asking about the following program: ${program.name} offered by ${program.institution}. Make sure you review user's profile and the program details, both of which you have access to within the vector store files, before responding.`}
-            placeholder="What do you want to know about this program?"
+            placeholder="What else do you want to know about this program?"
+            onOpen={() => setAssistantOpen(true)}
+            onClose={() => setAssistantOpen(false)}
           />
             
           {program.pageLink ? (

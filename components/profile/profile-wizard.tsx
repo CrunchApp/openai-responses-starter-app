@@ -458,8 +458,9 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
           if (profileData.documents) {
             // Extract all file IDs from documents structure
             Object.entries(profileData.documents).forEach(([key, value]) => {
-              if (value && typeof value === 'object' && 'fileId' in value) {
-                docFileIds.push(value.fileId);
+              // Check if value is a valid document object with fileId
+              if (value && typeof value === 'object' && 'fileId' in value && typeof value.fileId === 'string') {
+                docFileIds.push(value.fileId); // Now TS knows value.fileId is a string
               }
             });
           }

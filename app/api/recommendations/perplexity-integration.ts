@@ -103,6 +103,12 @@ interface ParsedProgram {
   }[];
 }
 
+// Define the return type for parsePerplexityResponse
+interface ParseResult {
+  programs: RecommendationProgram[];
+  responseId?: string; // Added responseId
+}
+
 /**
  * Detects if a Perplexity response appears to be truncated
  */
@@ -524,13 +530,14 @@ function createSimulatedProgramList(query: string): string {
 /**
  * Parses the Perplexity API response using the Planning Agent for evaluation and scoring
  * Extracts structured program data based on pathway and user profile context.
+ * Now returns both programs and the responseId from the evaluation step.
  */
 export async function parsePerplexityResponse(
   response: string, 
   pathway: any, 
   userProfile: UserProfile, // Add userProfile
   previousResponseId?: string // Add previousResponseId
-): Promise<RecommendationProgram[]> { // Return type is RecommendationProgram[]
+): Promise<ParseResult> { // Updated return type
   try {
     // Add detailed logging to verify the full text is being passed
     console.log('Parsing Perplexity API response via Planning Agent', { 
@@ -555,6 +562,7 @@ export async function parsePerplexityResponse(
     
     // Call the planning agent's evaluation function
     console.log(`Sending full response of ${response.length} characters to planning agent...`);
+    // The evaluateAndScorePrograms function now returns { programs: ..., responseId: ... }
     const evaluationResult = await evaluateAndScorePrograms(
       response,
       pathway,
@@ -564,11 +572,11 @@ export async function parsePerplexityResponse(
 
     if (!evaluationResult || !evaluationResult.programs) {
       console.warn('Planning agent did not return any programs from evaluation.');
-      return [];
+      return { programs: [], responseId: evaluationResult?.responseId }; // Return empty programs but keep responseId
     }
 
     // Log the number of programs returned from evaluation
-    console.log(`Planning agent extracted ${evaluationResult.programs.length} programs from response text of length ${response.length}`);
+    console.log(`Planning agent extracted ${evaluationResult.programs.length} programs. ResponseId: ${evaluationResult.responseId || 'none'}`);
     
     // Add unique IDs to the evaluated programs
     const programsWithIds: RecommendationProgram[] = evaluationResult.programs.map(program => ({
@@ -598,7 +606,11 @@ export async function parsePerplexityResponse(
     }));
 
     console.log(`Planning agent successfully evaluated ${programsWithIds.length} programs.`);
-    return programsWithIds;
+    // Return both programs and the responseId
+    return {
+      programs: programsWithIds,
+      responseId: evaluationResult.responseId 
+    };
     
   } catch (error: any) {
     console.error('Error parsing Perplexity response via Planning Agent:', error.message);
@@ -612,13 +624,14 @@ export async function parsePerplexityResponse(
  * Main function to search for programs using Perplexity
  * Combines the API call and parsing in one function
  * Updated to accept userProfile and previousResponseId
+ * Now returns an object containing both programs and the responseId.
  */
 export async function searchProgramsWithPerplexityAPI(
   query: string, 
   pathway: any, 
   userProfile: UserProfile, // Add userProfile
   previousResponseId?: string // Add previousResponseId
-): Promise<RecommendationProgram[]> { // Return type updated
+): Promise<ParseResult> { // Updated return type
   console.log('Starting Perplexity search for programs', { 
     pathwayTitle: pathway.title,
     queryLength: query.length 
@@ -632,15 +645,16 @@ export async function searchProgramsWithPerplexityAPI(
     try {
       // Then parse the response using the PLANNING AGENT
       console.log('Parsing Perplexity response via Planning Agent');
-      const programs = await parsePerplexityResponse(
+      // parsePerplexityResponse now returns { programs: ..., responseId: ... }
+      const parseResult = await parsePerplexityResponse(
         perplexityResponse, 
         pathway, 
         userProfile, // Pass userProfile
         previousResponseId // Pass previousResponseId
       );
       
-      console.log(`Perplexity search and Planning Agent evaluation complete, found ${programs.length} matching programs`);
-      return programs;
+      console.log(`Perplexity search and Planning Agent evaluation complete, found ${parseResult.programs.length} matching programs. ResponseId: ${parseResult.responseId || 'none'}`);
+      return parseResult; // Return the whole result object
     } catch (parseError: any) {
       // Handle parsing errors separately to attempt recovery
       console.error('Error parsing Perplexity response via Planning Agent:', {
@@ -651,7 +665,7 @@ export async function searchProgramsWithPerplexityAPI(
       // Create at least one fallback program so the overall process can continue
       const fallbackProgram = createFallbackProgram(pathway);
       console.log('Created fallback program due to parsing error');
-      return [fallbackProgram];
+      return { programs: [fallbackProgram], responseId: undefined }; // Return fallback with undefined responseId
     }
   } catch (error: any) {
     // Add detailed error information
@@ -665,7 +679,7 @@ export async function searchProgramsWithPerplexityAPI(
     try {
       const fallbackProgram = createFallbackProgram(pathway);
       console.log('Created fallback program due to API error');
-      return [fallbackProgram];
+      return { programs: [fallbackProgram], responseId: undefined }; // Return fallback with undefined responseId
     } catch (fallbackError) {
       console.error('Failed to create fallback program:', fallbackError);
       throw new Error(`Failed to search for programs: ${error.message}`);

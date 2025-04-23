@@ -6,9 +6,10 @@ import {
   // syncProgramsToVectorStore is handled within saveProgramsForPathway now
   // saveProgramsForPathway is defined below, not imported
 } from './supabase-helpers';
-import { researchSpecificPrograms } from '@/lib/ai/programResearchAgent';
+import { researchSpecificPrograms, ResearchProgramsResult } from '@/lib/ai/programResearchAgent'; // Import updated function and type
 import { createClient } from '@/lib/supabase/server';
 import { syncProgramsToVectorStore } from './vector-store-helpers'; // Import sync function
+import { getMoreEvaluatedPrograms } from '@/lib/ai/planningAgent'; // Import the new function from planningAgent
 
 // API URL from environment variables with fallback
 const API_URL = (() => {
@@ -39,7 +40,7 @@ async function fetchPathwayData(pathwayId: string, userId: string): Promise<{ pa
     // Fetch the pathway data
     const { data, error } = await supabase
       .from('education_pathways')
-      .select('*')
+      .select('*') // Select all needed fields, including last_pathway_response_id
       .eq('id', pathwayId)
       .eq('user_id', userId)
       .single();
@@ -455,6 +456,7 @@ export async function updatePathwayFeedback(
 
 /**
  * Generate specific program recommendations for a pathway
+ * Returns recommendations and the conversation response ID.
  */
 export async function generateProgramsForPathway(
   vectorStoreId: string,
@@ -463,6 +465,7 @@ export async function generateProgramsForPathway(
   pathwayFeedback?: any
 ): Promise<{
   recommendations: RecommendationProgram[];
+  responseId?: string; // Added responseId to return type
   error?: string;
   warning?: string;
   dbSaveError?: string;
@@ -471,7 +474,8 @@ export async function generateProgramsForPathway(
   rejectedPrograms?: Array<{name: string, reason: string}>;
 }> {
   let recommendations: RecommendationProgram[] = [];
-  const startTime = Date.now(); // Restore execution time tracking
+  let responseId: string | undefined = undefined; // Variable to hold responseId
+  const startTime = Date.now(); 
   
   try {
     // ---- Initialize Supabase Client ----
@@ -488,7 +492,7 @@ export async function generateProgramsForPathway(
     
     console.log(`Generating program recommendations for pathway ${pathwayId}...`);
     
-    // Check authentication status (already done in exploreProgramsAction, but good practice here too)
+    // Check authentication status
     const { isAuthenticated, userId: authUserId } = await checkUserAuthentication();
     console.log(`Auth check result: isAuthenticated=${isAuthenticated}, userId=${authUserId}`);
     
@@ -513,38 +517,37 @@ export async function generateProgramsForPathway(
     console.log(`Successfully fetched pathway: ${pathway.title}`);
     // ---- End Fetch Pathway Data ----
 
-    // ---- Fetch previousResponseId from user profile ----
-    let previousResponseId: string | undefined = undefined;
-    try {
-      const { data: profileData, error: profileFetchError } = await supabase
-        .from('profiles')
-        .select('last_pathway_response_id')
-        .eq('id', userId)
-        .single();
-      
-      if (profileFetchError) {
-        console.warn('Could not fetch profile to get last_pathway_response_id:', profileFetchError.message);
-      } else if (profileData?.last_pathway_response_id) {
-        previousResponseId = profileData.last_pathway_response_id;
-        console.log(`Retrieved previousResponseId for context: ${previousResponseId}`);
-      }
-    } catch (fetchError) {
-      console.warn('Error fetching last_pathway_response_id from profile:', fetchError);
+    // ---- Fetch previousResponseId from pathway (if available) ----
+    // Use the last_pathway_response_id from pathway data
+    // Note: This is for the *pathway generation* context, 
+    // We will later use the *program evaluation* responseId if available.
+    const previousPathwayResponseId = pathway.last_pathway_response_id || undefined;
+    if (previousPathwayResponseId) {
+      console.log(`Using previous pathway response ID for initial research context: ${previousPathwayResponseId}`);
     }
+    // We also need the last_recommended_programs_response_id if it exists
+    const previousProgramResponseId = pathway.last_recommended_programs_response_id || undefined;
+     if (previousProgramResponseId) {
+       console.log(`Using previous program recommendation response ID for context: ${previousProgramResponseId}`);
+     }
     // ---- End Fetch previousResponseId ----
 
     // ---- Call Program Research Agent Directly ----
     console.log(`Calling researchSpecificPrograms for pathway: ${pathway.title}`);
     let agentError: string | undefined = undefined;
+    let agentResult: ResearchProgramsResult | undefined; // Use the updated type
     
     try {
-      recommendations = await researchSpecificPrograms(
+      // Pass the program-specific response ID if available, otherwise the pathway one.
+      agentResult = await researchSpecificPrograms(
         pathway, 
         userProfile, 
         pathwayFeedback,
-        previousResponseId // Pass the retrieved ID
+        previousProgramResponseId || previousPathwayResponseId // Prefer program-specific context
       );
-      console.log(`Agent finished: ${recommendations.length} programs found`);
+      recommendations = agentResult.recommendations; // Extract recommendations
+      responseId = agentResult.responseId; // Capture the responseId from the agent result
+      console.log(`Agent finished: ${recommendations.length} programs found. ResponseId: ${responseId || 'none'}`);
     } catch (error) {
       console.error('Error calling researchSpecificPrograms agent:', error);
       agentError = error instanceof Error ? error.message : 'Failed to research programs.';
@@ -561,6 +564,7 @@ export async function generateProgramsForPathway(
       console.log('No program recommendations generated for this pathway');
       return {
         recommendations: [],
+        responseId: responseId, // Return responseId even if no programs
         warning: 'No specific programs were found matching this pathway\'s criteria.'
       };
     }
@@ -583,15 +587,51 @@ export async function generateProgramsForPathway(
         
         return {
           recommendations: recommendations, // Still return the generated programs
+          responseId: responseId, // Return responseId even on save failure
           dbSaveError: saveResult.error,
           partialSave: Boolean(saveResult.savedCount && saveResult.savedCount > 0),
           savedCount: saveResult.savedCount,
           rejectedPrograms: saveResult.rejectedPrograms
-          // No warning needed here, dbSaveError is the primary issue
         };
       }
       
       console.log(`Successfully saved ${saveResult.savedCount} program recommendations to the database`);
+
+      // --- Save the program responseId to the pathway ---
+      if (responseId) {
+        console.log(`Attempting to save program response ID ${responseId} to pathway ${pathwayId}`);
+        try {
+          const { error: rpcError } = await supabase.rpc(
+            'update_pathway_program_response_id',
+            { p_pathway_id: pathwayId, p_response_id: responseId }
+          );
+          if (rpcError) {
+            console.warn(`Failed to save program response ID for pathway ${pathwayId}:`, rpcError.message);
+            // Non-critical: Add warning to the return, but don't fail the overall operation
+             return {
+               recommendations: recommendations,
+               responseId: responseId, // Still return the ID
+               savedCount: saveResult.savedCount,
+               rejectedPrograms: saveResult.rejectedPrograms,
+               warning: `Programs saved, but failed to store conversation ID: ${rpcError.message}`
+             };
+          } else {
+            console.log(`Successfully saved program response ID ${responseId} for pathway ${pathwayId}`);
+          }
+        } catch (rpcCatchError) {
+          console.warn(`Error calling update_pathway_program_response_id RPC for pathway ${pathwayId}:`, rpcCatchError);
+           return {
+             recommendations: recommendations,
+             responseId: responseId, // Still return the ID
+             savedCount: saveResult.savedCount,
+             rejectedPrograms: saveResult.rejectedPrograms,
+             warning: `Programs saved, but failed to store conversation ID due to RPC error: ${rpcCatchError instanceof Error ? rpcCatchError.message : String(rpcCatchError)}`
+           };
+        }
+      } else {
+        console.log(`No program response ID received from agent for pathway ${pathwayId}, skipping update.`);
+      }
+      // --- End Save program responseId ---
 
       // Mark pathway as explored after successful save
       try {
@@ -613,15 +653,16 @@ export async function generateProgramsForPathway(
       console.log(`Program generation and saving completed in ${executionTime}ms`);
       return {
         recommendations: recommendations, // Return saved programs
+        responseId: responseId, // Return the responseId
         savedCount: saveResult.savedCount,
         rejectedPrograms: saveResult.rejectedPrograms
-        // No specific warning needed on full success
       };
     } catch (dbError) {
       console.error('Unexpected error saving to database:', dbError);
       
       return {
         recommendations: recommendations, // Still return generated programs
+        responseId: responseId, // Return responseId even on DB error
         dbSaveError: dbError instanceof Error 
           ? dbError.message 
           : 'An unexpected error occurred while saving programs to the database'
@@ -1821,7 +1862,7 @@ export async function deleteRecommendationProgramAction(
         }
         
         return {
-          success: true,
+          success: false,
           error: 'Recommendation already deleted or not found'
         };
       }
@@ -1842,7 +1883,7 @@ export async function deleteRecommendationProgramAction(
       }
       
       return {
-        success: true,
+        success: false,
         error: 'Recommendation already deleted or not found'
       };
     }
@@ -1990,4 +2031,190 @@ async function getAuthHeaders(): Promise<HeadersInit> {
     console.error('Error getting auth headers:', error);
     return { "Content-Type": "application/json" };
   }
-} 
+}
+
+/**
+ * Fetches more program recommendations for a pathway using conversation context.
+ */
+export async function getMoreProgramsForPathwayAction(
+  pathwayId: string,
+  userProfile: UserProfile,
+  programFeedback?: any // Optional feedback on existing programs
+): Promise<{
+  newRecommendations: RecommendationProgram[]; // Return only the newly fetched ones
+  newResponseId?: string; // The ID of the latest turn
+  error?: string;
+  warning?: string;
+  dbSaveError?: string;
+  partialSave?: boolean;
+  savedCount?: number;
+  rejectedPrograms?: Array<{name: string, reason: string}>;
+}> {
+  const startTime = Date.now();
+  let newRecommendations: RecommendationProgram[] = [];
+  let newResponseId: string | undefined = undefined;
+
+  try {
+    // ---- Initialize Supabase Client & Auth Check ----
+    const supabase = await createClient();
+    const { isAuthenticated, userId } = await checkUserAuthentication();
+
+    if (!isAuthenticated || !userId || userId !== userProfile.userId) {
+      return { newRecommendations: [], error: 'Authentication failed or user mismatch' };
+    }
+    
+    // Ensure vectorStoreId is available
+    const vectorStoreId = userProfile.vectorStoreId;
+     if (!vectorStoreId) {
+       return { newRecommendations: [], error: 'User profile is missing vector store ID' };
+     }
+
+    console.log(`Getting more programs for pathway ${pathwayId}...`);
+
+    // ---- Fetch Pathway Data including the last program response ID ----
+    const { pathway, error: pathwayError } = await fetchPathwayData(pathwayId, userId);
+
+    if (pathwayError || !pathway) {
+      console.error(`Failed to fetch pathway data: ${pathwayError}`);
+      return { newRecommendations: [], error: pathwayError || 'Could not retrieve pathway details.' };
+    }
+
+    const previousProgramResponseId = pathway.last_recommended_programs_response_id;
+
+    if (!previousProgramResponseId) {
+      console.warn(`No previous program response ID found for pathway ${pathwayId}. Cannot get more programs using context.`);
+      return { 
+        newRecommendations: [], 
+        error: 'Cannot get more programs without previous conversation context. Try exploring the pathway again.' 
+      };
+    }
+    console.log(`Using previous program response ID: ${previousProgramResponseId} for pathway ${pathwayId}`);
+
+    // ---- Construct User Request for More Programs ----
+    // Simple request for now, can be expanded with feedback processing
+    let userRequest = "Please provide 5 more distinct programs from your research results.";
+    if (programFeedback) {
+      // Basic feedback incorporation (can be made more sophisticated)
+      userRequest += ` Consider this feedback on previous programs: ${JSON.stringify(programFeedback)}. Prioritize programs that address these points.`;
+    }
+    console.log("User request for more programs:", userRequest);
+
+    // ---- Call the new Planning Agent function ----
+    try {
+      const moreProgramsResult = await getMoreEvaluatedPrograms(
+        previousProgramResponseId,
+        pathway, // Pass full pathway object
+        userProfile,
+        userRequest
+      );
+      
+      newRecommendations = moreProgramsResult.programs;
+      newResponseId = moreProgramsResult.responseId; // Capture the *new* responseId
+      console.log(`Agent returned ${newRecommendations.length} more programs. New responseId: ${newResponseId || 'none'}`);
+
+    } catch (agentError) {
+       console.error('Error calling getMoreEvaluatedPrograms agent:', agentError);
+       return { 
+         newRecommendations: [], 
+         error: `Failed to get more programs: ${agentError instanceof Error ? agentError.message : 'Agent error'}` 
+       };
+    }
+
+    // Handle case where no *new* programs were found
+    if (newRecommendations.length === 0) {
+      console.log('No additional distinct programs found for this pathway.');
+      // Still update the response ID if one was generated
+      if (newResponseId) {
+         await updatePathwayProgramResponseId(supabase, pathwayId, newResponseId);
+      }
+      return {
+        newRecommendations: [],
+        newResponseId: newResponseId, // Return the latest ID even if no programs
+        warning: 'No additional distinct programs were found matching the criteria.'
+      };
+    }
+
+    // ---- Save Newly Fetched Recommendations ----
+    console.log(`Saving ${newRecommendations.length} new program recommendations.`);
+    try {
+      const saveResult = await saveProgramsForPathway(
+        userId,
+        pathwayId,
+        vectorStoreId,
+        newRecommendations // Save only the new programs
+      );
+
+      if (!saveResult.success) {
+        console.error('Failed to save new program recommendations:', saveResult.error);
+        // Return new programs but indicate DB error
+        return {
+          newRecommendations: newRecommendations,
+          newResponseId: newResponseId, // Return new ID even on save failure
+          dbSaveError: saveResult.error,
+          partialSave: Boolean(saveResult.savedCount && saveResult.savedCount > 0),
+          savedCount: saveResult.savedCount,
+          rejectedPrograms: saveResult.rejectedPrograms
+        };
+      }
+      
+      console.log(`Successfully saved ${saveResult.savedCount} new program recommendations.`);
+
+      // --- Update the program responseId for the pathway with the NEW ID ---
+      if (newResponseId) {
+         await updatePathwayProgramResponseId(supabase, pathwayId, newResponseId);
+      } else {
+         console.warn(`No new response ID received from agent for pathway ${pathwayId} during 'get more', pathway context not updated.`);
+      }
+
+      const executionTime = Date.now() - startTime;
+      console.log(`'Get More Programs' action completed in ${executionTime}ms`);
+      return {
+        newRecommendations: newRecommendations, // Return only the newly fetched programs
+        newResponseId: newResponseId,
+        savedCount: saveResult.savedCount,
+        rejectedPrograms: saveResult.rejectedPrograms
+      };
+
+    } catch (dbError) {
+      console.error('Unexpected error saving new programs:', dbError);
+      return {
+        newRecommendations: newRecommendations,
+        newResponseId: newResponseId,
+        dbSaveError: dbError instanceof Error 
+          ? dbError.message 
+          : 'An unexpected error occurred while saving new programs'
+      };
+    }
+
+  } catch (error) {
+    console.error('Unexpected error in getMoreProgramsForPathwayAction:', error);
+    const executionTime = Date.now() - startTime;
+    console.log(`Action failed after ${executionTime}ms`);
+    return {
+      newRecommendations: [],
+      error: error instanceof Error 
+        ? error.message 
+        : 'An unexpected server error occurred while getting more programs'
+    };
+  }
+}
+
+// Helper function to call the RPC (to avoid duplicating RPC call logic)
+async function updatePathwayProgramResponseId(supabase: any, pathwayId: string, responseId: string): Promise<void> {
+   console.log(`Attempting to save program response ID ${responseId} to pathway ${pathwayId}`);
+   try {
+     const { error: rpcError } = await supabase.rpc(
+       'update_pathway_program_response_id',
+       { p_pathway_id: pathwayId, p_response_id: responseId }
+     );
+     if (rpcError) {
+       console.warn(`Failed to save program response ID for pathway ${pathwayId}:`, rpcError.message);
+       // Log warning but don't throw - non-critical failure
+     } else {
+       console.log(`Successfully saved program response ID ${responseId} for pathway ${pathwayId}`);
+     }
+   } catch (rpcCatchError) {
+     console.warn(`Error calling update_pathway_program_response_id RPC for pathway ${pathwayId}:`, rpcCatchError);
+     // Log warning but don't throw
+   }
+}

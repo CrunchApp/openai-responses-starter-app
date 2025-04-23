@@ -1,17 +1,23 @@
 import { RecommendationProgram, UserProfile } from '@/app/recommendations/types';
 import { searchProgramsWithPerplexityAPI } from '@/app/api/recommendations/perplexity-integration';
 
+// Define the return type for researchSpecificPrograms
+export interface ResearchProgramsResult {
+  recommendations: RecommendationProgram[];
+  responseId?: string; // Added responseId
+}
+
 /**
  * Program Research Agent
  * Takes a single education pathway and user profile and finds specific matching programs
- * Updated to accept previousResponseId for context
+ * Updated to accept previousResponseId for context and return a responseId.
  */
 export async function researchSpecificPrograms(
   pathway: any, 
   userProfile: UserProfile, 
   pathwayFeedback?: any,
   previousResponseId?: string
-): Promise<RecommendationProgram[]> {
+): Promise<ResearchProgramsResult> { // Updated return type
   try {
     if (!pathway) {
       throw new Error('No education pathway provided for research');
@@ -53,6 +59,7 @@ export async function researchSpecificPrograms(
     const query = constructDetailedQuery(normalizedPathway, userProfile, pathwayFeedback);
     
     // Create the research promise
+    // Note: Assuming searchProgramsWithPerplexityAPI is updated to return { programs: RecommendationProgram[], responseId?: string }
     const researchPromise = searchProgramsWithPerplexityAPI(
       query, 
       normalizedPathway,
@@ -62,23 +69,34 @@ export async function researchSpecificPrograms(
     
     // Race the research promise against the timeout
     const startTime = Date.now();
-    const results = await Promise.race([
+    // Update the type assumption here for the result
+    const searchResult: { programs: RecommendationProgram[], responseId?: string } = await Promise.race([
       researchPromise,
       timeoutPromise
     ]);
     
     console.log(`[ResearchAgent] Completed in ${Date.now() - startTime} ms`);
     
-    if (results.length === 0) {
+    // Extract programs and responseId
+    const recommendations = searchResult.programs || [];
+    const responseId = searchResult.responseId; // Capture the responseId
+    
+    if (recommendations.length === 0) {
       console.warn(`No programs found for pathway "${pathway.title}"`);
     } else {
-      console.log(`Found ${results.length} programs for pathway "${pathway.title}"`);
+      console.log(`Found ${recommendations.length} programs for pathway "${pathway.title}"`);
     }
     
     // Sort by match score before returning
-    return results
+    const sortedRecommendations = recommendations
       .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))
       .slice(0, 15); // Limit to top 15 recommendations
+      
+    // Return both recommendations and responseId
+    return {
+      recommendations: sortedRecommendations,
+      responseId: responseId
+    };
   } catch (error: any) {
     console.error('Error researching specific programs:', {
       message: error.message, 
@@ -161,7 +179,7 @@ USER PREFERENCES:
 ${feedbackNotes}
 
 OUTPUT GUIDELINES:
-1. Return **at least 10** distinct programs (10-15 preferred) in a numbered list.
+1. Return **at least 30** distinct programs (35-40 preferred) in a numbered list.
 2. For **each** program include **all** of the following fields:
      - Program name and degree/certificate type
      - Institution name

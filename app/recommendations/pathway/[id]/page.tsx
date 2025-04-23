@@ -1,15 +1,16 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import usePathwayStore from "@/stores/usePathwayStore";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, ArrowLeft, BookOpen, Award, Calendar, MapPin, Wallet, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, BookOpen, Award, Calendar, MapPin, Wallet, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ProgramCard } from "./_components/ProgramCard";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import useProfileStore from "@/stores/useProfileStore";
 
 // --- Helpers (to be moved/refactored from PathwayExplorer) ---
 function formatCurrency(amount?: number | null) {
@@ -95,16 +96,45 @@ export default function PathwayDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const pathwayId = params?.id as string;
-  const { pathways, programsByPathway, programGenerationLoading, programGenerationError } = usePathwayStore();
+  const { 
+    pathways, 
+    programsByPathway, 
+    programGenerationLoading, 
+    programGenerationError,
+    moreProgramsLoading,
+    moreProgramsError,
+    getMorePrograms,
+  } = usePathwayStore();
   const { user } = useAuth();
+  const { profileData, hydrated: profileStoreHydrated } = useProfileStore();
+
+  // --- Logging Effect ---
+  useEffect(() => {
+    console.log("[PathwayDetailsPage] Render check:");
+    console.log("  - Profile Data:", profileData);
+    console.log("  - Profile Store Hydrated:", profileStoreHydrated);
+    console.log("  - User (Auth Context):", user);
+  }, [profileData, profileStoreHydrated, user]);
+  // --- End Logging Effect ---
 
   const pathway = useMemo(() => pathways.find(p => p.id === pathwayId), [pathways, pathwayId]);
   const programs = useMemo(() => programsByPathway[pathwayId] || [], [programsByPathway, pathwayId]);
   const isLoading = programGenerationLoading[pathwayId];
-  const error = programGenerationError[pathwayId];
+  const initialLoadError = programGenerationError[pathwayId];
   const filteredPrograms = useMemo(() => programs.filter(p => !p.is_deleted && typeof p.id === 'string'), [programs]);
 
-  if (!pathway) {
+  const isLoadingMore = moreProgramsLoading[pathwayId];
+  const loadMoreError = moreProgramsError[pathwayId];
+  
+  const canLoadMore = !!pathway?.last_recommended_programs_response_id;
+
+  const handleLoadMore = () => {
+    if (isLoadingMore || !pathwayId || !profileData) return;
+    console.log(`Triggering load more for pathway: ${pathwayId}`);
+    getMorePrograms(pathwayId, profileData);
+  };
+  
+  if (!pathway && !isLoading) {
     return (
       <div className="container mx-auto py-8 px-4 max-w-4xl">
         <Button 
@@ -130,6 +160,22 @@ export default function PathwayDetailsPage() {
       </div>
     );
   }
+
+  if (!pathway && isLoading) {
+     return (
+      <div className="container mx-auto py-8 px-4 max-w-4xl">
+         <Skeleton className="h-10 w-48 mb-6" />
+         <Card className="mb-8">
+           <CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader>
+           <CardContent><Skeleton className="h-20 w-full" /></CardContent>
+         </Card>
+         <Skeleton className="h-8 w-1/2 mb-6" />
+         <ProgramLoadingSkeleton />
+      </div>
+     );
+  }
+  
+  if (!pathway) return null;
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
@@ -199,39 +245,38 @@ export default function PathwayDetailsPage() {
           Programs for this Pathway
           {filteredPrograms.length > 0 && (
             <Badge variant="secondary" className="ml-3 text-sm px-2">
-              {filteredPrograms.length}
+              {filteredPrograms.length} Found
             </Badge>
           )}
         </h2>
       </div>
       
-      {/* Render loading, error, or the list of programs */}
-      {isLoading ? (
+      {isLoading && filteredPrograms.length === 0 ? (
         <ProgramLoadingSkeleton />
-      ) : error ? (
+      ) : 
+      initialLoadError && filteredPrograms.length === 0 ? (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-5 w-5" />
           <AlertTitle>Error Loading Programs</AlertTitle>
-          <AlertDescription className="mt-1">{error}</AlertDescription>
-          <Button variant="outline" size="sm" className="mt-3">
-            Retry Loading Programs
-          </Button>
+          <AlertDescription className="mt-1">{initialLoadError}</AlertDescription>
         </Alert>
-      ) : filteredPrograms.length === 0 ? (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <AlertCircle className="h-12 w-12 text-amber-500 mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No Programs Found</h3>
-            <p className="text-muted-foreground mb-6 max-w-md">
-              We couldn't find any specific programs for this educational pathway. 
-              Try exploring other pathways or reach out to an advisor for more options.
-            </p>
-            <Button onClick={() => router.push("/recommendations")}>
-              Return to Pathways
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
+      ) : 
+      !isLoading && filteredPrograms.length === 0 ? (
+         <Card className="border-amber-200 bg-amber-50/50">
+           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+             <AlertCircle className="h-12 w-12 text-amber-500 mb-4" />
+             <h3 className="text-xl font-semibold mb-2">No Programs Found Yet</h3>
+             <p className="text-muted-foreground mb-6 max-w-md">
+               We couldn't find specific programs for this pathway during the initial search. 
+               You might need to refine the pathway or explore alternatives.
+             </p>
+             <Button onClick={() => router.push("/recommendations")}>
+               Return to Pathways
+             </Button>
+           </CardContent>
+         </Card>
+      ) : 
+      (
         <div className="space-y-6 animate-in fade-in-50 duration-300">
           {filteredPrograms.map(program => (
             <ProgramCard
@@ -244,6 +289,42 @@ export default function PathwayDetailsPage() {
               isGuest={!user}
             />
           ))}
+        </div>
+      )}
+
+      {filteredPrograms.length > 0 && (
+        <div className="mt-8 text-center">
+           {loadMoreError && (
+             <Alert variant="destructive" className="mb-4 text-left">
+               <AlertCircle className="h-4 w-4" />
+               <AlertTitle>Error Loading More</AlertTitle>
+               <AlertDescription>{loadMoreError}</AlertDescription>
+             </Alert>
+           )}
+          <Button
+            onClick={handleLoadMore}
+            disabled={isLoadingMore || !canLoadMore || !profileData}
+            variant="outline"
+            className="transition-all duration-200 group"
+            title={!canLoadMore ? "Cannot load more without previous context" : (!profileData ? "User profile needed" : "Load more programs")}
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 group-hover:rotate-180 transition-transform duration-300" />
+                Load More Programs
+              </>
+            )}
+          </Button>
+          {!canLoadMore && (
+             <p className="text-xs text-muted-foreground mt-2">
+               Load more requires previous context. Try exploring the pathway again if needed.
+             </p>
+           )}
         </div>
       )}
     </div>

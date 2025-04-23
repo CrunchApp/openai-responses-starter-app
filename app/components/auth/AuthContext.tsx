@@ -5,8 +5,45 @@ import { User, Session } from '@supabase/supabase-js'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { Database } from '@/lib/database.types'
+import useProfileStore from '@/stores/useProfileStore'
+import { UserProfile } from '@/app/types/profile-schema'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
+
+// Helper function to map Supabase profile row to UserProfile
+function mapDbProfileToUserProfile(dbProfile: Profile): UserProfile {
+  // Use type assertions and provide defaults cautiously
+  return {
+    userId: dbProfile.id,
+    firstName: dbProfile.first_name || '',
+    lastName: dbProfile.last_name || '',
+    email: dbProfile.email || '',
+    phone: dbProfile.phone || '',
+    preferredName: dbProfile.preferred_name || '',
+    linkedInProfile: dbProfile.linkedin_profile || '',
+    currentLocation: dbProfile.current_location || '',
+    nationality: dbProfile.nationality || '',
+    targetStudyLevel: (dbProfile.target_study_level as UserProfile['targetStudyLevel']) || '__NONE__',
+    // Assert the array type but provide default empty array
+    languageProficiency: (dbProfile.language_proficiency as UserProfile['languageProficiency']) || [],
+    // Assert the array type but provide default education record
+    education: (dbProfile.education as UserProfile['education']) || [{ degreeLevel: '__NONE__', institution: '', fieldOfStudy: '', graduationYear: '' }],
+    // Assert the object type but provide default career goals
+    careerGoals: (dbProfile.career_goals as UserProfile['careerGoals']) || { shortTerm: '', longTerm: '', achievements: '', desiredIndustry: [], desiredRoles: [] },
+    // Assert the array type but provide default empty array
+    skills: (dbProfile.skills as UserProfile['skills']) || [],
+    // Assert the object type but provide default preferences
+    preferences: (dbProfile.preferences as UserProfile['preferences']) || {
+      preferredLocations: [], studyMode: 'Full-time', startDate: '', budgetRange: { min: 0, max: 100000 },
+      preferredDuration: { min: undefined, max: undefined, unit: undefined }, preferredStudyLanguage: '',
+      livingExpensesBudget: { min: undefined, max: undefined, currency: 'USD' }, residencyInterest: false
+    },
+    // Assert the object type but provide default documents
+    documents: (dbProfile.documents as UserProfile['documents']) || {},
+    vectorStoreId: dbProfile.vector_store_id || undefined,
+    profileFileId: dbProfile.profile_file_id || undefined,
+  };
+}
 
 interface AuthContextType {
   user: User | null
@@ -38,6 +75,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
+
+  // --- Zustand Store Access --- 
+  const setProfileDataInStore = useProfileStore((state) => state.setProfileData);
+  const clearProfileStore = useProfileStore((state) => state.clearStore);
+  const setVectorStoreIdInStore = useProfileStore((state) => state.setVectorStoreId);
+  // --- End Zustand Store Access ---
 
   async function fetchProfile(userId: string) {
     try {
@@ -96,9 +139,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profileFileId: data.profile_file_id
       });
 
+      // === Update Profile Store ===
+      if (data) {
+        const userProfile = mapDbProfileToUserProfile(data);
+        console.log("[AuthContext] Setting profile data in Zustand store:", userProfile);
+        setProfileDataInStore(userProfile);
+        setVectorStoreIdInStore(userProfile.vectorStoreId || null);
+      } else {
+        // Ensure store is cleared if profile fetch fails or returns null
+        console.log("[AuthContext] No profile data found or fetch failed, clearing Zustand store.");
+        clearProfileStore(); 
+      }
+      // =========================
+
       return data
     } catch (error) {
       console.error('Unexpected error fetching profile:', error)
+      // === Clear Profile Store on Error ===
+      console.log("[AuthContext] Error fetching profile, clearing Zustand store.");
+      clearProfileStore(); 
+      // ==================================
       return null
     }
   }
@@ -154,6 +214,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isMounted) {
           setUser(null);
           setProfile(null);
+          // === Clear Profile Store on Sign Out ===
+          console.log("[AuthContext] User signed out, clearing Zustand store.");
+          clearProfileStore();
+          // ====================================
         }
       }
     })
@@ -254,6 +318,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setProfile(null);
       setVectorStoreId(null);
+      // === Clear Profile Store on Explicit Sign Out ===
+      console.log("[AuthContext] Explicit signOut called, clearing Zustand store.");
+      clearProfileStore();
+      // ============================================
       
       // Navigate as the final step
       router.push('/');
@@ -345,6 +413,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Update tools store with vectorStoreId if available
       if (profileData?.vector_store_id) {
+        // === Update Profile Store on Refresh === 
+        const userProfile = mapDbProfileToUserProfile(profileData);
+        console.log("[AuthContext] Refreshing session, setting profile data in Zustand store:", userProfile);
+        setProfileDataInStore(userProfile);
+        setVectorStoreIdInStore(userProfile.vectorStoreId || null);
+        // =====================================
+
         const useToolsStore = (await import('@/stores/useToolsStore')).default;
         useToolsStore.getState().setVectorStore({
           id: profileData.vector_store_id,

@@ -256,8 +256,10 @@ const programEvaluationSchema = {
 // Define interface for the structured output (excluding generated ID)
 interface EvaluatedProgramOutput extends Omit<RecommendationProgram, 'id'> {}
 
+// Updated return type to include responseId
 interface ProgramEvaluationResponse {
   programs: EvaluatedProgramOutput[];
+  responseId?: string; // Added responseId
 }
 
 /**
@@ -594,13 +596,14 @@ ${feedbackContextString || 'None'}
 /**
  * Evaluates programs found by programResearchAgent against
  * a specific education pathway and user profile, calculating match scores.
+ * Now accepts previousResponseId and returns a responseId.
  */
 export async function evaluateAndScorePrograms(
   perplexityResponseText: string,
   pathway: EducationPathway, // Use the specific type
   userProfile: UserProfile,
-  previousResponseId?: string
-): Promise<ProgramEvaluationResponse> {
+  previousResponseId?: string // Accept previousResponseId
+): Promise<ProgramEvaluationResponse> { // Updated return type
   try {
     if (!OPENAI_API_KEY) {
       throw new Error('Missing OPENAI_API_KEY environment variable');
@@ -640,7 +643,7 @@ export async function evaluateAndScorePrograms(
     // --- Prepare Request Options ---
     const requestOptions: any = {
       model: "o4-mini-2025-04-16",
-      store: true 
+      store: true // Ensure conversation state is stored
     };
     
     // If we have a previous response ID, use it to maintain conversation context
@@ -812,8 +815,7 @@ Think critically about the alignment. The match scores should be quantitative re
       const response = await openai.responses.create(requestOptions);
       console.log(`Evaluation response received with status: ${response.status}`);
 
-      // --- Process Response (remain unchanged) ---
-      // ... existing code for extracting output text, handling errors, and parsing responses
+      // --- Process Response ---
       if (response.status === 'incomplete') {
         const reason = response.incomplete_details?.reason || 'unknown';
         const details = (response.incomplete_details as any)?.typedError?.message || '';
@@ -886,8 +888,11 @@ Think critically about the alignment. The match scores should be quantitative re
           }
         }
         
-        // Note: The caller (parsePerplexityResponse) will add unique IDs.
-        return evaluatedData; 
+        // Return the parsed data along with the response ID
+        return {
+          programs: evaluatedData.programs, // Note: The caller (parsePerplexityResponse) will add unique IDs.
+          responseId: response.id // Return the response ID
+        }; 
         
       } catch (parseError) {
         console.error('JSON parsing error during evaluation:', parseError instanceof Error ? parseError.message : String(parseError));
@@ -907,6 +912,157 @@ Think critically about the alignment. The match scores should be quantitative re
       throw new Error(`Program evaluation failed: ${error.message}`);
     } else {
       throw new Error(`Program evaluation failed: ${String(error)}`);
+    }
+  }
+}
+
+/**
+ * Retrieves more evaluated programs based on previous conversation context.
+ */
+export async function getMoreEvaluatedPrograms(
+  previousResponseId: string,
+  pathway: EducationPathway,
+  userProfile: UserProfile,
+  userRequest: string // e.g., "Find 5 more distinct programs, prioritizing affordability."
+): Promise<ProgramEvaluationResponse> { // Returns programs and the new responseId
+  try {
+    if (!OPENAI_API_KEY) {
+      throw new Error('Missing OPENAI_API_KEY environment variable');
+    }
+    if (!previousResponseId) {
+      throw new Error('Missing previousResponseId for conversation context');
+    }
+    if (!pathway) {
+      throw new Error('Missing pathway context');
+    }
+    if (!userProfile) {
+      throw new Error('Missing user profile context');
+    }
+    if (!userRequest) {
+      throw new Error('Missing user request for getting more programs');
+    }
+
+    console.log(`getMoreEvaluatedPrograms called for pathway: ${pathway.title} using previousResponseId: ${previousResponseId}`);
+
+    // Construct the user message for the follow-up request
+    const followUpMessage = `Based on our previous conversation (where you evaluated programs for the ${pathway.qualification_type} in ${pathway.field_of_study}), please find more programs matching that pathway and my profile.
+
+${userRequest}
+
+Please ensure these programs are *distinct* from the ones you previously recommended in this conversation thread. Evaluate these new programs using the same criteria and scoring rationale as before (careerAlignment, budgetFit, locationMatch, academicFit, overall matchScore).
+
+Respond ONLY with the valid JSON object conforming strictly to the program evaluation schema. Do not include explanations outside the JSON structure. Only include the *new* programs found.`;
+
+    // Prepare Request Options
+    const requestOptions: any = {
+      model: "o4-mini-2025-04-16",
+      store: true, // Ensure conversation state is stored
+      previous_response_id: previousResponseId, // Link to the previous evaluation
+      input: [
+        {
+          role: "user",
+          content: followUpMessage
+        }
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "program_evaluation", // Use the same schema name
+          schema: programEvaluationSchema,
+          strict: true
+        }
+      }
+    };
+
+    console.log("Calling OpenAI Responses API for *more* program evaluations");
+    
+    try {
+      const response = await openai.responses.create(requestOptions);
+      console.log(`'Get More' evaluation response received with status: ${response.status}`);
+
+      // Process Response (similar to evaluateAndScorePrograms)
+      if (response.status === 'incomplete') {
+        const reason = response.incomplete_details?.reason || 'unknown';
+        const details = (response.incomplete_details as any)?.typedError?.message || '';
+        console.error(`OpenAI 'Get More' evaluation response incomplete (${reason}): ${details}`);
+        throw new Error(`'Get More' program evaluation failed: Response incomplete. Reason: ${reason}${details ? ` - ${details}` : ''}`);
+      }
+
+      // Extract output text
+      let outputText: string | undefined;
+      // ... (Extraction logic identical to evaluateAndScorePrograms - omitted for brevity, assume it works) ...
+       if (response.output_text) {
+         outputText = response.output_text;
+       } else if (response.output && Array.isArray(response.output)) {
+         const messageOutput = response.output.find(item => item.type === 'message');
+         if (messageOutput && (messageOutput as any).content) {
+           const content = (messageOutput as any).content;
+           const refusalContent = Array.isArray(content) && content.find(c => c.type === 'refusal');
+            if (refusalContent?.type === 'refusal') {
+              throw new Error(`'Get More' evaluation failed: AI refused request. Reason: ${refusalContent.refusal}`);
+            }
+           const outputTextContent = Array.isArray(content) && content.find(c => c.type === 'output_text');
+           if (outputTextContent?.type === 'output_text') {
+             outputText = outputTextContent.text;
+           }
+         }
+          if (!outputText) {
+            const reasoningOutput = response.output.find(item => item.type === 'reasoning');
+            if (reasoningOutput && (reasoningOutput as any).text) {
+              outputText = (reasoningOutput as any).text;
+            }
+          }
+          if (!outputText) {
+            for (const item of response.output) {
+              if ((item as any).text) {
+                outputText = (item as any).text;
+                break;
+              }
+            }
+          }
+       }
+
+      if (!outputText) {
+        console.error('Could not find output_text in \'Get More\' evaluation response');
+        throw new Error('Failed to extract usable text from the AI \'Get More\' evaluation response.');
+      }
+
+      console.log(`Successfully extracted 'Get More' evaluation output text.`);
+
+      try {
+        const evaluatedData = JSON.parse(outputText) as ProgramEvaluationResponse;
+
+        if (!evaluatedData || !Array.isArray(evaluatedData.programs)) {
+          console.error('Parsed \'Get More\' evaluation JSON does not match expected structure');
+          throw new Error('Failed to parse additional evaluated programs: Invalid JSON structure.');
+        }
+
+        console.log(`Successfully parsed ${evaluatedData.programs.length} additional evaluated programs.`);
+
+        // Return the parsed data along with the new response ID
+        return {
+          programs: evaluatedData.programs,
+          responseId: response.id // Return the NEW response ID for this turn
+        };
+
+      } catch (parseError) {
+        console.error('JSON parsing error during \'Get More\' evaluation:', parseError instanceof Error ? parseError.message : String(parseError));
+        console.error('Raw \'Get More\' Output Text:', outputText.substring(0, 500) + (outputText.length > 500 ? '...(truncated)' : ''));
+        throw new Error(`Failed to parse additional evaluated programs: Invalid JSON. ${parseError instanceof Error ? parseError.message : ''}`);
+      }
+    } catch (apiError) {
+      if (apiError instanceof OpenAIError) {
+        console.error(`OpenAI API Error during 'Get More' evaluation:`, apiError.message);
+        throw new Error(`OpenAI API error during 'Get More' evaluation: ${apiError.message}`);
+      }
+      throw apiError;
+    }
+  } catch (error) {
+    console.error('Error getting more evaluated programs:', error);
+    if (error instanceof Error) {
+      throw new Error(`'Get More' program evaluation failed: ${error.message}`);
+    } else {
+      throw new Error(`'Get More' program evaluation failed: ${String(error)}`);
     }
   }
 } 

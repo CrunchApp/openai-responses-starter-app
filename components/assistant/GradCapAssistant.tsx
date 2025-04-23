@@ -427,7 +427,7 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
               <div>
                 <p className={cn("font-medium text-foreground mb-1", size === 'small' ? 'text-[11px]' : 'text-[0.625rem]')}>Quick Chat!</p>
                 <p className={cn("text-muted-foreground", size === 'small' ? 'text-[11px]' : 'text-[0.625rem]')}>
-                  Wherever you see me on the app, you can hover over the cap to ask the Vista Assistant a quick question. You can also drag me around the screen. Just double click and hold to move me to a new location.
+                  Wherever you see me on the app, you can hover over the cap to ask Vista a quick question. You can also drag me around the screen. Just double click and hold to drop me on a new location.
                 </p>
               </div>
             </div>

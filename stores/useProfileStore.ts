@@ -85,14 +85,19 @@ const useProfileStore = create<ProfileState>()(
 
       setHydrated: (state) => set({ hydrated: state }),
       
-      setProfileData: (data) => set({ profileData: data }),
+      setProfileData: (data) => {
+        console.log("[useProfileStore] setProfileData called with:", data); // Log before setting
+        set({ profileData: data });
+      },
       
-      updateProfileData: (data) => 
+      updateProfileData: (data) => {
+        console.log("[useProfileStore] updateProfileData called with:", data); // Log before setting
         set((state) => ({
           profileData: state.profileData 
             ? { ...state.profileData, ...data } 
             : { ...initialProfileData, ...data }
-        })),
+        }));
+      },
       
       setProfileComplete: (isComplete) => set({ isProfileComplete: isComplete }),
       
@@ -114,6 +119,7 @@ const useProfileStore = create<ProfileState>()(
       
       // Updated Clear Action
       clearStore: () => {
+        console.log("[useProfileStore] clearStore called."); // Log clear action
         set((state) => ({
             ...profileInitialState, // Reset everything to initial defaults
             hydrated: state.hydrated, // Preserve only hydration status

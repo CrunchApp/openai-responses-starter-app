@@ -8,6 +8,7 @@ import {
   generateMorePathwaysAction,
   deleteRecommendationProgramAction,
   resetPathwaysAction,
+  getMoreProgramsForPathwayAction
 } from "@/app/recommendations/pathway-actions";
 import { 
   toggleRecommendationFavorite, 
@@ -95,6 +96,13 @@ interface PathwayState {
   deleteProgram: (pathwayId: string, programId: string) => Promise<void>;
   resetAllPathways: () => Promise<void>;
   // --- End New Phase 2 Actions ---
+
+  // New actions
+  getMorePrograms: (pathwayId: string, userProfile: UserProfile, programFeedback?: any) => Promise<void>;
+
+  // New state properties
+  moreProgramsLoading: { [pathwayId: string]: boolean };
+  moreProgramsError: { [pathwayId: string]: string | null };
 }
 
 // Default initial state for the store
@@ -103,6 +111,8 @@ const initialState = {
   programsByPathway: {},
   programGenerationLoading: {},
   programGenerationError: {},
+  moreProgramsLoading: {},
+  moreProgramsError: {},
   isAuthenticated: false,
   userId: null,
   isLoading: false,
@@ -740,6 +750,57 @@ const usePathwayStore = create<PathwayState>()(
         isAuthenticated: state.isAuthenticated,
         userId: state.userId,
       })),
+
+      // New action
+      getMorePrograms: async (pathwayId: string, userProfile: UserProfile, programFeedback?: any) => {
+        set((state) => ({
+          moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: true },
+          moreProgramsError: { ...state.moreProgramsError, [pathwayId]: null },
+        }));
+        try {
+           console.log(`Store action: getting more programs for pathway ${pathwayId}`);
+           const result = await getMoreProgramsForPathwayAction(pathwayId, userProfile, programFeedback);
+
+           if (result.error) throw new Error(result.error);
+           if (result.dbSaveError) console.warn(`DB Save Error for more programs: ${result.dbSaveError}`);
+           if (result.warning) console.warn(`Warning getting more programs: ${result.warning}`);
+
+           if (result.newRecommendations.length > 0) {
+             set((state) => {
+                const currentPrograms = state.programsByPathway[pathwayId] || [];
+                // Directly append new recommendations. Rely on backend/rendering logic for duplicates if necessary.
+                const updatedPrograms = [...currentPrograms, ...result.newRecommendations];
+
+                // Optional: If duplicates become an issue visually after this change, uncomment the next line
+                // const uniquePrograms = Array.from(new Map(updatedPrograms.map(p => [p.id, p])).values());
+
+                return {
+                 programsByPathway: {
+                   ...state.programsByPathway,
+                   [pathwayId]: updatedPrograms // Use updatedPrograms directly (or uniquePrograms if uncommented)
+                 },
+                 moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false },
+                };
+             });
+             console.log(`Store updated with ${result.newRecommendations.length} new programs for pathway ${pathwayId}`);
+           } else {
+             // No new programs, just update loading state
+             set((state) => ({
+               moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false },
+               // Optionally show the warning to the user via state if needed
+             }));
+             console.log(`Store: No new programs returned for pathway ${pathwayId}`);
+           }
+           // Note: We don't need to store the newResponseId in the client store.
+
+        } catch (error) {
+           console.error(`Error getting more programs for pathway ${pathwayId}:`, error);
+           set((state) => ({
+             moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false },
+             moreProgramsError: { ...state.moreProgramsError, [pathwayId]: error instanceof Error ? error.message : `Failed to load more programs` },
+           }));
+        }
+      },
     }),
     {
       name: "pathway-store",
@@ -747,6 +808,9 @@ const usePathwayStore = create<PathwayState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.setHydrated(true);
+           // Ensure initial state for new properties if loading from storage
+           state.moreProgramsLoading = state.moreProgramsLoading || {};
+           state.moreProgramsError = state.moreProgramsError || {};
           if (state.isAuthenticated && state.userId) {
               console.log("[PathwayStore] Rehydrated with authenticated user, checking for sync.");
               if (state.pathways.length === 0 && !state.isLoading) {
@@ -755,6 +819,23 @@ const usePathwayStore = create<PathwayState>()(
           }
         }
       },
+       partialize: (state) => ({ 
+         // Persist only pathways and programs, not loading/error states
+         pathways: state.pathways, 
+         programsByPathway: state.programsByPathway,
+         // Persist guest count
+         guestPathwayGenerationCount: state.guestPathwayGenerationCount, 
+         maxGuestPathwayGenerations: state.maxGuestPathwayGenerations,
+         // Don't persist loading/error/action states
+         // isLoading: undefined, 
+         // error: undefined,
+         // isActionLoading: undefined,
+         // actionError: undefined,
+         // programGenerationLoading: undefined,
+         // programGenerationError: undefined,
+         // moreProgramsLoading: undefined,
+         // moreProgramsError: undefined,
+       }),
     }
   )
 );

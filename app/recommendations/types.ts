@@ -68,6 +68,8 @@ export interface EducationPathway {
   query_string?: string;
   user_feedback?: any;
   is_deleted?: boolean; // Added for soft delete
+  last_pathway_response_id?: string; // ID from pathway generation
+  last_recommended_programs_response_id?: string; // ID from program evaluation
 }
 
 export interface EducationProgram {

@@ -1143,6 +1143,7 @@ async function saveProgramsForPathway(
         match_score: typeof program.matchScore === 'number' ? program.matchScore : 70,
         match_rationale: matchRationale, // Make sure this is a valid JSONB object
         is_favorite: program.isFavorite === true,
+        is_deleted: false, // Explicitly set is_deleted to false for new programs
         
         // Arrays and objects - using validated versions
         requirements: requirements,

@@ -210,6 +210,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const profileData = await fetchProfile(session.user.id);
           if (isMounted) setProfile(profileData);
         }
+      } else if (event === 'PASSWORD_RECOVERY') {
+        // Handle password recovery event
+        console.log("[AuthContext] Handling PASSWORD_RECOVERY event.");
+        if (session?.user) {
+          if (isMounted) {
+            setUser(session.user); 
+            // Optionally fetch profile if needed during recovery, though likely not required
+            // const profileData = await fetchProfile(session.user.id);
+            // if (isMounted) setProfile(profileData);
+            setLoading(false); // Set loading to false after recovery handled
+          }
+        } else {
+          // Handle case where recovery event doesn't provide a session (unlikely but good practice)
+          console.warn("[AuthContext] PASSWORD_RECOVERY event received without a session.");
+          if (isMounted) {
+            setUser(null);
+            setProfile(null);
+            clearProfileStore();
+            setLoading(false); // Also set loading false here
+          }
+        }
       } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session?.user)) {
         if (isMounted) {
           setUser(null);
@@ -218,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log("[AuthContext] User signed out, clearing Zustand store.");
           clearProfileStore();
           // ====================================
+          setLoading(false); // Ensure loading is false on sign out/initial no session
         }
       }
     })

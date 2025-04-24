@@ -1387,9 +1387,11 @@ export async function fetchProgramsForPathway(pathwayId: string): Promise<{
       matchScore: typeof row.match_score === 'number' ? row.match_score : 0,
       matchRationale: row.match_rationale && typeof row.match_rationale === 'object' ? row.match_rationale : undefined,
       isFavorite: row.is_favorite ?? false,
+      // Structured feedback from JSONB column
+      feedbackData: row.feedback_data ?? {},
       feedbackNegative: row.feedback_negative ?? false,
-      feedbackReason: row.feedback_reason ?? null,
-      feedbackSubmittedAt: row.feedback_submitted_at ?? null,
+      feedbackReason: row.feedback_data?.reason ?? null,
+      feedbackSubmittedAt: row.feedback_data?.submittedAt ?? null,
       scholarships: Array.isArray(row.scholarships) ? row.scholarships : [],
       pathway_id: pathwayId,
       program_id: row.program_id,

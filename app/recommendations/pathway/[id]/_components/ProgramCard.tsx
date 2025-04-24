@@ -10,6 +10,10 @@ import { useRouter } from "next/navigation";
 import { RecommendationProgram } from "@/app/recommendations/types";
 import { cn } from "@/lib/utils";
 import { GradCapAssistant } from "@/components/assistant/GradCapAssistant";
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // --- Helpers ---
 function formatCurrency(amount?: number | null) {
@@ -57,17 +61,20 @@ export function ProgramCard({
   onToggleFavorite, 
   onSubmitFeedback,
   onDeleteProgram,
-  isGuest
+  isGuest,
+  onRestoreFeedback
 }: { 
   program: RecommendationProgram;
   pathwayId: string;
   onToggleFavorite: () => void;
-  onSubmitFeedback: (reason: string) => void;
+  onSubmitFeedback: (reason: string, details?: string) => void;
   onDeleteProgram: () => void;
   isGuest: boolean;
+  onRestoreFeedback?: () => void;
 }) {
-  const [showFeedbackOptions, setShowFeedbackOptions] = useState(false);
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
   const [feedbackReason, setFeedbackReason] = useState(program.feedbackReason || "not_relevant");
+  const [feedbackDetails, setFeedbackDetails] = useState("");
   const [showScholarships, setShowScholarships] = useState(false);
   const router = useRouter();
   const hasScholarships = program.scholarships && program.scholarships.length > 0;
@@ -82,12 +89,12 @@ export function ProgramCard({
     onToggleFavorite();
   };
 
-  const handleSubmitFeedback = (reason: string) => {
+  const handleSubmitFeedback = (reason: string, details?: string) => {
     if (isGuest) {
       alert("Please sign up to submit feedback.");
       return;
     }
-    onSubmitFeedback(reason);
+    onSubmitFeedback(reason, details);
   };
 
   const handleDeleteProgram = () => {
@@ -102,6 +109,9 @@ export function ProgramCard({
     if (!program) return;
     router.push("/chat");
   };
+
+  // DEBUGGING: Log program feedback state just before rendering
+  console.log(`[ProgramCard] Rendering program '${program.name}' (ID: ${program.id}). feedbackNegative:`, program.feedbackNegative, 'is_deleted:', program.is_deleted);
 
   return (
     <Card
@@ -289,68 +299,106 @@ export function ProgramCard({
             )}
           </Button>
             
-          {!showFeedbackOptions && !hasFeedback ? (
-            <Button 
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5"
-              title={isGuest ? "Sign up to provide feedback" : "Not interested"}
-              onClick={() => {
-                if (isGuest) {
-                  alert("Please sign up to submit feedback.");
-                  return;
-                }
-                setShowFeedbackOptions(true);
-              }}
-            >
-              {isGuest ? (
-                <><Lock className="h-3.5 w-3.5 mr-1.5" /> Feedback</>
-              ) : (
-                <><ThumbsDown className="h-3.5 w-3.5 mr-1.5" /> Not interested</>
-              )}
-            </Button>
-          ) : hasFeedback ? (
-            <div className="flex items-center">
-              <Badge variant="outline" className="text-xs">
+          {!program.feedbackNegative && !hasFeedback ? (
+            <>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="h-8 px-2.5"
+                title={isGuest ? "Sign up to provide feedback" : "Not interested"}
+                onClick={() => {
+                  if (isGuest) {
+                    alert("Please sign up to submit feedback.");
+                    return;
+                  }
+                  setShowFeedbackDialog(true);
+                }}
+              >
+                {isGuest ? (
+                  <><Lock className="h-3.5 w-3.5 mr-1.5" /> Feedback</>
+                ) : (
+                  <><ThumbsDown className="h-3.5 w-3.5 mr-1.5" /> Not interested</>
+                )}
+              </Button>
+              <AlertDialog open={showFeedbackDialog} onOpenChange={setShowFeedbackDialog}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Not Interested in this Program?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Please tell us why. Your feedback helps improve future recommendations.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="py-4 space-y-4">
+                    <Label htmlFor={`feedback-reason-${program.id}`}>Reason</Label>
+                    <RadioGroup 
+                      id={`feedback-reason-${program.id}`}
+                      value={feedbackReason}
+                      onValueChange={setFeedbackReason}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="not_relevant" id={`r1-${program.id}`} />
+                        <Label htmlFor={`r1-${program.id}`}>Not Relevant</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="too_expensive" id={`r2-${program.id}`} />
+                        <Label htmlFor={`r2-${program.id}`}>Too Expensive</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="wrong_location" id={`r3-${program.id}`} />
+                        <Label htmlFor={`r3-${program.id}`}>Wrong Location</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="other" id={`r4-${program.id}`} />
+                        <Label htmlFor={`r4-${program.id}`}>Other</Label>
+                      </div>
+                    </RadioGroup>
+                    <Label htmlFor={`feedback-details-${program.id}`}>Additional Details (Optional)</Label>
+                    <Textarea 
+                      id={`feedback-details-${program.id}`}
+                      placeholder="Any other comments?"
+                      value={feedbackDetails}
+                      onChange={(e) => setFeedbackDetails(e.target.value)}
+                    />
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => {
+                      handleSubmitFeedback(feedbackReason, feedbackDetails);
+                      setShowFeedbackDialog(false);
+                    }} className="bg-red-600 hover:bg-red-700">
+                      Submit Feedback
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          ) : program.feedbackNegative && !program.is_deleted ? (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs flex items-center">
                 <ThumbsDown className="h-3 w-3 mr-1.5 text-red-500" />
                 {program.feedbackReason || "Not interested"}
               </Badge>
+              {onRestoreFeedback && (
+                <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs text-blue-600 hover:underline" onClick={onRestoreFeedback}>
+                  Restore
+                </Button>
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <select 
-                className="text-xs h-8 px-2 rounded-md border"
-                value={feedbackReason}
-                onChange={(e) => setFeedbackReason(e.target.value)}
-              >
-                <option value="not_relevant">Not Relevant</option>
-                <option value="too_expensive">Too Expensive</option>
-                <option value="wrong_location">Wrong Location</option>
-                <option value="other">Other</option>
-              </select>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="h-8 px-2.5 text-xs"
-                onClick={() => {
-                  handleSubmitFeedback(feedbackReason);
-                  setShowFeedbackOptions(false);
-                }}
-              >
-                Submit
-              </Button>
-            </div>
-          )}
+          ) : null}
             
-          <Button 
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2.5 text-muted-foreground hover:text-red-500 hover:bg-red-50"
-            title={isGuest ? "Sign up to remove programs" : "Remove this program suggestion"}
-            onClick={handleDeleteProgram}
-          >
-            {isGuest ? <Lock className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-          </Button>
+          {/* Archive button only after feedback */}
+          {!isGuest && hasFeedback && (
+            <Button 
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-muted-foreground hover:text-red-500 hover:bg-red-50"
+              title="Archive this program"
+              onClick={handleDeleteProgram}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              <span className="text-xs">Archive</span>
+            </Button>
+          )}
         </div>
           
         {/* Secondary Actions: Vista Assistant widget & Explore Program */}

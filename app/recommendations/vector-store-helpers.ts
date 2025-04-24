@@ -284,6 +284,7 @@ export async function syncRecommendationsToVectorStore(
         feedbackNegative: recommendation.feedbackNegative || false,
         feedbackReason: recommendation.feedbackReason || null,
         feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
+        feedbackData: recommendation.feedbackData || {},
         scholarships: recommendation.scholarships || [],
         userId: userId,
         syncedAt: new Date().toISOString()
@@ -488,6 +489,7 @@ export async function syncSingleRecommendationToVectorStore(
       feedbackNegative: recommendation.feedbackNegative || false,
       feedbackReason: recommendation.feedbackReason || null,
       feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
+      feedbackData: recommendation.feedbackData || {},
       scholarships: recommendation.scholarships || [],
       pathway_id: recommendation.pathway_id, // Include pathway_id
       userId: userId,
@@ -749,6 +751,7 @@ export async function syncProgramsToVectorStore(
           feedbackNegative: recommendation.feedbackNegative || false,
           feedbackReason: recommendation.feedbackReason || null,
           feedbackSubmittedAt: recommendation.feedbackSubmittedAt || null,
+          feedbackData: recommendation.feedbackData || {},
           scholarships: recommendation.scholarships || [],
           pathway_id: recommendation.pathway_id, // Include pathway_id
           program_id: recommendation.program_id, // Include program_id for traceability

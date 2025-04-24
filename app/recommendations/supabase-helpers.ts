@@ -102,43 +102,42 @@ export async function fetchUserRecommendations(userId: string): Promise<{
       return { recommendations: [] };
     }
     
-    // Transform the data to match our RecommendationProgram interface, adding defaults
-    const recommendations: RecommendationProgram[] = data.map((item: any) => ({
-      id: item.id || `missing_id_${Math.random()}`, // Provide fallback ID if needed
-      name: item.name || 'N/A',
-      institution: item.institution || 'N/A',
-      degreeType: item.degree_type || 'N/A',
-      fieldOfStudy: item.field_of_study || 'N/A',
-      description: item.description || 'No description available.',
-      matchScore: item.match_score ?? 0, // Default to 0 if null
-      costPerYear: item.cost_per_year ?? 0, // Default to 0 if null
-      duration: item.duration ?? 0, // Default to 0 if null
-      location: item.location || 'N/A',
-      startDate: item.start_date || 'N/A',
-      isFavorite: item.is_favorite ?? false, // Default to false if null
-      applicationDeadline: item.application_deadline || 'N/A',
-      requirements: Array.isArray(item.requirements) ? item.requirements : [], // Default to empty array
-      highlights: Array.isArray(item.highlights) ? item.highlights : [], // Default to empty array
-      pageLink: item.page_link,
-      matchRationale: item.match_rationale && typeof item.match_rationale === 'object'
-        ? { // Provide default structure for matchRationale
-            careerAlignment: item.match_rationale.careerAlignment ?? 0,
-            budgetFit: item.match_rationale.budgetFit ?? 0,
-            locationMatch: item.match_rationale.locationMatch ?? 0,
-            academicFit: item.match_rationale.academicFit ?? 0,
-          }
-        : { // Default object if null or not an object
-            careerAlignment: 0,
-            budgetFit: 0,
-            locationMatch: 0,
-            academicFit: 0,
-          },
-      // Include feedback fields from the database
-      feedbackNegative: item.feedback_negative || false,
-      feedbackReason: item.feedback_reason || null,
-      feedbackSubmittedAt: item.feedback_submitted_at || null,
-      scholarships: Array.isArray(item.scholarships) ? item.scholarships : undefined, // Keep as undefined if not present or not array
-    }));
+    // Transform the data to match our RecommendationProgram interface, adding defaults and JSONB feedback
+    const recommendations: RecommendationProgram[] = data.map((item: any) => {
+      const fbData = item.feedback_data || {};
+      return {
+        id: item.id || `missing_id_${Math.random()}`,
+        name: item.name || 'N/A',
+        institution: item.institution || 'N/A',
+        degreeType: item.degree_type || 'N/A',
+        fieldOfStudy: item.field_of_study || 'N/A',
+        description: item.description || 'No description available.',
+        matchScore: item.match_score ?? 0,
+        costPerYear: item.cost_per_year ?? 0,
+        duration: item.duration ?? 0,
+        location: item.location || 'N/A',
+        startDate: item.start_date || 'N/A',
+        isFavorite: item.is_favorite ?? false,
+        applicationDeadline: item.application_deadline || 'N/A',
+        requirements: Array.isArray(item.requirements) ? item.requirements : [],
+        highlights: Array.isArray(item.highlights) ? item.highlights : [],
+        pageLink: item.page_link,
+        matchRationale: item.match_rationale && typeof item.match_rationale === 'object'
+          ? {
+              careerAlignment: item.match_rationale.careerAlignment ?? 0,
+              budgetFit: item.match_rationale.budgetFit ?? 0,
+              locationMatch: item.match_rationale.locationMatch ?? 0,
+              academicFit: item.match_rationale.academicFit ?? 0,
+            }
+          : { careerAlignment: 0, budgetFit: 0, locationMatch: 0, academicFit: 0 },
+        // Map feedback JSONB
+        feedbackData: fbData,
+        feedbackNegative: item.feedback_negative || !!fbData.reason,
+        feedbackReason: fbData.reason ?? null,
+        feedbackSubmittedAt: fbData.submittedAt ?? null,
+        scholarships: Array.isArray(item.scholarships) ? item.scholarships : undefined,
+      } as RecommendationProgram;
+    });
     
     console.log(`Fetched and mapped ${recommendations.length} recommendations for user ${userId}`);
     return { recommendations };
@@ -249,37 +248,14 @@ export async function toggleRecommendationFavorite(
     const { data: initialRecommendationData, error: recError } = await supabase
       .from('recommendations')
       .select('id, match_score, is_favorite, match_rationale, program_id, pathway_id')
-      .eq('id', recommendationId) // This needs to match the database column name
+      .eq('id', recommendationId)
       .eq('user_id', userId)
       .single();
-    
-    if (recError) {
-      console.error('Error retrieving recommendation details:', recError);
-      // Try again with recommendation_id to handle database schema changes
-      console.log('Attempting to find recommendation using recommendation_id...');
-      // Check if we can access this recommendation as "recommendation_id" instead of "id"
-      const { data: altRecommendationData, error: altRecError } = await supabase
-        .from('recommendations')
-        .select('id, match_score, is_favorite, match_rationale, program_id, pathway_id')
-        .eq('recommendation_id', recommendationId) // Try using recommendation_id column
-        .eq('user_id', userId)
-        .single();
-        
-      if (altRecError || !altRecommendationData) {
-        console.error('Error retrieving recommendation with alternative method:', altRecError);
-        return {
-          success: true,
-          newStatus,
-          error: 'Favorite status updated but failed to sync with AI system due to schema inconsistency'
-        };
-      }
-      
-      // If we got here, we found it using recommendation_id column
-      recommendationData = altRecommendationData;
-    } else {
-      // Use the initial data if the first query was successful
-      recommendationData = initialRecommendationData;
+    if (recError || !initialRecommendationData) {
+      console.error('Error retrieving recommendation by id:', recError);
+      return { success: true, newStatus, error: 'Failed to sync with AI system: missing recommendation' };
     }
+    recommendationData = initialRecommendationData;
     
     if (!recommendationData || !recommendationData.program_id) {
       console.error('Missing recommendation data or program_id:', recommendationId);
@@ -664,71 +640,49 @@ export async function deleteUserRecommendations(
 }
 
 /**
- * Submit negative feedback for a recommendation
+ * Submit negative feedback for a recommendation, storing both reason and optional details in JSONB
  */
 export async function submitRecommendationFeedback(
   userId: string,
   recommendationId: string,
-  reason: string
+  reason: string,
+  details?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!userId || !recommendationId || !reason) {
       throw new Error('User ID, recommendation ID, and feedback reason are required');
     }
     
-    console.log(`Submitting negative feedback for recommendation ${recommendationId} from user ${userId} with reason: ${reason}`);
+    console.log(`Submitting negative feedback for recommendation ${recommendationId} from user ${userId} with reason: ${reason}, details: ${details}`);
     
     const supabase = await createClient();
-    
-    // Check if the recommendation exists and belongs to the user
-    let recommendation: any;
-    const { data: initialRecommendation, error: fetchError } = await supabase
+
+    const { data: recommendation, error: fetchError } = await supabase
       .from('recommendations')
       .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id, pathway_id')
       .eq('id', recommendationId)
       .eq('user_id', userId)
       .single();
-    
-    if (fetchError) {
-      console.error('Error fetching recommendation:', fetchError);
-      
-      // Try again with recommendation_id to handle database schema changes
-      console.log('Attempting to find recommendation using recommendation_id...');
-      const { data: altRecommendation, error: altFetchError } = await supabase
-        .from('recommendations')
-        .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id, pathway_id')
-        .eq('recommendation_id', recommendationId) // Try using recommendation_id column
-        .eq('user_id', userId)
-        .single();
-        
-      if (altFetchError || !altRecommendation) {
-        console.error('Error fetching recommendation with alternative method:', altFetchError);
-        throw new Error(`Recommendation not found or doesn't belong to the user`);
-      }
-      
-      // If we got here, we found it using recommendation_id column
-      recommendation = altRecommendation;
-    } else {
-      // Use the initial data if the first query was successful
-      recommendation = initialRecommendation;
+    if (fetchError || !recommendation) {
+      console.error('Error fetching recommendation:', fetchError || 'Not found by id');
+      throw new Error('Recommendation not found or does not belong to the user');
     }
     
-    // Check if recommendation exists after both attempts
-    if (!recommendation) {
-      throw new Error(`Recommendation not found or doesn't belong to the user`);
-    }
-    
-    // Update the recommendation with feedback
-    // Use the id from the recommendation we found
+    const now = new Date().toISOString();
+    const feedbackRecord = {
+      feedback_data: {
+        reason,
+        ...(details ? { details } : {}),
+        submittedAt: now,
+      },
+      feedback_negative: true,
+      feedback_submitted_at: now,
+      updated_at: now
+    };
     const { error: updateError } = await supabase
       .from('recommendations')
-      .update({
-        feedback_negative: true,
-        feedback_reason: reason,
-        feedback_submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', recommendation.id) // Use the id we found, not the passed recommendationId
+      .update(feedbackRecord)
+      .eq('id', recommendation.id)
       .eq('user_id', userId);
     
     if (updateError) {
@@ -779,7 +733,8 @@ export async function submitRecommendationFeedback(
           // Include feedback data
           feedbackNegative: true,
           feedbackReason: reason,
-          feedbackSubmittedAt: new Date().toISOString(),
+          feedbackSubmittedAt: now,
+          feedbackData: feedbackRecord.feedback_data,
           // Get scholarships if available (would require a separate query if needed)
           scholarships: []
         };
@@ -817,6 +772,143 @@ export async function submitRecommendationFeedback(
       error: error instanceof Error 
         ? error.message 
         : 'An unexpected error occurred while submitting feedback',
+    };
+  }
+}
+
+// New function to archive (soft-delete) a recommendation by setting is_deleted = true
+export async function archiveRecommendationProgram(
+  userId: string,
+  recommendationId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!userId || !recommendationId) {
+      throw new Error('User ID and recommendation ID are required');
+    }
+
+    console.log(`Archiving recommendation ${recommendationId} for user ${userId}`);
+
+    const supabase = await createClient();
+
+    const { error: updateError } = await supabase
+      .from('recommendations')
+      .update({
+        is_deleted: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', recommendationId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Error archiving recommendation:', updateError);
+      throw new Error(`Failed to archive recommendation: ${updateError.message}`);
+    }
+
+    console.log(`Successfully archived recommendation ${recommendationId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error in archiveRecommendationProgram:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unexpected error while archiving recommendation',
+    };
+  }
+}
+
+/**
+ * Restore a recommendation by clearing feedback and un-deleting
+ */
+export async function restoreRecommendationFeedback(
+  userId: string,
+  recommendationId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!userId || !recommendationId) {
+      throw new Error('User ID and recommendation ID are required');
+    }
+
+    console.log(`Restoring recommendation ${recommendationId} for user ${userId}`);
+
+    const supabase = await createClient();
+
+    const restoreNow = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from('recommendations')
+      .update({
+        feedback_data: {},
+        feedback_negative: false,
+        feedback_submitted_at: null,
+        is_deleted: false,
+        updated_at: restoreNow,
+      })
+      .eq('id', recommendationId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Error restoring recommendation:', updateError);
+      throw new Error(`Failed to restore recommendation: ${updateError.message}`);
+    }
+
+    console.log(`Successfully restored recommendation ${recommendationId}`);
+    // Sync restored recommendation to Vector Store
+    try {
+      // Fetch updated recommendation row for vector store info
+      const { data: recRow, error: recFetchError } = await supabase
+        .from('recommendations')
+        .select('id, match_score, is_favorite, match_rationale, program_id, vector_store_id, pathway_id')
+        .eq('id', recommendationId)
+        .eq('user_id', userId)
+        .single();
+      if (!recFetchError && recRow?.vector_store_id) {
+        const { data: programData, error: progErr } = await supabase
+          .from('programs')
+          .select('*')
+          .eq('id', recRow.program_id)
+          .single();
+        if (programData && !progErr) {
+          const restoredRecommendation: RecommendationProgram = {
+            id: recRow.id,
+            name: programData.name || '',
+            institution: programData.institution || '',
+            degreeType: programData.degree_type || '',
+            fieldOfStudy: programData.field_of_study || '',
+            description: programData.description || '',
+            costPerYear: programData.cost_per_year || 0,
+            duration: programData.duration || 0,
+            location: programData.location || '',
+            startDate: programData.start_date || '',
+            applicationDeadline: programData.application_deadline || '',
+            requirements: programData.requirements || [],
+            highlights: programData.highlights || [],
+            pageLink: programData.page_link,
+            matchScore: recRow.match_score || 0,
+            matchRationale: recRow.match_rationale || {},
+            isFavorite: recRow.is_favorite || false,
+            pathway_id: recRow.pathway_id,
+            feedbackNegative: false,
+            feedbackReason: null,
+            feedbackSubmittedAt: null,
+            scholarships: []
+          };
+          const { success: syncSuccess, error: syncError } = await syncSingleRecommendationToVectorStore(
+            userId,
+            restoredRecommendation,
+            recRow.vector_store_id
+          );
+          if (!syncSuccess) {
+            console.error('Error syncing restored recommendation to Vector Store:', syncError);
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.error('Error syncing restored recommendation:', syncErr);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Error in restoreRecommendationFeedback:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unexpected error while restoring recommendation',
     };
   }
 } 

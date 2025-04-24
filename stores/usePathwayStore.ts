@@ -6,13 +6,13 @@ import {
   fetchProgramsForPathway,
   deletePathwayWithFeedbackAction,
   generateMorePathwaysAction,
-  deleteRecommendationProgramAction,
   resetPathwaysAction,
   getMoreProgramsForPathwayAction
 } from "@/app/recommendations/pathway-actions";
-import { 
-  toggleRecommendationFavorite, 
-  submitRecommendationFeedback 
+import {
+  toggleRecommendationFavorite,
+  submitRecommendationFeedback,
+  archiveRecommendationProgram,
 } from "@/app/recommendations/supabase-helpers";
 
 interface PathwayState {
@@ -62,7 +62,7 @@ interface PathwayState {
   
   // Feedback/Interaction operations (mapped to programsByPathway)
   toggleFavorite: (pathwayId: string, programId: string) => Promise<void>;
-  submitFeedback: (pathwayId: string, programId: string, reason: string) => Promise<void>;
+  submitFeedback: (pathwayId: string, programId: string, reason: string, details?: string) => Promise<void>;
   
   // Auth methods
   setAuthState: (isAuthenticated: boolean, userId: string | null) => void;
@@ -103,6 +103,9 @@ interface PathwayState {
   // New state properties
   moreProgramsLoading: { [pathwayId: string]: boolean };
   moreProgramsError: { [pathwayId: string]: string | null };
+
+  hideProgram: (pathwayId: string, programId: string) => void;
+  restoreProgram: (pathwayId: string, programId: string) => void;
 }
 
 // Default initial state for the store
@@ -352,7 +355,7 @@ const usePathwayStore = create<PathwayState>()(
       deleteProgram: async (pathwayId, programId) => {
          const { isAuthenticated, userId, programsByPathway } = get();
          if (!isAuthenticated || !userId) {
-           console.warn("Cannot delete program: user not authenticated");
+           console.warn("Cannot hide program: user not authenticated");
            set({ actionError: "You must be logged in to manage programs." });
            return;
          }
@@ -361,70 +364,42 @@ const usePathwayStore = create<PathwayState>()(
          const programExists = originalPrograms.some(p => p.id === programId);
 
          if (!programExists) {
-           console.warn(`Attempted to delete non-existent program ${programId} in pathway ${pathwayId}`);
+           console.warn(`Attempted to hide non-existent program ${programId} in pathway ${pathwayId}`);
            return;
          }
 
-         // Check if this will be the last program
-         const remainingPrograms = originalPrograms.filter(p => p.id !== programId);
-         const isLastProgram = remainingPrograms.length === 0;
-
-         // Optimistic UI update: remove program
-         set((state) => {
-           // Create a state update with the correct typing
-           const updates: Partial<PathwayState> = {
-             programsByPathway: {
-               ...state.programsByPathway,
-               [pathwayId]: remainingPrograms
-             },
-             isActionLoading: true,
-             actionError: null,
-           };
-
-           // If this is the last program, also update the pathway's is_explored status
-           if (isLastProgram) {
-             updates.pathways = state.pathways.map(p => 
-               p.id === pathwayId ? { ...p, is_explored: false } : p
-             );
-           }
-
-           return updates;
-         });
+         // Optimistic UI update – mark as deleted
+         get().hideProgram(pathwayId, programId);
+         set({ isActionLoading: true, actionError: null });
 
          try {
-           const result = await deleteRecommendationProgramAction(programId, pathwayId);
+           const result = await archiveRecommendationProgram(userId, programId);
 
            if (!result.success) {
-             console.error("Failed to delete program on server:", result.error);
-             // Revert optimistic update
+             console.error("Failed to archive program on server:", result.error);
+             // Revert optimistic change
              set({
-               programsByPathway: { ...get().programsByPathway, [pathwayId]: originalPrograms },
-               actionError: result.error || "Failed to remove program. Please try again.",
-               isActionLoading: false
+               programsByPathway: {
+                 ...get().programsByPathway,
+                 [pathwayId]: originalPrograms,
+               },
+               actionError: result.error || "Failed to hide program. Please try again.",
+               isActionLoading: false,
              });
            } else {
-             console.log(`Program ${programId} deleted successfully from pathway ${pathwayId}.`);
-             
-             // Update is_explored status based on server response
-             if (result.pathwayUpdated || isLastProgram) {
-               console.log(`Pathway ${pathwayId} has 0 programs now, is_explored set to false`);
-               set((state) => ({
-                 pathways: state.pathways.map(p => 
-                   p.id === pathwayId ? { ...p, is_explored: false } : p
-                 ),
-                 isActionLoading: false
-               }));
-             } else {
-               set({ isActionLoading: false });
-             }
+             console.log(`Program ${programId} archived successfully.`);
+             set({ isActionLoading: false });
            }
          } catch (error) {
-           console.error("Error calling deleteRecommendationProgramAction:", error);
-           // Revert optimistic update
+           console.error("Error calling archiveRecommendationProgram:", error);
+           // Revert optimistic change
            set({
-              programsByPathway: { ...get().programsByPathway, [pathwayId]: originalPrograms },
-              actionError: "An unexpected error occurred while removing the program.",
-              isActionLoading: false
+             programsByPathway: {
+               ...get().programsByPathway,
+               [pathwayId]: originalPrograms,
+             },
+             actionError: "An unexpected error occurred while hiding the program.",
+             isActionLoading: false,
            });
          }
       },
@@ -510,7 +485,7 @@ const usePathwayStore = create<PathwayState>()(
         }
       },
       
-      submitFeedback: async (pathwayId, programId, reason) => {
+      submitFeedback: async (pathwayId, programId, reason, details) => {
         const { isAuthenticated, userId, programsByPathway } = get();
         if (!isAuthenticated || !userId) {
           console.warn("Cannot submit feedback: user not authenticated");
@@ -527,21 +502,38 @@ const usePathwayStore = create<PathwayState>()(
           feedbackNegative: program.feedbackNegative,
           feedbackReason: program.feedbackReason,
           feedbackSubmittedAt: program.feedbackSubmittedAt,
+          feedbackData: program.feedbackData,
         };
 
+        const timestamp = new Date().toISOString();
         const newFeedback = {
           feedbackNegative: true,
           feedbackReason: reason,
-          feedbackSubmittedAt: new Date().toISOString(),
+          feedbackSubmittedAt: timestamp,
+          feedbackData: {
+            reason,
+            ...(details ? { details } : {}),
+            submittedAt: timestamp,
+          }
         };
 
         get().updateProgramInPathway(pathwayId, programId, newFeedback);
 
         try {
-          const result = await submitRecommendationFeedback(userId, programId, reason);
+          // --- DEBUGGING: Log details before sending ---
+          console.log(`[PathwayStore] Calling submitRecommendationFeedback for program ${programId}. Details:`, details);
+          // --- END DEBUGGING ---
+          const result = await submitRecommendationFeedback(userId, programId, reason, details);
           if (!result.success) {
             console.error("Failed to submit feedback on server:", result.error);
             get().updateProgramInPathway(pathwayId, programId, originalFeedback);
+          } else {
+            console.log(`[PathwayStore] Feedback submitted successfully for ${programId}, ensuring UI state.`);
+            const finalFeedbackState = {
+              ...newFeedback,
+              feedbackNegative: true
+            };
+            get().updateProgramInPathway(pathwayId, programId, finalFeedbackState);
           }
         } catch (error) {
           console.error("Error submitting feedback:", error);
@@ -799,6 +791,46 @@ const usePathwayStore = create<PathwayState>()(
              moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false },
              moreProgramsError: { ...state.moreProgramsError, [pathwayId]: error instanceof Error ? error.message : `Failed to load more programs` },
            }));
+        }
+      },
+
+      hideProgram: (pathwayId, programId) => set((state) => {
+        const pathwayPrograms = state.programsByPathway[pathwayId] || [];
+        return {
+          programsByPathway: {
+            ...state.programsByPathway,
+            [pathwayId]: pathwayPrograms.map(p =>
+              p.id === programId ? { ...p, is_deleted: true } : p
+            ),
+          },
+        } as Partial<PathwayState>;
+      }),
+
+      restoreProgram: (pathwayId, programId) => {
+        const { isAuthenticated, userId } = get();
+        const pathwayPrograms = get().programsByPathway[pathwayId] || [];
+
+        // Optimistic restore in UI, clear negative feedback flags
+        set((state) => ({
+          programsByPathway: {
+            ...state.programsByPathway,
+            [pathwayId]: pathwayPrograms.map(p =>
+              p.id === programId ? { ...p,
+                is_deleted: false,
+                feedbackNegative: false,
+                feedbackReason: null,
+                feedbackSubmittedAt: null
+              } : p
+            ),
+          },
+        }));
+
+        if (isAuthenticated && userId) {
+          import("@/app/recommendations/supabase-helpers").then(({ restoreRecommendationFeedback }) => {
+            restoreRecommendationFeedback(userId, programId).catch((err) => {
+              console.error("Failed to restore recommendation on server", err);
+            });
+          });
         }
       },
     }),

@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import usePathwayStore from "@/stores/usePathwayStore";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
@@ -120,6 +120,11 @@ export default function PathwayDetailsPage() {
   const pathway = useMemo(() => pathways.find(p => p.id === pathwayId), [pathways, pathwayId]);
   const programs = useMemo(() => programsByPathway[pathwayId] || [], [programsByPathway, pathwayId]);
   const isLoading = programGenerationLoading[pathwayId];
+  const [showHiddenPrograms, setShowHiddenPrograms] = useState(false);
+  const archivedPrograms = useMemo(
+    () => programs.filter(p => p.is_deleted && typeof p.id === 'string'),
+    [programs]
+  );
   const initialLoadError = programGenerationError[pathwayId];
   const filteredPrograms = useMemo(() => programs.filter(p => !p.is_deleted && typeof p.id === 'string'), [programs]);
 
@@ -284,9 +289,10 @@ export default function PathwayDetailsPage() {
               program={program}
               pathwayId={pathwayId}
               onToggleFavorite={() => usePathwayStore.getState().toggleFavorite(pathwayId, program.id as string)}
-              onSubmitFeedback={reason => usePathwayStore.getState().submitFeedback(pathwayId, program.id as string, reason)}
+              onSubmitFeedback={(reason, details) => usePathwayStore.getState().submitFeedback(pathwayId, program.id as string, reason, details)}
               onDeleteProgram={() => usePathwayStore.getState().deleteProgram(pathwayId, program.id as string)}
               isGuest={!user}
+              onRestoreFeedback={program.feedbackNegative && !program.is_deleted ? () => usePathwayStore.getState().restoreProgram(pathwayId, program.id as string) : undefined}
             />
           ))}
         </div>
@@ -325,6 +331,25 @@ export default function PathwayDetailsPage() {
                Load more requires previous context. Try exploring the pathway again if needed.
              </p>
            )}
+        </div>
+      )}
+      {archivedPrograms.length > 0 && (
+        <div className="mt-8">
+          <Button variant="link" onClick={() => setShowHiddenPrograms(!showHiddenPrograms)}>
+            {showHiddenPrograms ? "Hide hidden programs" : `Show hidden programs (${archivedPrograms.length})`}
+          </Button>
+          {showHiddenPrograms && (
+            <div className="space-y-4 mt-4">
+              {archivedPrograms.map(program => (
+                <div key={program.id} className="flex items-center justify-between p-4 bg-gray-50 rounded">
+                  <span className="text-sm text-muted-foreground">{program.name}</span>
+                  <Button size="sm" onClick={() => usePathwayStore.getState().restoreProgram(pathwayId, program.id as string)}>
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

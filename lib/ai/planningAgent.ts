@@ -341,11 +341,27 @@ ${existingPathways.map((pathway, index) => {
     console.log('Preferences:', JSON.stringify(userProfile.preferences));
     
     // Safely access education, providing defaults if undefined
-    const educationHistory = Array.isArray(userProfile.education) 
-      ? userProfile.education.map((edu) => 
-        `${edu.degreeLevel} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.graduationYear})`
-      ).join(', ')
-      : 'Not specified';
+    const validEducation = Array.isArray(userProfile.education)
+      ? userProfile.education.filter((edu) =>
+          edu.degreeLevel !== "__NONE__" &&
+          edu.fieldOfStudy.trim() !== "" &&
+          edu.institution.trim() !== "" &&
+          edu.graduationYear.trim() !== ""
+        )
+      : [];
+    const educationHistory = validEducation.length > 0
+      ? validEducation
+          .sort((a, b) => Number(b.graduationYear) - Number(a.graduationYear))
+          .map((edu) => {
+            const degree = edu.degreeLevel;
+            const field = edu.fieldOfStudy;
+            const institution = edu.institution;
+            const graduationYear = edu.graduationYear;
+            const gpaInfo = edu.gpa ? `, GPA: ${edu.gpa}` : "";
+            return `- ${graduationYear}: ${degree} in ${field} from ${institution}${gpaInfo}`;
+          })
+          .join("\n")
+      : "Not specified";
 
     // NEW: Build richer context strings for additional profile attributes
     const targetStudyLevel = userProfile.targetStudyLevel && userProfile.targetStudyLevel !== '__NONE__' 
@@ -706,11 +722,27 @@ Respond ONLY with the valid JSON object conforming strictly to the provided sche
       
       // --- Prepare Context ---
       // User Profile Summary
-      const educationHistory = Array.isArray(userProfile.education) 
-        ? userProfile.education.map((edu) => 
-          `${edu.degreeLevel} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.graduationYear})`
-        ).join(', ')
-        : 'Not specified';
+      const evalValidEducation = Array.isArray(userProfile.education)
+        ? userProfile.education.filter((edu) =>
+            edu.degreeLevel !== "__NONE__" &&
+            edu.fieldOfStudy.trim() !== "" &&
+            edu.institution.trim() !== "" &&
+            edu.graduationYear.trim() !== ""
+          )
+        : [];
+      const evalEducationHistory = evalValidEducation.length > 0
+        ? evalValidEducation
+            .sort((a, b) => Number(b.graduationYear) - Number(a.graduationYear))
+            .map((edu) => {
+              const degree = edu.degreeLevel;
+              const field = edu.fieldOfStudy;
+              const institution = edu.institution;
+              const graduationYear = edu.graduationYear;
+              const gpaInfo = edu.gpa ? `, GPA: ${edu.gpa}` : "";
+              return `- ${graduationYear}: ${degree} in ${field} from ${institution}${gpaInfo}`;
+            })
+            .join("\n")
+        : "Not specified";
       const careerGoals = userProfile.careerGoals || {};
       const shortTermGoal = careerGoals.shortTerm !== undefined && careerGoals.shortTerm !== null 
         ? careerGoals.shortTerm 
@@ -757,7 +789,7 @@ ${pathwayContext}
 
 USER PROFILE SUMMARY:
 - Career Goals: Short-term: ${shortTermGoal}; Long-term: ${longTermGoal}; Industries: ${desiredIndustry}; Roles: ${desiredRoles}
-- Education: ${educationHistory}
+- Education: ${evalEducationHistory}
 - Skills: ${skillsList}
 - Preferences: Locations: ${preferredLocations}; Budget: ${budgetRange}; Study Mode: ${preferences.studyMode || 'Any'}; Start Date: ${preferences.startDate || 'Any'}
 

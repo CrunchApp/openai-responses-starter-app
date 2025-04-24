@@ -32,9 +32,10 @@ export async function researchSpecificPrograms(
       : 480000; // 8 minutes
     let hasTimedOut = false;
     
-    // Create a timeout promise with detailed logging
+    // Create a timeout promise with detailed logging and allow cancellation
+    let timeoutId: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         hasTimedOut = true;
         console.error(`[ResearchAgent] Global research operation exceeded ${timeoutMs} ms and will be aborted.`);
         reject(new Error(`Program research timed out after ${timeoutMs / 1000} seconds`));
@@ -67,13 +68,19 @@ export async function researchSpecificPrograms(
       previousResponseId
     );
     
-    // Race the research promise against the timeout
+    // Race the research promise against the timeout, then clear timeout when done
     const startTime = Date.now();
-    // Update the type assumption here for the result
-    const searchResult: { programs: RecommendationProgram[], responseId?: string } = await Promise.race([
-      researchPromise,
-      timeoutPromise
-    ]);
+    let searchResult: { programs: RecommendationProgram[]; responseId?: string };
+    try {
+      searchResult = await Promise.race([
+        researchPromise,
+        timeoutPromise
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
     
     console.log(`[ResearchAgent] Completed in ${Date.now() - startTime} ms`);
     

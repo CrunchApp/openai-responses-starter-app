@@ -718,7 +718,7 @@ function EnhancedPathwayCard({
               </>
             ) : (
               <>
-                Explore Programs
+                Explore Similar Programs
                 <ChevronRight className="ml-2 h-4 w-4" />
               </>
             )}

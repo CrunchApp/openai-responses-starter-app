@@ -284,15 +284,18 @@ async function savePathways(
     // Convert pathways to the expected format for the stored procedure
     const pathwaysArray = pathways.map(pathway => ({
       title: pathway.title,
-      qualificationType: pathway.qualificationType,
-      fieldOfStudy: pathway.fieldOfStudy,
+      qualificationType: pathway.qualification_type,
+      fieldOfStudy: pathway.field_of_study,
       subfields: pathway.subfields || [],
-      targetRegions: pathway.targetRegions || [],
-      budgetRange: pathway.budgetRange || { min: 0, max: 0 },
-      duration: pathway.duration || { min: 0, max: 0 },
-      alignment: pathway.alignment,
+      targetRegions: pathway.target_regions || [],
+      budgetRange: pathway.budget_range_usd || { min: 0, max: 0 },
+      duration: {
+        min: pathway.duration_months ?? 0,
+        max: pathway.duration_months ?? 0
+      },
+      alignment: pathway.alignment_rationale,
       alternatives: pathway.alternatives || [],
-      queryString: pathway.queryString
+      queryString: pathway.query_string
     }));
     
     // Call the stored procedure to create the pathways
@@ -1387,6 +1390,8 @@ export async function fetchProgramsForPathway(pathwayId: string): Promise<{
       matchScore: typeof row.match_score === 'number' ? row.match_score : 0,
       matchRationale: row.match_rationale && typeof row.match_rationale === 'object' ? row.match_rationale : undefined,
       isFavorite: row.is_favorite ?? false,
+      // Soft-delete flag: null/undefined treated as false
+      is_deleted: row.is_deleted ?? false,
       // Structured feedback from JSONB column
       feedbackData: row.feedback_data ?? {},
       feedbackNegative: row.feedback_negative ?? false,

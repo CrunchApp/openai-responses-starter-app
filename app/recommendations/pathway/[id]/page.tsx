@@ -255,6 +255,26 @@ export default function PathwayDetailsPage() {
           )}
         </h2>
       </div>
+
+      {archivedPrograms.length > 0 && (
+        <div className="mt-8">
+          <Button variant="link" onClick={() => setShowHiddenPrograms(!showHiddenPrograms)}>
+            {showHiddenPrograms ? "Hide hidden programs" : `Show hidden programs (${archivedPrograms.length})`}
+          </Button>
+          {showHiddenPrograms && (
+            <div className="space-y-4 mt-4">
+              {archivedPrograms.map(program => (
+                <div key={program.id} className="flex items-center justify-between p-4 bg-gray-50 rounded">
+                  <span className="text-sm text-muted-foreground">{program.name}, {program.institution}</span>
+                  <Button size="sm" onClick={() => usePathwayStore.getState().restoreProgram(pathwayId, program.id as string)}>
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       
       {isLoading && filteredPrograms.length === 0 ? (
         <ProgramLoadingSkeleton />
@@ -331,25 +351,6 @@ export default function PathwayDetailsPage() {
                Load more requires previous context. Try exploring the pathway again if needed.
              </p>
            )}
-        </div>
-      )}
-      {archivedPrograms.length > 0 && (
-        <div className="mt-8">
-          <Button variant="link" onClick={() => setShowHiddenPrograms(!showHiddenPrograms)}>
-            {showHiddenPrograms ? "Hide hidden programs" : `Show hidden programs (${archivedPrograms.length})`}
-          </Button>
-          {showHiddenPrograms && (
-            <div className="space-y-4 mt-4">
-              {archivedPrograms.map(program => (
-                <div key={program.id} className="flex items-center justify-between p-4 bg-gray-50 rounded">
-                  <span className="text-sm text-muted-foreground">{program.name}</span>
-                  <Button size="sm" onClick={() => usePathwayStore.getState().restoreProgram(pathwayId, program.id as string)}>
-                    Restore
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

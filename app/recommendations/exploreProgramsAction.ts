@@ -129,7 +129,7 @@ export async function exploreProgramsAction(pathwayId: string) {
       };
     }
 
-    // Ensure any scholarship data is correctly formatted before returning
+    // Ensure any scholarship data is correctly formatted before returning and mark programs as not deleted
     const programs = result.recommendations.map(program => {
       const { scholarships, ...rest } = program;
       
@@ -153,6 +153,8 @@ export async function exploreProgramsAction(pathwayId: string) {
         
       return {
         ...rest,
+        // Soft-delete flag: default to false
+        is_deleted: false,
         scholarships: formattedScholarships,
         requirements: requirements,
         highlights: highlights

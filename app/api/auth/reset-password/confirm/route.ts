@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url)
-  const token_hash = url.searchParams.get('token_hash')
-  const type = url.searchParams.get('type') as EmailOtpType | null
+  const { searchParams } = new URL(request.url)
+  const token_hash = searchParams.get('token_hash')
+  const type = searchParams.get('type') as EmailOtpType | null
 
   // Where we'll send the user if OTP is valid
   const onSuccess = request.nextUrl.clone()
@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
   onError.search = ''  
 
   if (token_hash && type === 'recovery') {
-    // Create a server-side supabase client (will set cookies for you)
-    const supabase = createServerSupabaseClient()
+    // Create our SSR supabase client (sets cookies)
+    const supabase = await createClient()
     const { error } = await supabase.auth.verifyOtp({ type, token_hash })
 
     if (!error) {
@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { password } = await request.json()
-    const supabase = createServerSupabaseClient()
+    // Create our SSR supabase client (reads cookies)
+    const supabase = await createClient()
 
     const { error } = await supabase.auth.updateUser({ password })
 

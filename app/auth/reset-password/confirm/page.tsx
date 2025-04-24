@@ -11,7 +11,8 @@ import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export default function ResetPasswordConfirmPage() {
-  const { updatePassword, loading, error } = useAuth()
+  const { updatePassword, error } = useAuth()
+  const [loading, setLoading] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [formError, setFormError] = useState('')
@@ -34,6 +35,8 @@ export default function ResetPasswordConfirmPage() {
       return
     }
     
+    // Show spinner while we call updatePassword
+    setLoading(true)
     try {
       await updatePassword(password)
       setSuccessMessage('Password has been updated successfully')
@@ -49,6 +52,8 @@ export default function ResetPasswordConfirmPage() {
     } catch (error) {
       // Error is handled by the auth context
       console.error('Password update failed:', error)
+    } finally {
+      setLoading(false)
     }
   }
 

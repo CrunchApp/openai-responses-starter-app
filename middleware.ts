@@ -25,7 +25,11 @@ const PUBLIC_API_ROUTES = [
   '/api/turn_response',
   '/api/conversations',
   '/api/conversations/:id',
-  '/api/conversations/:id/messages'
+  '/api/conversations/:id/messages',
+
+  // Allow password reset API endpoints
+  '/api/auth/reset-password',
+  '/api/auth/reset-password/confirm',
 ]
 
 export async function middleware(request: NextRequest) {

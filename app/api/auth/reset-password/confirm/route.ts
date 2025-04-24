@@ -1,5 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
+import type { EmailOtpType } from '@supabase/supabase-js'
+
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url)
+  const token_hash = url.searchParams.get('token_hash')
+  const type = url.searchParams.get('type') as EmailOtpType | null
+
+  // Where we'll send the user if OTP is valid
+  const onSuccess = request.nextUrl.clone()
+  onSuccess.pathname = '/auth/reset-password/update'
+  onSuccess.search = ''  // clear query params
+
+  // Where we'll send them on error
+  const onError = request.nextUrl.clone()
+  onError.pathname = '/auth/auth-code-error'
+  onError.search = ''  
+
+  if (token_hash && type === 'recovery') {
+    // Create a server-side supabase client (will set cookies for you)
+    const supabase = createServerSupabaseClient()
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash })
+
+    if (!error) {
+      // OTP verified → redirect into the "update password" page
+      return NextResponse.redirect(onSuccess)
+    }
+  }
+
+  // OTP missing/invalid/expired
+  return NextResponse.redirect(onError)
+}
 
 export async function POST(request: NextRequest) {
   try {

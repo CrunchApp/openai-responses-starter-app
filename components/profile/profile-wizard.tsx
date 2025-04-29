@@ -21,6 +21,7 @@ import { UserProfile, ProfileSchema } from "@/app/types/profile-schema";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import usePathwayStore from "@/stores/usePathwayStore";
 import { useTranslation } from "react-i18next";
+import { useToast } from "@/hooks/use-toast";
 
 // Helper function to convert a Blob to a base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -303,6 +304,9 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     }
   };
 
+  // Toast helper for user feedback
+  const { toast } = useToast();
+
   // Modified function to handle profile saving and completion based on userId
   const saveAndCompleteProfile = async (isEdit: boolean, userId?: string) => {
     setIsCompleting(true);
@@ -310,6 +314,18 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
     try {
       // Make sure we have the latest profile data in the store before saving
       syncProfileToStore();
+      
+      // Validate profile before any remote/network calls
+      const validationResult = ProfileSchema.safeParse(profileData);
+      if (!validationResult.success) {
+        console.error("Profile validation failed", validationResult.error);
+        toast({
+          title: "Invalid profile data",
+          description: "Please review your profile – some required fields are missing or invalid.",
+          variant: "destructive",
+        });
+        throw new Error("Validation failed – aborting save process");
+      }
       
       // Log vector store IDs for debugging
       console.log("Vector Store IDs:", {
@@ -324,6 +340,11 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
       // Ensure there's a vector store ID available
       if (!finalVectorStoreId) {
+        toast({
+          title: "Memory not initialized",
+          description: "We couldn't find your personal memory store. Please restart the wizard.",
+          variant: "destructive",
+        });
         throw new Error("No vector store ID found. Please complete the welcome step first.");
       }
 
@@ -348,7 +369,15 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       const uploadResponse = await fetch("/api/vector_stores/upload_file", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileObject }),
       });
-      if (!uploadResponse.ok) throw new Error("Failed to upload profile JSON");
+      if (!uploadResponse.ok) {
+        const errText = await uploadResponse.text().catch(() => "Unknown error");
+        toast({
+          title: "Upload failed",
+          description: "We couldn't upload your profile to memory. Please try again.",
+          variant: "destructive",
+        });
+        throw new Error(`Failed to upload profile JSON: ${errText}`);
+      }
       const uploadData = await uploadResponse.json();
       const newFileId = uploadData.id;
       
@@ -356,7 +385,15 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
       const addFileResponse = await fetch("/api/vector_stores/add_file", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: newFileId, vectorStoreId: guaranteedVectorStoreId }),
       });
-      if (!addFileResponse.ok) throw new Error("Failed to add profile file to vector store");
+      if (!addFileResponse.ok) {
+        const errText = await addFileResponse.text().catch(() => "Unknown error");
+        toast({
+          title: "Memory sync failed",
+          description: "Could not attach profile to your memory. Please try again.",
+          variant: "destructive",
+        });
+        throw new Error(`Failed to add profile file to vector store: ${errText}`);
+      }
       console.log("Profile JSON saved to Vector Store, File ID:", newFileId);
 
       // Update profileData with the vectorStoreID and file ID before saving
@@ -377,7 +414,13 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
           body: JSON.stringify({ userId, profileData: profileToSave }),
         });
         if (!saveDbResponse.ok) {
-          console.error('Error saving profile to Supabase:', await saveDbResponse.text());
+          const errText = await saveDbResponse.text().catch(() => "Unknown error");
+          console.error('Error saving profile to Supabase:', errText);
+          toast({
+            title: "Database error",
+            description: "Your profile wasn't saved to our database. Please try again.",
+            variant: "destructive",
+          });
           throw new Error("Failed to save profile to database.");
         }
         console.log('Profile saved to Supabase successfully');
@@ -406,12 +449,23 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
         setVectorStore({ id: guaranteedVectorStoreId, name: `Guest Profile Store` });
         setFileSearchEnabled(true);
         console.log("Profile saved locally for guest.");
+        toast({
+          title: "Profile saved",
+          description: "Your profile has been safely stored locally.",
+          variant: "default",
+        });
       }
 
       return guaranteedVectorStoreId;
     } catch (error) {
       console.error("Error completing profile:", error);
-      // Rethrow the original error after logging
+      // Communicate error to user via toast
+      toast({
+        title: "Profile save failed",
+        description: error instanceof Error ? error.message : 'Unknown error occurred.',
+        variant: "destructive",
+      });
+      // Rethrow the original error after logging so caller can react
       throw error;
     } finally {
       setIsCompleting(false);
@@ -435,9 +489,14 @@ export default function ProfileWizard({ isEditMode = false }: ProfileWizardProps
 
     } catch (error) {
       console.error("Error in handleComplete:", error);
-      // Type assertion for error message
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred. Please try again.';
-      alert(`There was an error saving your profile: ${errorMessage}`);
+      toast({
+        title: "Something went wrong",
+        description: "We couldn't save your profile. Please visit your profile page and verify your details before trying again.",
+        variant: "destructive",
+      });
+
+      // Redirect user to profile page for manual review
+      router.push('/profile');
       // No need to call setIsCompleting(false) here, as it's handled in the finally block of saveAndCompleteProfile
     }
   };

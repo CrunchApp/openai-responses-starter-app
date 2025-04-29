@@ -10,6 +10,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
     
+    // Ensure the profile has a vector store id before persisting – the adviser relies on it for personalised answers
+    if (!profileData?.vectorStoreId) {
+      return NextResponse.json(
+        { error: 'Vector store is missing. Please restart the onboarding wizard.' },
+        { status: 400 }
+      )
+    }
+    
     // Validate the profile data against our schema
     try {
       ProfileSchema.parse(profileData)

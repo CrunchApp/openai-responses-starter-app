@@ -64,6 +64,7 @@ import {
 import SignupModal from "@/app/auth/SignupModal";
 import useProfileStore from "@/stores/useProfileStore";
 import { UserProfile } from "@/app/types/profile-schema";
+import { useToast } from "@/hooks/use-toast";
 
 export function PathwayExplorer({ 
   userProfile, 
@@ -113,11 +114,16 @@ export function PathwayExplorer({
   const isGuest = !user && !authLoading;
   const hasReachedLimit = isGuest && hasReachedGuestLimit();
   
+  // Toast for user feedback
+  const { toast } = useToast();
+  
   // Note: Pathway synchronization is now handled by AuthSynchronizer component
   
   const handleGeneratePathways = async () => {
     if (!userProfile) {
-      setError("User profile is required to generate pathways. Please visit the profile wizard to create your profile.");
+      const msg = "User profile is required to generate pathways. Please complete your profile first.";
+      setError(msg);
+      toast({ title: "Incomplete Profile", description: msg, variant: "destructive" });
       return;
     }
     
@@ -126,8 +132,9 @@ export function PathwayExplorer({
     
     // Check if guest has reached limit
     if (isGuest && hasReachedLimit) {
-      setError("You've reached the limit for generating pathways as a guest. Please sign up to generate more.");
-      // Stop progress modal on failure
+      const msg = "You've reached the limit for generating pathways as a guest. Please sign up to generate more.";
+      setError(msg);
+      toast({ title: "Guest Limit Reached", description: msg, variant: "destructive" });
       if (onStopGeneration) onStopGeneration(false);
       return;
     }
@@ -157,17 +164,19 @@ export function PathwayExplorer({
         
         if (!morePathwaysResult.success && morePathwaysResult.error) {
           setError(morePathwaysResult.error);
+          toast({ title: "Generation Error", description: morePathwaysResult.error, variant: "destructive" });
           if (onStopGeneration) onStopGeneration(false);
           return;
         }
         
         if (morePathwaysResult.pathways && morePathwaysResult.pathways.length > 0) {
-          // Append the new pathways to the existing ones
           setPathways([...pathways, ...morePathwaysResult.pathways]);
-          // Set new pathway IDs for highlighting
-          setNewPathwayIds(morePathwaysResult.pathways.map(p => p.id)); 
+          setNewPathwayIds(morePathwaysResult.pathways.map(p => p.id));
+          toast({ title: "Recommendations Updated", description: `Added ${morePathwaysResult.pathways.length} more pathways.`, variant: "default" });
         } else {
-          setError("No new pathways were generated. Please try again.");
+          const msg = "No new pathways were generated. Please try again.";
+          setError(msg);
+          toast({ title: "No New Pathways", description: msg, variant: "destructive" });
         }
       } else {
         // First-time generation or guest user - use the original method
@@ -175,21 +184,26 @@ export function PathwayExplorer({
         
         if (result.error) {
           setError(result.error);
+          toast({ title: "Generation Error", description: result.error, variant: "destructive" });
           if (onStopGeneration) onStopGeneration(false);
           return;
         }
         
         if (result.pathways && result.pathways.length > 0) {
           setPathways(result.pathways);
-          // Set new pathway IDs for highlighting
-          setNewPathwayIds(result.pathways.map(p => p.id)); 
+          setNewPathwayIds(result.pathways.map(p => p.id));
+          toast({ title: "Recommendations Ready", description: `Generated ${result.pathways.length} pathways for you.`, variant: "default" });
         } else {
-          setError("No pathways were generated. Please try again.");
+          const msg = "No pathways were generated. Please try again.";
+          setError(msg);
+          toast({ title: "No Pathways", description: msg, variant: "destructive" });
         }
       }
     } catch (err) {
       console.error("Error generating pathways:", err);
-      setError("Failed to generate pathways. Please try again later.");
+      const msg = "Failed to generate pathways. Please try again later.";
+      setError(msg);
+      toast({ title: "Generation Failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);
       // Stop progress modal, passing true if no error was set, false otherwise.
@@ -718,7 +732,7 @@ function EnhancedPathwayCard({
               </>
             ) : (
               <>
-                Explore Similar Programs
+                Explore Relevant Programs
                 <ChevronRight className="ml-2 h-4 w-4" />
               </>
             )}

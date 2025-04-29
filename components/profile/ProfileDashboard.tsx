@@ -153,7 +153,8 @@ const getDocumentFileId = (doc: any): string | undefined => {
 };
 
 export default function ProfileDashboard() {
-  const [expandedSection, setExpandedSection] = useState("personal");
+  // Expand the Documents section by default
+  const [expandedSection, setExpandedSection] = useState<string>("documents");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +181,10 @@ export default function ProfileDashboard() {
   const router = useRouter();
   const { user, loading: authLoading, vectorStoreId: authVectorStoreId } = useAuth();
   const { toast } = useToast();
+  const [isProcessingDocs, setIsProcessingDocs] = useState(false);
+  const [processDocsError, setProcessDocsError] = useState<string | null>(null);
+  // Track processing availability
+  const [canProcessDocs, setCanProcessDocs] = useState(false);
   
   // Add animation for decorative elements
   useEffect(() => {
@@ -624,7 +629,7 @@ export default function ProfileDashboard() {
       }
       
       try {
-        // First, sync the updated profile to Vector Store to ensure AI has latest information
+        // First, sync the updated profile to Vector Store
         console.log("Syncing updated profile with new document to Vector Store...");
         const newFileId = await syncProfileToVectorStore(updatedProfile, vsId);
         
@@ -634,41 +639,31 @@ export default function ProfileDashboard() {
           profileFileId: newFileId
         };
         
-        // Now, update the profile in the database with both new document and profile file ID
+        // Now, update the profile in the database
         const response = await fetch('/api/profile/update', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(finalUpdatedProfile),
         });
-        
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to update document');
         }
-        
-        // Update the local state with the new document and profile file ID
         setUserProfile(finalUpdatedProfile);
-        
+        // Allow processing now that a fresh document was uploaded
+        setCanProcessDocs(true);
         console.log(`Profile successfully updated with new ${docType} document and synced to Vector Store`);
-        
         // Show success message
         alert(`Your ${docType} has been successfully updated.`);
       } catch (syncError) {
         console.error("Error syncing profile with new document to Vector Store:", syncError);
-        
-        // Even if sync fails, still try to update just the document in Supabase
+        // Fallback to database-only update
         console.log("Falling back to database-only update...");
-        
         const response = await fetch('/api/profile/update', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedProfile),
         });
-        
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to update document');
@@ -733,6 +728,75 @@ export default function ProfileDashboard() {
        toast({ title: "Deletion Failed", description: "An unexpected error occurred.", variant: "destructive" });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handler to process uploaded documents and auto-populate profile
+  const handleProcessDocuments = async () => {
+    if (!userProfile?.vectorStoreId) {
+      toast({ title: "Error", description: "Vector store not initialized.", variant: "destructive" });
+      return;
+    }
+    const documentIds: string[] = [];
+    if (userProfile.documents?.resume?.fileId) documentIds.push(userProfile.documents.resume.fileId);
+    if (userProfile.documents?.transcripts?.fileId) documentIds.push(userProfile.documents.transcripts.fileId);
+    if (userProfile.documents?.statementOfPurpose?.fileId) documentIds.push(userProfile.documents.statementOfPurpose.fileId);
+    if (userProfile.documents?.otherDocuments) {
+      userProfile.documents.otherDocuments.forEach(doc => {
+        if (doc.fileId) documentIds.push(doc.fileId);
+      });
+    }
+    if (documentIds.length === 0) {
+      toast({ title: "No documents", description: "Please upload documents first.", variant: "destructive" });
+      return;
+    }
+    setIsProcessingDocs(true);
+    setProcessDocsError(null);
+    try {
+      // Extract profile info from documents
+      const res = await fetch('/api/profile/extract-from-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vectorStoreId: userProfile.vectorStoreId, documentIds }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to process documents');
+      }
+      const data = await res.json();
+      if (!data.profile) throw new Error('No profile data extracted');
+      const extracted = data.profile as UserProfile;
+      // Merge extracted fields, preserve existing documents
+      const mergedProfile: UserProfile = {
+        ...userProfile,
+        ...extracted,
+        documents: userProfile.documents,
+        vectorStoreId: userProfile.vectorStoreId,
+      };
+      // Sync merged profile JSON to Vector Store
+      const vectorId = userProfile.vectorStoreId!; // guaranteed by initial check
+      const newProfileFileId = await syncProfileToVectorStore(mergedProfile, vectorId);
+      const finalProfile: UserProfile = { ...mergedProfile, profileFileId: newProfileFileId };
+      // Persist merged+synced profile to database
+      const updateRes = await fetch('/api/profile/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalProfile),
+      });
+      if (!updateRes.ok) {
+        const errData = await updateRes.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save extracted profile');
+      }
+      setUserProfile(finalProfile);
+      setCanProcessDocs(false);
+      toast({ title: 'Profile updated', description: 'Profile populated from documents.', variant: 'default' });
+    } catch (error) {
+      console.error('Error processing documents:', error);
+      const message = error instanceof Error ? error.message : 'Error processing documents';
+      setProcessDocsError(message);
+      toast({ title: 'Processing Failed', description: message, variant: 'destructive' });
+    } finally {
+      setIsProcessingDocs(false);
     }
   };
 
@@ -1096,7 +1160,7 @@ export default function ProfileDashboard() {
                onCheckedChange={(checked) => handleFieldChange('preferences.residencyInterest', checked)}
              />
              <label htmlFor="residencyInterest" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-               Interested in long-term residency/migration options?
+               Interested in long-term residency/migration options
              </label>
            </div>
          {/* --- End Added Fields --- */}
@@ -1446,7 +1510,306 @@ export default function ProfileDashboard() {
           </div>
         </motion.div>
 
-        <Accordion type="single" collapsible className="w-full" defaultValue="personal" value={expandedSection} onValueChange={setExpandedSection}>
+        <Accordion type="single" collapsible className="w-full" value={expandedSection} onValueChange={setExpandedSection}>
+        {/* Documents */}
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.6 }}
+          >
+            <AccordionItem value="documents" className="border border-primary/20 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-amber-50 to-background data-[state=open]:bg-amber-100/50 transition-all duration-300">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 rounded-full bg-amber-100 text-amber-600">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium text-base">Documents</span>
+                    <p className="text-xs text-zinc-500 mt-0.5">Uploaded files that enhance your recommendations</p>
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 py-4 bg-white">
+                <div className="pl-10 space-y-4 py-2">
+                  <div className="space-y-3">
+                    {/* Resume */}
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <FileText size={20} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Resume/CV</p>
+                          <p className="text-xs text-gray-500">Your educational and professional experience</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {userProfile?.documents?.resume ? (
+                          <>
+                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                              <Check size={14} className="mr-1" />
+                              Uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc']}
+                              className="h-8"
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
+                                  <Edit size={14} className="mr-1" /> Replace
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                              Not uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc']}
+                              className="h-8"
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="outline" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
+                                  <Plus size={14} className="mr-1" /> Upload
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Transcripts */}
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <FileText size={20} className="text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Transcripts</p>
+                          <p className="text-xs text-gray-500">Your academic records</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {userProfile?.documents?.transcripts ? (
+                          <>
+                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                              <Check size={14} className="mr-1" />
+                              Uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
+                              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
+                              className="h-8"
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="ghost" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
+                                  <Edit size={14} className="mr-1" /> Replace
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                              Not uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
+                              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
+                              className="h-8"
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="outline" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
+                                  <Plus size={14} className="mr-1" /> Upload
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Statement of Purpose */}
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <FileText size={20} className="text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Statement of Purpose</p>
+                          <p className="text-xs text-gray-500">Your educational goals</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {userProfile?.documents?.statementOfPurpose ? (
+                          <>
+                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                              <Check size={14} className="mr-1" />
+                              Uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
+                              className="h-8"
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="ghost" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
+                                  <Edit size={14} className="mr-1" /> Replace
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                              Not uploaded
+                            </span>
+                            <DocumentUpload
+                              onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
+                              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
+                              className="h-8"
+                              vectorStoreId={userProfile?.vectorStoreId || ''}
+                              disabled={!userProfile?.vectorStoreId}
+                            >
+                              <div className="flex items-center justify-center h-full p-1 text-center">
+                                <Button variant="outline" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
+                                  <Plus size={14} className="mr-1" /> Upload
+                                </Button>
+                              </div>
+                            </DocumentUpload>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Language Tests / Other */}
+                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-md border border-gray-200">
+                          <Languages size={20} className="text-cyan-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Language Tests / Other</p>
+                          <p className="text-xs text-gray-500">Additional supporting documents</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(userProfile?.documents?.otherDocuments && userProfile.documents.otherDocuments.length > 0) ? (
+                          <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
+                            <Check size={14} className="mr-1" />
+                            {userProfile.documents.otherDocuments.length} Uploaded
+                          </span>
+                        ) : (
+                          <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
+                            Not uploaded
+                          </span>
+                        )}
+                        <DocumentUpload
+                          onSuccess={(fileId) => {
+                            // Create a function to handle multiple documents
+                            // This is a simplified version that just appends to the array
+                            const updatedDocs = userProfile?.documents?.otherDocuments || [];
+                            const newDoc = {
+                              fileId: fileId,
+                              vectorStoreId: userProfile?.vectorStoreId || '',
+                              uploadedAt: new Date().toISOString(),
+                              status: 'uploaded'
+                            };
+                            
+                            // Update user profile with new other document
+                            if (userProfile) {
+                              const updatedDocuments = { ...userProfile.documents };
+                              updatedDocuments.otherDocuments = [...updatedDocs, newDoc];
+                              
+                              const updatedProfile = {
+                                ...userProfile,
+                                documents: updatedDocuments
+                              };
+                              
+                              // Update in database and state
+                              fetch('/api/profile/update', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(updatedProfile),
+                              }).then(response => {
+                                if (response.ok) {
+                                  setUserProfile(updatedProfile);
+                                  setCanProcessDocs(true);
+                                  toast({ 
+                                    title: "Document Uploaded", 
+                                    description: "Your additional document has been uploaded successfully.", 
+                                    variant: "default" 
+                                  });
+                                }
+                              }).catch(error => {
+                                console.error("Error uploading other document:", error);
+                                toast({ 
+                                  title: "Upload Failed", 
+                                  description: "Failed to upload document. Please try again.", 
+                                  variant: "destructive" 
+                                });
+                              });
+                            }
+                          }}
+                          allowedFileTypes={['.pdf', '.docx', '.doc', '.jpg', '.jpeg', '.png']}
+                          className="h-8"
+                          vectorStoreId={userProfile?.vectorStoreId || ''}
+                          disabled={!userProfile?.vectorStoreId}
+                        >
+                          <div className="flex items-center justify-center h-full p-1 text-center">
+                            <Button variant="outline" size="sm" className="h-8 text-cyan-600 hover:text-cyan-800">
+                              <Plus size={14} className="mr-1" /> Upload
+                            </Button>
+                          </div>
+                        </DocumentUpload>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Process Documents Button */}
+                <div className="mt-6 flex justify-centre pl-10">
+                  <Button
+                    title={!canProcessDocs ? "Please upload or replace at least one document first" : "Auto-fill My Profile from Uploaded Documents"}
+                    onClick={handleProcessDocuments}
+                    // Only enable once a fresh upload or replacement has occurred
+                    disabled={isProcessingDocs || !canProcessDocs}
+                    variant="outline"
+                  >
+                    {isProcessingDocs ? (
+                      <>
+                        <Loader2 className="animate-spin mr-1 h-4 w-4" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1 h-4 w-4" />
+                        Auto-fill My Profile from Uploaded Documents
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {processDocsError && (
+                  <p className="mt-2 pl-10 text-sm text-red-600">{processDocsError}</p>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </motion.div>
+
           {/* Personal Information */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1939,278 +2302,7 @@ export default function ProfileDashboard() {
             </AccordionItem>
           </motion.div>
 
-          {/* Documents */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.6 }}
-          >
-            <AccordionItem value="documents" className="border border-primary/20 rounded-lg mb-4 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-              <AccordionTrigger className="hover:no-underline px-6 py-4 bg-gradient-to-r from-amber-50 to-background data-[state=open]:bg-amber-100/50 transition-all duration-300">
-                <div className="flex items-center gap-3 w-full">
-                  <div className="p-2 rounded-full bg-amber-100 text-amber-600">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                  <div className="text-left">
-                    <span className="font-medium text-base">Documents</span>
-                    <p className="text-xs text-zinc-500 mt-0.5">Uploaded files that enhance your recommendations</p>
-                  </div>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-6 py-4 bg-white">
-                <div className="pl-10 space-y-4 py-2">
-                  <div className="space-y-3">
-                    {/* Resume */}
-                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white rounded-md border border-gray-200">
-                          <FileText size={20} className="text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-800">Resume/CV</p>
-                          <p className="text-xs text-gray-500">Your educational and professional experience</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {userProfile?.documents?.resume ? (
-                          <>
-                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                              <Check size={14} className="mr-1" />
-                              Uploaded
-                            </span>
-                            <DocumentUpload
-                              onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
-                              allowedFileTypes={['.pdf', '.docx', '.doc']}
-                              className="h-8"
-                              vectorStoreId={userProfile?.vectorStoreId || ''}
-                              disabled={!userProfile?.vectorStoreId}
-                            >
-                              <div className="flex items-center justify-center h-full p-1 text-center">
-                                <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
-                                  <Edit size={14} className="mr-1" /> Replace
-                                </Button>
-                              </div>
-                            </DocumentUpload>
-                          </>
-                        ) : (
-                          <>
-                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                              Not uploaded
-                            </span>
-                            <DocumentUpload
-                              onSuccess={(fileId) => handleDocumentUpdate('resume', fileId)}
-                              allowedFileTypes={['.pdf', '.docx', '.doc']}
-                              className="h-8"
-                              vectorStoreId={userProfile?.vectorStoreId || ''}
-                              disabled={!userProfile?.vectorStoreId}
-                            >
-                              <div className="flex items-center justify-center h-full p-1 text-center">
-                                <Button variant="outline" size="sm" className="h-8 text-blue-600 hover:text-blue-800">
-                                  <Plus size={14} className="mr-1" /> Upload
-                                </Button>
-                              </div>
-                            </DocumentUpload>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Transcripts */}
-                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white rounded-md border border-gray-200">
-                          <FileText size={20} className="text-purple-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-800">Transcripts</p>
-                          <p className="text-xs text-gray-500">Your academic records</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {userProfile?.documents?.transcripts ? (
-                          <>
-                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                              <Check size={14} className="mr-1" />
-                              Uploaded
-                            </span>
-                            <DocumentUpload
-                              onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
-                              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
-                              className="h-8"
-                              vectorStoreId={userProfile?.vectorStoreId || ''}
-                              disabled={!userProfile?.vectorStoreId}
-                            >
-                              <div className="flex items-center justify-center h-full p-1 text-center">
-                                <Button variant="ghost" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
-                                  <Edit size={14} className="mr-1" /> Replace
-                                </Button>
-                              </div>
-                            </DocumentUpload>
-                          </>
-                        ) : (
-                          <>
-                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                              Not uploaded
-                            </span>
-                            <DocumentUpload
-                              onSuccess={(fileId) => handleDocumentUpdate('transcripts', fileId)}
-                              allowedFileTypes={['.pdf', '.jpg', '.jpeg', '.png']}
-                              className="h-8"
-                              vectorStoreId={userProfile?.vectorStoreId || ''}
-                              disabled={!userProfile?.vectorStoreId}
-                            >
-                              <div className="flex items-center justify-center h-full p-1 text-center">
-                                <Button variant="outline" size="sm" className="h-8 text-purple-600 hover:text-purple-800">
-                                  <Plus size={14} className="mr-1" /> Upload
-                                </Button>
-                              </div>
-                            </DocumentUpload>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Statement of Purpose */}
-                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white rounded-md border border-gray-200">
-                          <FileText size={20} className="text-amber-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-800">Statement of Purpose</p>
-                          <p className="text-xs text-gray-500">Your educational goals</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {userProfile?.documents?.statementOfPurpose ? (
-                          <>
-                            <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                              <Check size={14} className="mr-1" />
-                              Uploaded
-                            </span>
-                            <DocumentUpload
-                              onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
-                              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
-                              className="h-8"
-                              vectorStoreId={userProfile?.vectorStoreId || ''}
-                              disabled={!userProfile?.vectorStoreId}
-                            >
-                              <div className="flex items-center justify-center h-full p-1 text-center">
-                                <Button variant="ghost" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
-                                  <Edit size={14} className="mr-1" /> Replace
-                                </Button>
-                              </div>
-                            </DocumentUpload>
-                          </>
-                        ) : (
-                          <>
-                            <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                              Not uploaded
-                            </span>
-                            <DocumentUpload
-                              onSuccess={(fileId) => handleDocumentUpdate('statementOfPurpose', fileId)}
-                              allowedFileTypes={['.pdf', '.docx', '.doc', '.txt']}
-                              className="h-8"
-                              vectorStoreId={userProfile?.vectorStoreId || ''}
-                              disabled={!userProfile?.vectorStoreId}
-                            >
-                              <div className="flex items-center justify-center h-full p-1 text-center">
-                                <Button variant="outline" size="sm" className="h-8 text-amber-600 hover:text-amber-800">
-                                  <Plus size={14} className="mr-1" /> Upload
-                                </Button>
-                              </div>
-                            </DocumentUpload>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Language Tests / Other */}
-                    <div className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white rounded-md border border-gray-200">
-                          <Languages size={20} className="text-cyan-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-800">Language Tests / Other</p>
-                          <p className="text-xs text-gray-500">Additional supporting documents</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {(userProfile?.documents?.otherDocuments && userProfile.documents.otherDocuments.length > 0) ? (
-                          <span className="bg-green-100 text-green-700 text-xs py-1 px-3 rounded-full flex items-center">
-                            <Check size={14} className="mr-1" />
-                            {userProfile.documents.otherDocuments.length} Uploaded
-                          </span>
-                        ) : (
-                          <span className="bg-gray-100 text-gray-500 text-xs py-1 px-3 rounded-full">
-                            Not uploaded
-                          </span>
-                        )}
-                        <DocumentUpload
-                          onSuccess={(fileId) => {
-                            // Create a function to handle multiple documents
-                            // This is a simplified version that just appends to the array
-                            const updatedDocs = userProfile?.documents?.otherDocuments || [];
-                            const newDoc = {
-                              fileId: fileId,
-                              vectorStoreId: userProfile?.vectorStoreId || '',
-                              uploadedAt: new Date().toISOString(),
-                              status: 'uploaded'
-                            };
-                            
-                            // Update user profile with new other document
-                            if (userProfile) {
-                              const updatedDocuments = { ...userProfile.documents };
-                              updatedDocuments.otherDocuments = [...updatedDocs, newDoc];
-                              
-                              const updatedProfile = {
-                                ...userProfile,
-                                documents: updatedDocuments
-                              };
-                              
-                              // Update in database and state
-                              fetch('/api/profile/update', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(updatedProfile),
-                              }).then(response => {
-                                if (response.ok) {
-                                  setUserProfile(updatedProfile);
-                                  toast({ 
-                                    title: "Document Uploaded", 
-                                    description: "Your additional document has been uploaded successfully.", 
-                                    variant: "default" 
-                                  });
-                                }
-                              }).catch(error => {
-                                console.error("Error uploading other document:", error);
-                                toast({ 
-                                  title: "Upload Failed", 
-                                  description: "Failed to upload document. Please try again.", 
-                                  variant: "destructive" 
-                                });
-                              });
-                            }
-                          }}
-                          allowedFileTypes={['.pdf', '.docx', '.doc', '.jpg', '.jpeg', '.png']}
-                          className="h-8"
-                          vectorStoreId={userProfile?.vectorStoreId || ''}
-                          disabled={!userProfile?.vectorStoreId}
-                        >
-                          <div className="flex items-center justify-center h-full p-1 text-center">
-                            <Button variant="outline" size="sm" className="h-8 text-cyan-600 hover:text-cyan-800">
-                              <Plus size={14} className="mr-1" /> Upload
-                            </Button>
-                          </div>
-                        </DocumentUpload>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </motion.div>
+          
         </Accordion>
 
         {/* Delete Profile Button and Dialog */}

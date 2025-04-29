@@ -97,6 +97,44 @@ export async function POST(request: NextRequest) {
     // Sanitize and ensure profile data is correctly structured
     const userProfile = sanitizeUserProfile(rawUserProfile);
     
+    // --- Guard: ensure profile has required key fields before generation
+    const missingFields: string[] = [];
+    // Check vector store ID
+    if (!userProfile.vectorStoreId) {
+      missingFields.push('memory store');
+    }
+    // Check education array
+    if (!Array.isArray(userProfile.education) || userProfile.education.length === 0) {
+      missingFields.push('education history');
+    }
+    // Check target study level
+    if (!userProfile.targetStudyLevel || userProfile.targetStudyLevel === '__NONE__') {
+      missingFields.push('target study level');
+    }
+    // Check career goals completeness
+    if (!userProfile.careerGoals || (
+      !userProfile.careerGoals.shortTerm &&
+      !userProfile.careerGoals.longTerm &&
+      Array.isArray(userProfile.careerGoals.desiredIndustry) && userProfile.careerGoals.desiredIndustry.length === 0 &&
+      Array.isArray(userProfile.careerGoals.desiredRoles) && userProfile.careerGoals.desiredRoles.length === 0
+    )) {
+      missingFields.push('career goals');
+    }
+    // Check preferences
+    if (!userProfile.preferences || !Array.isArray(userProfile.preferences.preferredLocations) || userProfile.preferences.preferredLocations.length === 0) {
+      missingFields.push('preferences');
+    }
+    // If any required fields are missing, respond with an error
+    if (missingFields.length > 0) {
+      console.warn('Profile generation guard triggered, missing:', missingFields);
+      return NextResponse.json(
+        {
+          error: `Incomplete profile: missing ${missingFields.join(', ')}. Please complete your profile before generating pathways.`
+        },
+        { status: 400 }
+      );
+    }
+    
     // Debug logging for user profile data
     console.log('User profile received for recommendations:');
     console.log('Raw Career Goals:', JSON.stringify(rawUserProfile.careerGoals));

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/accordion";
 import useProfileStore from "@/stores/useProfileStore";
 import SignupModal from "@/app/auth/SignupModal";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReviewStepProps {
   profileData: UserProfile;
@@ -37,6 +38,9 @@ export default function ReviewStep({
   const { vectorStoreId: storeVectorStoreId, setVectorStoreId, setProfileComplete } = useProfileStore();
   const { setVectorStore, setFileSearchEnabled } = useToolsStore();
 
+  // Toast helper
+  const { toast } = useToast();
+
   // Add a useEffect to verify vector store ID consistency
   useEffect(() => {
     // Check if vector store ID needs to be updated from the store to profile data
@@ -56,7 +60,11 @@ export default function ReviewStep({
           await onComplete();
        } catch (error) {
           console.error("Error completing guest edit:", error);
-          alert("Failed to update profile.");
+          toast({
+            title: "Update failed",
+            description: "We couldn't update your profile. Please check your details and try again.",
+            variant: "destructive",
+          });
           setIsSubmitting(false);
        }
     } else {
@@ -71,6 +79,11 @@ export default function ReviewStep({
       await onComplete(userId);
     } catch (error) {
       console.error("Error after signup modal:", error);
+      toast({
+        title: "Something went wrong",
+        description: "Unable to proceed. Please try again later.",
+        variant: "destructive",
+      });
       setIsSubmitting(false);
     }
   };

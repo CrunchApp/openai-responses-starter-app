@@ -170,8 +170,8 @@ export default function RecommendationsPage() {
   // State for recommendation progress modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
-  const [isGenerationComplete, setIsGenerationComplete] = useState(false); 
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isGenerationComplete, setIsGenerationComplete] = useState(false);
+  const [modalStages, setModalStages] = useState<Array<typeof RECOMMENDATION_STAGES_ENHANCED[number]>>([]);
   const progressTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   const [isGuestResetting, setIsGuestResetting] = useState(false);
@@ -390,65 +390,48 @@ export default function RecommendationsPage() {
   };
 
   // Functions to control the progress modal simulation
-  const startProgressSimulation = () => {
+  const startProgressSimulation = (
+    stages: Array<typeof RECOMMENDATION_STAGES_ENHANCED[number]>,
+    timings: number[]
+  ) => {
+    setModalStages(stages);
     setCurrentStageIndex(0);
     setIsGenerationComplete(false);
     setIsModalOpen(true);
-    
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    // Clear existing timeouts
     progressTimeoutsRef.current.forEach(clearTimeout);
     progressTimeoutsRef.current = [];
-    
-    // Using the same timings as the old version
-    const stageTiming = [
-      1000, // Analyzing profile: 1s
-      3500, // Generating pathways (start): 3.5s (AI call)
-       500, // Generating pathways (complete): 0.5s
-      // Subsequent stages removed as generation happens in one step now
-      1000, // Placeholder for saving/processing
-       500  // Placeholder for preparing
-    ];
-
-    // Use only the relevant number of stages
-    const relevantStages = RECOMMENDATION_STAGES_ENHANCED.slice(0, stageTiming.length);
-
+    // Schedule stage transitions based on provided timings
     let cumulativeTime = 0;
-    
-    relevantStages.forEach((_stage, index: number) => {
-      const currentStageDuration = stageTiming[index];
-      
-      if (index === 0) {
-        setCurrentStageIndex(0); // Start immediately
-      } else {
+    timings.forEach((duration, index) => {
+      if (index > 0) {
         const timeout = setTimeout(() => {
-          if (index < relevantStages.length) {
-             setCurrentStageIndex(index);
-          }
+          setCurrentStageIndex(index);
         }, cumulativeTime);
         progressTimeoutsRef.current.push(timeout);
       }
-      cumulativeTime += currentStageDuration;
+      cumulativeTime += duration;
     });
   };
 
   const stopProgressSimulation = (success: boolean) => {
+    // Clear pending timeouts
     progressTimeoutsRef.current.forEach(clearTimeout);
     progressTimeoutsRef.current = [];
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-
     if (success) {
-       const finalStageIndex = RECOMMENDATION_STAGES_ENHANCED.slice(0, 5).length - 1; // Adjust based on used stages
-       setCurrentStageIndex(finalStageIndex); 
-       setIsGenerationComplete(true);
-       setTimeout(() => {
-         setIsModalOpen(false);
-         setTimeout(() => setIsGenerationComplete(false), 300); 
-       }, 1200); 
+      // Move to final stage and show completion
+      const finalIndex = modalStages.length - 1;
+      setCurrentStageIndex(finalIndex);
+      setIsGenerationComplete(true);
+      // Delay closing to allow user to see completion
+      setTimeout(() => {
+        setIsModalOpen(false);
+        setTimeout(() => setIsGenerationComplete(false), 300);
+      }, 1200);
     } else {
-      // If failed, close modal immediately without showing completion
+      // Close immediately on failure or cancel
       setIsModalOpen(false);
       setIsGenerationComplete(false);
-      // Optionally show an error message here or rely on the store's error state
     }
   };
 
@@ -488,7 +471,7 @@ export default function RecommendationsPage() {
     <PageWrapper allowGuest>
       <RecommendationProgressModal
         isOpen={isModalOpen}
-        progressStages={RECOMMENDATION_STAGES_ENHANCED.slice(0, 5)}
+        progressStages={modalStages}
         currentStageIndex={currentStageIndex}
         isComplete={isGenerationComplete}
       />

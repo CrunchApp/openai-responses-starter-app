@@ -114,32 +114,42 @@ export const RECOMMENDATION_STAGES_ENHANCED = [
   }
 ];
 
+// Define a type for dynamic progress stages
+export type ProgressStage = typeof RECOMMENDATION_STAGES_ENHANCED[number];
 
 interface RecommendationProgressModalProps {
   isOpen: boolean;
-  // Use the enhanced stages type
-  progressStages: typeof RECOMMENDATION_STAGES_ENHANCED;
+  // Dynamic array of progress stages to display
+  progressStages: ProgressStage[];
   currentStageIndex: number;
   isComplete: boolean;
 }
 
 export function RecommendationProgressModal({
   isOpen,
-  progressStages, // This will now be RECOMMENDATION_STAGES_ENHANCED
+  progressStages, // This will now be dynamic ProgressStage[]
   currentStageIndex,
   isComplete
 }: RecommendationProgressModalProps) {
-  // Calculate progress percentage based on the potentially longer list of stages
+  // Calculate progress percentage based on the dynamic list of stages
   const progressPercentage = isComplete 
     ? 100 
     : Math.min(100, Math.ceil(((currentStageIndex + 1) / progressStages.length) * 100)); // Use currentStageIndex + 1 for better progress feel
+
+  // Determine dynamic header and footer texts
+  const headerText = isComplete 
+    ? 'All Done!'
+    : progressStages[currentStageIndex]?.title || 'Processing...';
+  const footerText = isComplete 
+    ? 'Process completed successfully!' 
+    : progressStages[currentStageIndex]?.description || 'Please wait...';
 
   return (
     <Dialog open={isOpen} onOpenChange={() => {}} modal={true}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-center">
-            {isComplete ? 'Recommendations Ready!' : 'Generating Your Recommendations'}
+          <DialogTitle className="text-center font-semibold text-lg">
+            {headerText}
           </DialogTitle>
         </DialogHeader>
         
@@ -193,7 +203,7 @@ export function RecommendationProgressModal({
                         {stage.title}
                       </h4>
                       {isActive && (
-                        <p className="text-xs text-blue-600">
+                        <p className="text-xs text-blue-600 mt-1">
                           {stage.description}
                         </p>
                       )}
@@ -217,10 +227,8 @@ export function RecommendationProgressModal({
             )}
           </div>
           
-          <div className="text-center text-xs text-gray-500 mt-4">
-            {isComplete ? 
-              'Recommendations have been generated successfully!' : 
-              'Please wait while we prepare your personalized results...'}
+          <div className="text-center text-sm text-gray-600 mt-4">
+            {footerText}
           </div>
         </div>
       </DialogContent>

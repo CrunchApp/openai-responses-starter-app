@@ -65,6 +65,10 @@ import SignupModal from "@/app/auth/SignupModal";
 import useProfileStore from "@/stores/useProfileStore";
 import { UserProfile } from "@/app/types/profile-schema";
 import { useToast } from "@/hooks/use-toast";
+import { RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
+
+// Define ProgressStage type from modal stages
+type ProgressStage = typeof RECOMMENDATION_STAGES_ENHANCED[number];
 
 export function PathwayExplorer({ 
   userProfile, 
@@ -74,7 +78,7 @@ export function PathwayExplorer({
 }: { 
   userProfile: any;
   onSelectPathway?: (pathway: EducationPathway) => void;
-  onStartGeneration?: () => void;
+  onStartGeneration?: (stages: ProgressStage[], timings: number[]) => void;
   onStopGeneration?: (success: boolean) => void;
 }) {
   const router = useRouter();
@@ -128,7 +132,12 @@ export function PathwayExplorer({
     }
     
     // Start progress modal if callback provided
-    if (onStartGeneration) onStartGeneration();
+    if (onStartGeneration) {
+      // Show pathway generation stages
+      const pathwayStages = RECOMMENDATION_STAGES_ENHANCED.slice(0, 3);
+      const pathwayTimings = [1000, 3500, 500];
+      onStartGeneration(pathwayStages, pathwayTimings);
+    }
     
     // Check if guest has reached limit
     if (isGuest && hasReachedLimit) {
@@ -206,11 +215,8 @@ export function PathwayExplorer({
       toast({ title: "Generation Failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);
-      // Stop progress modal, passing true if no error was set, false otherwise.
-      // Ensure the callback is always called if it exists.
-      if (onStopGeneration) {
-        onStopGeneration(!error); // Pass the success state based on whether error is set
-      }
+      // Stop progress modal with success state
+      if (onStopGeneration) onStopGeneration(!error);
       // Clear new pathway IDs after a short delay
       setTimeout(() => setNewPathwayIds([]), 5000); 
     }
@@ -222,6 +228,14 @@ export function PathwayExplorer({
       return;
     }
     
+    // Start progress modal for program exploration
+    let programSuccess = true;
+    if (onStartGeneration) {
+      const programStages = RECOMMENDATION_STAGES_ENHANCED.slice(3, 6);
+      const programTimings = [500, 1500, 1000];
+      onStartGeneration(programStages, programTimings);
+    }
+    
     // Set loading state for this specific pathway
     setProgramGenerationLoading(pathway.id, true);
     
@@ -230,6 +244,7 @@ export function PathwayExplorer({
       
       if (!result.success || result.error) {
         console.error(`Error exploring programs for pathway ${pathway.id}:`, result.error);
+        programSuccess = false;
         setProgramGenerationError(pathway.id, result.error || "Failed to generate programs");
         return;
       }
@@ -248,10 +263,15 @@ export function PathwayExplorer({
       }
     } catch (err) {
       console.error("Error exploring programs:", err);
+      programSuccess = false;
       setProgramGenerationError(
         pathway.id, 
         err instanceof Error ? err.message : "An unexpected error occurred"
       );
+    } finally {
+      // Clear loading and stop modal
+      setProgramGenerationLoading(pathway.id, false);
+      if (onStopGeneration) onStopGeneration(programSuccess);
     }
   };
   

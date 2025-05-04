@@ -3,8 +3,12 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import Backend from 'i18next-http-backend';
 
+// Only use HTTP backend in the browser to avoid SSR URL parsing errors
+const isBrowser = typeof window !== 'undefined';
+if (isBrowser) {
+  i18n.use(Backend);
+}
 i18n
-  .use(Backend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({

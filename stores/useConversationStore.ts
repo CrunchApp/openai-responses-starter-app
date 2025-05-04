@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { Item, MessageItem, processMessages } from "@/lib/assistant";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { INITIAL_MESSAGE } from "@/config/constants";
+import { vectorStoreClient } from "@/lib/vector-store/client";
 
 // Define Conversation type matching ConversationSelector
 type Conversation = {
@@ -50,6 +51,9 @@ interface ConversationState {
   // New methods
   updateConversationTitleInState: (conversationId: string, title: string) => void;
   fetchConversations: () => Promise<void>; // Add method to fetch conversations
+
+  previousResponseId: string | null;
+  setPreviousResponseId: (id: string | null) => void;
 }
 
 const useConversationStore = create<ConversationState>((set, get) => ({
@@ -70,6 +74,8 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   ],
   conversationItems: [],
   conversations: [], // Initialize conversations state
+  
+  previousResponseId: null,
   
   // Auth management
   setAuthState: (isAuthenticated, userId) => {
@@ -125,7 +131,9 @@ const useConversationStore = create<ConversationState>((set, get) => ({
   },
   
   createNewConversation: async (firstMessageContent?: string, firstAssistantContent?: string) => {
-    const { isAuthenticated, userId, resetState, fetchConversations, updateConversationTitleInState, addChatMessage, addConversationItem } = get();
+    const { isAuthenticated, userId, resetState, fetchConversations, updateConversationTitleInState, addChatMessage, addConversationItem, setPreviousResponseId } = get();
+    // Reset previousResponseId for a new conversation
+    setPreviousResponseId(null);
 
     if (!isAuthenticated || !userId) {
       console.log('Creating local conversation only (not authenticated)');
@@ -416,6 +424,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
         activeConversationId: conversation.id,
         chatMessages: processedChatMessages,
         conversationItems: processedConversationItems,
+        previousResponseId: null,
       });
       
       return true;
@@ -536,11 +545,22 @@ const useConversationStore = create<ConversationState>((set, get) => ({
           }),
         });
         
-        if (!response.ok) {
+        if (response.ok) {
+          console.log(`Message saved to DB for conversation ${conversationIdToUse}`);
+          // Index user message in vector store
+          try {
+            await vectorStoreClient.add({
+              userId,
+              applicationId: conversationIdToUse,
+              role: role as 'user' | 'assistant',
+              content: messageContent,
+            });
+          } catch (err) {
+            console.error("Error indexing user message in vector store:", err);
+          }
+        } else {
           const errorData = await response.json();
           console.error('Error saving message:', errorData.error);
-        } else {
-           console.log(`Message saved to DB for conversation ${conversationIdToUse}`);
         }
       } catch (error) {
         console.error('Error saving message to database:', error);
@@ -601,10 +621,13 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     ],
     conversationItems: [],
     error: null,
+    previousResponseId: null,
     // Don't reset conversations list on resetState, only on sign out
   }),
   
   rawSet: set,
+
+  setPreviousResponseId: (id: string | null) => set({ previousResponseId: id }),
 }));
 
 // Remove the automatic subscribe handler that was causing cascading renders

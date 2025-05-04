@@ -66,17 +66,20 @@ import useProfileStore from "@/stores/useProfileStore";
 import { UserProfile } from "@/app/types/profile-schema";
 import { useToast } from "@/hooks/use-toast";
 import { RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
+import { list_user_applications } from '@/config/functions';
 
 // Define ProgressStage type from modal stages
 type ProgressStage = typeof RECOMMENDATION_STAGES_ENHANCED[number];
 
 export function PathwayExplorer({ 
   userProfile, 
+  applicationMap,
   onSelectPathway,
   onStartGeneration,
   onStopGeneration
 }: { 
   userProfile: any;
+  applicationMap?: Record<string, string>;
   onSelectPathway?: (pathway: EducationPathway) => void;
   onStartGeneration?: (stages: ProgressStage[], timings: number[]) => void;
   onStopGeneration?: (success: boolean) => void;

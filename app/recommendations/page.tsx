@@ -54,6 +54,8 @@ import Image from "next/image";
 import { HowItWorksModal, RecommendationOptionsModal } from "./_components";
 import SignupModal from "@/app/auth/SignupModal";
 import { UserProfile } from "@/app/types/profile-schema";
+import { list_user_applications } from "@/config/functions";
+import { ApplicationsView } from "./ApplicationsView";
 
 // Add interface for Supabase profile to fix type issues
 interface SupabaseProfile {
@@ -183,6 +185,8 @@ export default function RecommendationsPage() {
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [isConvertingGuest, setIsConvertingGuest] = useState(false); // Loading state for conversion
 
+  const [appMap, setAppMap] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (authLoading) {
       console.log("[RecPage] Waiting for auth loading...");
@@ -224,6 +228,24 @@ export default function RecommendationsPage() {
     }
   
   }, [authLoading, user, typedProfile, router, isProfileComplete, setVectorStoreId, setProfileComplete, vectorStoreId, fileSearchEnabled, setFileSearchEnabled]);
+
+  // Fetch user's existing applications
+  useEffect(() => {
+    if (!user) return;
+    list_user_applications()
+      .then((res) => {
+        if (res.success && Array.isArray(res.applications)) {
+          const map: Record<string, string> = {};
+          res.applications.forEach((app: any) => {
+            if (app.recommendation_id) {
+              map[app.recommendation_id] = app.id;
+            }
+          });
+          setAppMap(map);
+        }
+      })
+      .catch(console.error);
+  }, [user]);
 
   const handleGuestSignupClick = () => {
     if (!isProfileComplete) {
@@ -684,6 +706,7 @@ export default function RecommendationsPage() {
               >
                 <PathwayExplorer 
                   userProfile={profileForExplorer}
+                  applicationMap={appMap}
                   onStartGeneration={startProgressSimulation} 
                   onStopGeneration={stopProgressSimulation} 
                 /> 
@@ -708,21 +731,12 @@ export default function RecommendationsPage() {
               </TabsContent>
               
               <TabsContent value="applications">
-                {user ? (
-                  <div className="text-center py-16 px-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="inline-flex items-center justify-center p-3 bg-white rounded-full border border-slate-200 shadow-sm mb-4">
-                      <FileText className="w-8 h-8 text-slate-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold mb-3">No applications yet</h3>
-                    <p className="text-slate-600 mb-6 max-w-md mx-auto">
-                      Your education program applications will appear here when you start applying.
-                    </p>
-                    <Button variant="outline" disabled className="px-6 bg-white"> 
-                      <Star className="w-4 h-4 mr-2 text-amber-400" />
-                      Coming Soon
-                    </Button>
+                {user && (
+                  <div className="p-4">
+                    <ApplicationsView />
                   </div>
-                ) : (
+                )}
+                {!user && (
                   <div className="text-center py-16 px-4 bg-slate-50 rounded-lg border border-slate-200">
                     <div className="inline-flex items-center justify-center p-3 bg-white rounded-full border border-slate-200 shadow-sm mb-4">
                       <Lock className="w-8 h-8 text-slate-400" />

@@ -6,6 +6,10 @@ import { getTools } from "./tools/tools";
 import { Annotation } from "@/components/annotations";
 import { functionsMap } from "@/config/functions";
 
+// Sentinel prefixes for chaining previous response context
+const CHAIN_PREFIX = "__CHAIN__:";
+const USE_PREV_PREFIX = "__USE_PREV__:";
+
 export interface ContentItem {
   type: "input_text" | "output_text" | "refusal" | "output_audio";
   annotations?: Annotation[];
@@ -38,7 +42,8 @@ export type Item = MessageItem | ToolCallItem;
 export const handleTurn = async (
   messages: any[],
   tools: any[],
-  onMessage: (data: any) => void
+  onMessage: (data: any) => void,
+  previousResponseId?: string | null
 ) => {
   try {
     // Get response from the API (defined in app/api/turn_response/route.ts)
@@ -48,6 +53,7 @@ export const handleTurn = async (
       body: JSON.stringify({
         messages: messages,
         tools: tools,
+        previous_response_id: previousResponseId ?? undefined,
       }),
     });
 
@@ -116,6 +122,8 @@ export const processMessages = async () => {
       conversationItems,
       setChatMessages,
       setConversationItems,
+      previousResponseId,
+      setPreviousResponseId,
     } = useConversationStore.getState();
 
     // Create local copies to avoid state mutation issues
@@ -123,13 +131,33 @@ export const processMessages = async () => {
     const localConversationItems = [...conversationItems];
 
     const tools = getTools();
+
+    // Filter out sentinel system messages and handle chaining logic
+    let effectivePreviousResponseId: string | null = previousResponseId;
+    const filteredConversationItems = localConversationItems.filter((item) => {
+      if (item.role === "system" && typeof item.content === "string") {
+        const contentStr = item.content as string;
+        if (contentStr.startsWith(CHAIN_PREFIX)) {
+          // Set initial previous response ID from chain sentinel
+          effectivePreviousResponseId = contentStr.slice(CHAIN_PREFIX.length);
+          return false; // Exclude from input
+        }
+        if (contentStr.startsWith(USE_PREV_PREFIX)) {
+          // Instruction to use existing previousResponseId; exclude
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Persist discovered previousResponseId in store
+    if (effectivePreviousResponseId && effectivePreviousResponseId !== previousResponseId) {
+      setPreviousResponseId(effectivePreviousResponseId);
+    }
+
     const allConversationItems = [
-      // Adding developer prompt as first item in the conversation
-      {
-        role: "developer",
-        content: DEVELOPER_PROMPT,
-      },
-      ...localConversationItems,
+      { role: "developer", content: DEVELOPER_PROMPT },
+      ...filteredConversationItems,
     ];
 
     let assistantMessageContent = "";
@@ -153,18 +181,20 @@ export const processMessages = async () => {
           }
           assistantMessageContent += partial;
 
-          // Check if we already have a message with this ID
+          // Determine which ID to use for display (chain into previous message if applicable)
+          const displayId = effectivePreviousResponseId ?? item_id;
+          // Check if we already have a message with this display ID
           let assistantMessage = localChatMessages.find(
-            (m) => m.type === "message" && m.role === "assistant" && m.id === item_id
+            (m) => m.type === "message" && m.role === "assistant" && m.id === displayId
           ) as MessageItem | undefined;
 
           if (!assistantMessage) {
-            // No message with this ID exists yet, create a new one
-            console.log("Creating new assistant message with ID:", item_id);
+            // Create a new assistant message (use displayId for chaining)
+            console.log("Creating new assistant message with display ID:", displayId);
             assistantMessage = {
               type: "message",
               role: "assistant",
-              id: item_id,
+              id: displayId,
               content: [
                 {
                   type: "output_text",
@@ -173,12 +203,16 @@ export const processMessages = async () => {
                 },
               ],
             };
-            
+            // Record the initial message ID for chaining if starting a new chain
+            if (!effectivePreviousResponseId) {
+              useConversationStore.getState().setPreviousResponseId(item_id);
+            }
+
             localChatMessages.push(assistantMessage);
-            addedMessageIds.add(item_id); // Track that we've added this message ID
+            addedMessageIds.add(displayId); // Track that we've added this message ID
           } else {
-            // Update the existing message
-            console.log("Updating existing assistant message with ID:", item_id);
+            // Update the existing message content
+            console.log("Updating existing assistant message with display ID:", displayId);
             const contentItem = assistantMessage.content[0];
             if (contentItem && contentItem.type === "output_text") {
               contentItem.text = assistantMessageContent;
@@ -297,7 +331,8 @@ export const processMessages = async () => {
           if (!localConversationItems.some(
             ci => ci.type === item.type && ci.id === item.id
           )) {
-            setConversationItems([...localConversationItems, item]);
+            localConversationItems.push(item);
+            setConversationItems([...localConversationItems]);
           }
 
           // For tool calls, update status
@@ -377,6 +412,7 @@ export const processMessages = async () => {
             localConversationItems.push({
               type: "function_call_output",
               call_id: toolCallMessage.call_id,
+              
               status: "completed",
               output: JSON.stringify(toolResult),
             });
@@ -416,7 +452,15 @@ export const processMessages = async () => {
 
         // Handle other events as needed
       }
-    });
+    }, effectivePreviousResponseId);
+
+    // After turn completes, if effectivePreviousResponseId exists, drop older assistant messages from conversationItems to reduce payload
+    if (effectivePreviousResponseId) {
+      const updatedConversationItems = filteredConversationItems.filter(
+        (item) => !(item.role === "assistant")
+      );
+      setConversationItems(updatedConversationItems);
+    }
   } catch (error) {
     console.error("Error in processMessages:", error);
   } finally {

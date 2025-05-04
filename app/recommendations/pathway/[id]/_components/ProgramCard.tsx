@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { create_application_plan } from "@/config/functions";
 
 // --- Helpers ---
 function formatCurrency(amount?: number | null) {
@@ -62,7 +63,8 @@ export function ProgramCard({
   onSubmitFeedback,
   onDeleteProgram,
   isGuest,
-  onRestoreFeedback
+  onRestoreFeedback,
+  applicationId: initialAppId,
 }: { 
   program: RecommendationProgram;
   pathwayId: string;
@@ -71,15 +73,22 @@ export function ProgramCard({
   onDeleteProgram: () => void;
   isGuest: boolean;
   onRestoreFeedback?: () => void;
+  applicationId?: string;
 }) {
+  const router = useRouter();
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
   const [feedbackReason, setFeedbackReason] = useState(program.feedbackReason || "not_relevant");
   const [feedbackDetails, setFeedbackDetails] = useState("");
   const [showScholarships, setShowScholarships] = useState(false);
-  const router = useRouter();
   const hasScholarships = program.scholarships && program.scholarships.length > 0;
   const hasFeedback = program.feedbackNegative === true;
   const [assistantOpen, setAssistantOpen] = useState(false);
+  // Track new application ID if created in this session
+  const [newAppId, setNewAppId] = useState<string | null>(null);
+  // Use existing applicationId prop or newly created ID
+  const applicationId = initialAppId || newAppId;
+  const [isStarting, setIsStarting] = useState(false);
+  const [appError, setAppError] = useState<string | null>(null);
 
   const handleToggleFavorite = () => {
     if (isGuest) {
@@ -106,8 +115,42 @@ export function ProgramCard({
   };
 
   const handleAskAI = () => {
-    if (!program) return;
     router.push("/chat");
+  };
+
+  const handleStartApplication = async () => {
+    if (isGuest) {
+      alert("Please sign up to start application process.");
+      return;
+    }
+    if (applicationId) {
+      router.push(`/applications/${applicationId}`);
+      return;
+    }
+    if (!program.id) {
+      setAppError("Invalid program ID");
+      return;
+    }
+
+    setIsStarting(true);
+    setAppError(null);
+    try {
+      const result = await create_application_plan({ recommendation_id: program.id });
+      if (!result.success) {
+        setAppError(result.error || "Failed to start application.");
+      } else if (!result.application_id) {
+        setAppError("No application ID returned.");
+      } else {
+        setNewAppId(result.application_id);
+        router.push(`/applications/${result.application_id}`);
+      }
+    } catch (err: any) {
+      const errorMsg = err instanceof Error ? err.message : String(err) || "Unknown error";
+      console.error("Error creating application:", errorMsg);
+      setAppError(errorMsg);
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   // DEBUGGING: Log program feedback state just before rendering
@@ -115,18 +158,21 @@ export function ProgramCard({
 
   return (
     <Card
+      role="region"
+      aria-labelledby={`program-card-${program.id}-title`}
+      tabIndex={0}
       className={cn(
-        "w-full overflow-hidden transition-all duration-200 hover:shadow-md",
-        assistantOpen ? 'min-h-[340px] pb-6' : '' // expand card when assistant is open
+        "w-full max-w-sm bg-white dark:bg-slate-800 overflow-hidden transition-all duration-200 hover:shadow-md focus:outline-none focus:ring focus:ring-blue-500",
+        assistantOpen ? 'min-h-[340px] pb-6' : ''
       )}
     >
       <div className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h4 className="font-semibold text-base">{program.name}</h4>
+            <h3 id={`program-card-${program.id}-title`} className="font-semibold text-base text-gray-900 dark:text-gray-100">{program.name}</h3>
             <p className="text-sm text-muted-foreground">{program.institution}</p>
             <div className="flex items-center text-xs text-muted-foreground mt-1.5">
-              <BookOpen className="h-3.5 w-3.5 mr-1.5 text-blue-500" />
+              <BookOpen aria-hidden="true" className="h-3.5 w-3.5 mr-1.5 text-blue-500" />
               <span>Part of pathway</span>
             </div>
           </div>
@@ -135,7 +181,7 @@ export function ProgramCard({
           </Badge>
         </div>
         
-        <div className="mt-3 space-y-2 bg-muted/20 p-2.5 rounded-md">
+        <div className="mt-3 space-y-2 bg-muted/20 dark:bg-muted/30 p-2.5 rounded-md">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground font-medium">Duration:</span>
             <span className="font-medium">{program.duration} months</span>
@@ -226,14 +272,14 @@ export function ProgramCard({
                 {/* Match Rationale */}
                 {program.matchRationale && (
                   <div className="bg-blue-50/50 p-2.5 rounded-md">
-                    <h5 className="font-semibold mb-2 flex items-center text-blue-700"><TrendingUp className="h-4 w-4 mr-1.5" /> Match Rationale</h5>
+                    <h5 className="font-semibold mb-2 flex items-center text-blue-700"><TrendingUp aria-hidden="true" className="h-4 w-4 mr-1.5 text-blue-700" /> Match Rationale</h5>
                     <div className="space-y-1.5 pl-2">
                       <div className="flex items-center justify-between">
                         <span className="flex items-center"><GraduationCap className="h-3.5 w-3.5 mr-1.5 text-blue-500" /> Academic Fit:</span>
                         <span className="font-semibold">{program.matchRationale.academicFit || 0}%</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="flex items-center"><TrendingUp className="h-3.5 w-3.5 mr-1.5 text-blue-500" /> Career Alignment:</span>
+                        <span className="flex items-center"><TrendingUp aria-hidden="true" className="h-3.5 w-3.5 mr-1.5 text-blue-700" /> Career Alignment:</span>
                         <span className="font-semibold">{program.matchRationale.careerAlignment || 0}%</span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -291,6 +337,7 @@ export function ProgramCard({
             )}
             title={isGuest ? "Sign up to save favorites" : (program.isFavorite ? "Remove from favorites" : "Add to favorites")}
             onClick={handleToggleFavorite}
+            aria-pressed={program.isFavorite}
           >
             {isGuest ? (
               <><Lock className="h-3.5 w-3.5 mr-1.5" /> Save</>
@@ -433,6 +480,23 @@ export function ProgramCard({
             >
               Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
             </Button>
+          )}
+        </div>
+        <div className="mt-4">
+          <Button
+            variant={applicationId ? "secondary" : "default"}
+            onClick={handleStartApplication}
+            disabled={isStarting}
+          >
+            {isStarting
+              ? <>Starting...</>
+              : applicationId
+                ? <>View Application</>
+                : <>Start Application process</>
+            }
+          </Button>
+          {appError && (
+            <p className="text-red-500 text-sm mt-2">{appError}</p>
           )}
         </div>
       </div>

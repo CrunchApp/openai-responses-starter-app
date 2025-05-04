@@ -35,7 +35,7 @@ type Tool = FileTool | WebTool | FunctionTool;
 
 export async function POST(request: Request) {
   try {
-    const { messages, tools } = await request.json();
+    const { messages, tools, previous_response_id } = await request.json();
     console.log("Received messages:", messages);
 
     // Validate tools array to prevent errors with null vector_store_ids
@@ -58,6 +58,8 @@ export async function POST(request: Request) {
       tools: validatedTools,
       stream: true,
       parallel_tool_calls: false,
+      ...(previous_response_id ? { previous_response_id } : {}),
+      store: true,
     });
 
     // Create a ReadableStream that emits SSE data

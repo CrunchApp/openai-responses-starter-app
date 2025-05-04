@@ -11,6 +11,7 @@ import { ProgramCard } from "./_components/ProgramCard";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import useProfileStore from "@/stores/useProfileStore";
+import { list_user_applications } from "@/config/functions";
 
 // --- Helpers (to be moved/refactored from PathwayExplorer) ---
 function formatCurrency(amount?: number | null) {
@@ -106,6 +107,22 @@ export default function PathwayDetailsPage() {
     getMorePrograms,
   } = usePathwayStore();
   const { user } = useAuth();
+  const [appMap, setAppMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!user) return;
+    list_user_applications()
+      .then(res => {
+        if (res.success && Array.isArray(res.applications)) {
+          const map: Record<string, string> = {};
+          res.applications.forEach((app: any) => {
+            map[app.recommendation_id] = app.id;
+          });
+          setAppMap(map);
+        }
+      })
+      .catch(console.error);
+  }, [user]);
+
   const { profileData, hydrated: profileStoreHydrated } = useProfileStore();
 
   // --- Logging Effect ---
@@ -308,6 +325,7 @@ export default function PathwayDetailsPage() {
               key={program.id}
               program={program}
               pathwayId={pathwayId}
+              applicationId={appMap[program.id as string]}
               onToggleFavorite={() => usePathwayStore.getState().toggleFavorite(pathwayId, program.id as string)}
               onSubmitFeedback={(reason, details) => usePathwayStore.getState().submitFeedback(pathwayId, program.id as string, reason, details)}
               onDeleteProgram={() => usePathwayStore.getState().deleteProgram(pathwayId, program.id as string)}

@@ -499,6 +499,82 @@ export interface Database {
           created_at?: string
         }
       },
+      applications: {
+        Row: {
+          id: string
+          user_id: string
+          recommendation_id: string | null
+          profile_file_id: string
+          program_file_id: string
+          planner_response_id: string | null
+          status: string
+          checklist: Json | null
+          timeline: Json | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          recommendation_id?: string | null
+          profile_file_id: string
+          program_file_id: string
+          planner_response_id?: string | null
+          status?: string
+          checklist?: Json | null
+          timeline?: Json | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          recommendation_id?: string | null
+          profile_file_id?: string
+          program_file_id?: string
+          planner_response_id?: string | null
+          status?: string
+          checklist?: Json | null
+          timeline?: Json | null
+          created_at?: string
+          updated_at?: string | null
+        }
+      },
+      application_tasks: {
+        Row: {
+          id: string
+          application_id: string
+          title: string
+          description: string
+          due_date: string
+          status: string
+          sort_order: number | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          application_id: string
+          title: string
+          description: string
+          due_date: string
+          status?: string
+          sort_order?: number | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          application_id?: string
+          title?: string
+          description?: string
+          due_date?: string
+          status?: string
+          sort_order?: number | null
+          created_at?: string
+          updated_at?: string | null
+        }
+      },
     },
     Functions: {
       get_user_recommendations: {

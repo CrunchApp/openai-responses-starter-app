@@ -18,6 +18,7 @@ interface GradCapAssistantProps {
   size?: 'default' | 'small'; // Size variant
   onOpen?: () => void;
   onClose?: () => void;
+  previousResponseId?: string;
 }
 
 // Local storage keys for the hint popup
@@ -58,6 +59,7 @@ const ToolCallDisplay: React.FC<{ toolCall: ToolCallItem, size: 'default' | 'sma
 export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   className,
   contextMessage,
+  previousResponseId,
   placeholder,
   size = 'default', // Default size
   onOpen,
@@ -202,6 +204,21 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
     }
   };
 
+  // On mount, if a previousResponseId prop is provided, inject a sentinel system message and ensure store has it
+  useEffect(() => {
+    (async () => {
+      if (previousResponseId) {
+        // Ensure store has the value
+        if (!useConversationStore.getState().previousResponseId) {
+          useConversationStore.getState().setPreviousResponseId(previousResponseId);
+        }
+        // Inject chain sentinel once
+        await addConversationItem({ role: 'system', content: `__CHAIN__:${previousResponseId}` });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSendMessage = async () => {
     if (!message.trim() || isLoading) return; // Prevent sending while loading
 
@@ -235,6 +252,12 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
       await addConversationItem({ role: "system", content: contextMessage });
     }
 
+    // If there is a previousResponseId in store, inject a sentinel to signal chaining
+    const currentPrevId = useConversationStore.getState().previousResponseId;
+    if (currentPrevId) {
+      await addConversationItem({ role: 'system', content: `__USE_PREV__:${currentPrevId}` });
+    }
+
     // Send the user message (this will trigger processing)
     await sendUserMessage(userMessageContent);
 
@@ -261,7 +284,11 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   };
 
   // Save as conversation prompt logic
+  const [isSaving, setIsSaving] = useState(false); // NEW: track saving state
   const handleSaveAsConversation = async (save: boolean) => {
+    if (save) {
+      setIsSaving(true); // start spinner
+    }
     setShowSavePrompt(false); // Hide prompt immediately
 
     // Find the relevant items (messages/tool calls after user's message)
@@ -288,9 +315,20 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
           if (convId) {
               console.log('Saved conversation with ID:', convId);
               setConversationId(convId); // Store the new ID locally to show "Continue in chat"
-              // **DO NOT RESET STATE HERE** - Keep the messages visible
+              setIsSaving(false); // finished
+
+              // Recompute userMessageIndex based on new store state (chatMessages were reset within createNewConversation)
+              const updatedMessages = useConversationStore.getState().chatMessages;
+              const newUserIdx = updatedMessages.findIndex(
+                (m) => m.type === 'message' && m.role === 'user'
+              );
+              setUserMessageIndex(newUserIdx !== -1 ? newUserIdx : 0);
+
+              // Ensure local copies of lastUserMessage and assistantResponse remain intact (already set)
+              // No need to reset state here
           } else {
               console.error("Failed to create conversation from quick chat.");
+              setIsSaving(false);
               // Handle error (e.g., show a toast notification)
               // Reset state if saving fails to allow user to try again or dismiss
               setLastUserMessage(null);
@@ -299,6 +337,7 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
           }
       } else {
           console.warn("Cannot save conversation: missing user message or final assistant text.");
+          setIsSaving(false);
           // Reset state if critical info is missing
           setLastUserMessage(null);
           setAssistantResponse(null);
@@ -537,6 +576,11 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
               >
                 <CheckCircle2 className={cn("mr-1 text-green-500", size === 'small' ? 'h-3.5 w-3.5' : 'h-4 w-4')} /> Continue in chat
               </Button>
+            )}
+            {isSaving && (
+              <div className="flex items-center justify-center gap-2 text-muted-foreground mt-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Saving conversation...
+              </div>
             )}
           </motion.div>
         )}

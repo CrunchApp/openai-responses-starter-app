@@ -82,6 +82,40 @@ export async function getApplicationState(
       return { success: false, error: appError?.message || "Application not found" };
     }
 
+    // Fetch program details via recommendation -> program
+    let programName: string | null = null;
+    let institutionName: string | null = null;
+    let degreeType: string | null = null;
+    if (appRow.recommendation_id) {
+      // Get recommendation record to find program_id
+      const { data: recRow, error: recError } = await supabase
+        .from("recommendations")
+        .select("program_id")
+        .eq("id", appRow.recommendation_id)
+        .maybeSingle();
+      if (!recError && recRow?.program_id) {
+        // Get program details
+        const { data: progRow, error: progError } = await supabase
+          .from("programs")
+          .select("name, institution, degree_type")
+          .eq("id", recRow.program_id)
+          .maybeSingle();
+        if (!progError && progRow) {
+          programName = progRow.name;
+          institutionName = progRow.institution;
+          degreeType = progRow.degree_type;
+        }
+      }
+    }
+
+    // Include program fields on returned application object
+    const application = {
+      ...appRow,
+      program_name: programName,
+      institution_name: institutionName,
+      degree_type: degreeType,
+    };
+
     // Get tasks
     const { data: tasks, error: tasksError } = await supabase
       .from("application_tasks")
@@ -92,7 +126,7 @@ export async function getApplicationState(
       return { success: false, error: tasksError.message };
     }
 
-    return { success: true, application: appRow, tasks: tasks || [] };
+    return { success: true, application, tasks: tasks || [] };
   } catch (error: any) {
     console.error("Error in getApplicationState", error);
     return { success: false, error: error.message };

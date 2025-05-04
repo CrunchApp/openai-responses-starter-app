@@ -8,10 +8,11 @@ export async function POST(request: NextRequest) {
 
     // Authenticate user
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-    if (sessionError || !session?.user) {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
 

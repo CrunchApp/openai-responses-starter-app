@@ -74,7 +74,6 @@ export const toolsList = [
           status: { type: "string", description: "New status (e.g. pending, done)" },
           sort_order: { type: "integer", description: "New sort order" },
         },
-        required: ["title", "description", "due_date", "status", "sort_order"],
         additionalProperties: false,
       },
     },

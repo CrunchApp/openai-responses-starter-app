@@ -9,13 +9,13 @@ export async function POST(request: NextRequest) {
 
     // Get auth user
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-    if (sessionError || !session?.user) {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
-    const userId = session.user.id;
+    const userId = user.id;
 
     // Arguments from the assistant tool call
     const { recommendation_id, plan, previous_response_id } = await request.json();

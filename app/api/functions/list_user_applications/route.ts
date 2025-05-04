@@ -4,15 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    // Authenticate user
+    // Use getUser for authenticated and verified user data
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-    if (sessionError || !session?.user) {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "Unauthenticated", success: false }, { status: 401 });
     }
-    const userId = session.user.id;
+
+    const userId = user.id;
 
     // Fetch applications for user
     const { data, error } = await supabase

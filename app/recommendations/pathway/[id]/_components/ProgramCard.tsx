@@ -162,7 +162,7 @@ export function ProgramCard({
       aria-labelledby={`program-card-${program.id}-title`}
       tabIndex={0}
       className={cn(
-        "w-full max-w-sm bg-white dark:bg-slate-800 overflow-hidden transition-all duration-200 hover:shadow-md focus:outline-none focus:ring focus:ring-blue-500",
+        "w-full bg-white dark:bg-slate-800 overflow-hidden transition-all duration-200 hover:shadow-md focus:outline-none focus:ring focus:ring-blue-500",
         assistantOpen ? 'min-h-[340px] pb-6' : ''
       )}
     >

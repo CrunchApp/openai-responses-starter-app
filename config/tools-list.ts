@@ -74,6 +74,7 @@ export const toolsList = [
           status: { type: "string", description: "New status (e.g. pending, done)" },
           sort_order: { type: "integer", description: "New sort order" },
         },
+        required: ["title", "description", "due_date", "status", "sort_order"],
         additionalProperties: false,
       },
     },
@@ -128,5 +129,43 @@ export const toolsList = [
     name: "list_user_applications",
     description: "Retrieve all applications for the authenticated user, returning a list of application IDs and associated recommendation IDs.",
     parameters: {},
+  },
+  {
+    name: "create_application_task",
+    description: "Create a new task in an application checklist",
+    parameters: {
+      application_id: { type: "string", description: "The UUID of the application" },
+      title: { type: "string", description: "Task title" },
+      description: { type: "string", description: "Task description" },
+      due_date: { type: "string", description: "Due date (YYYY-MM-DD)" },
+      sort_order: { type: "integer", description: "Sort order for the new task" },
+    },
+  },
+  {
+    name: "delete_application_task",
+    description: "Delete a task from an application by task ID",
+    parameters: {
+      task_id: { type: "string", description: "The UUID of the task to delete" },
+    },
+  },
+  {
+    name: "update_application_timeline",
+    description: "Update the timeline of an application",
+    parameters: {
+      application_id: { type: "string", description: "The UUID of the application" },
+      timeline: {
+        type: "array",
+        description: "Updated array of timeline events",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "Event label" },
+            target_date: { type: "string", description: "Target date (YYYY-MM-DD)" },
+          },
+          required: ["label", "target_date"],
+          additionalProperties: false,
+        },
+      },
+    },
   },
 ];

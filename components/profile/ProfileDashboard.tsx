@@ -1476,6 +1476,7 @@ export default function ProfileDashboard() {
             >
               <span className="text-sm font-semibold text-primary">{completionPercentage}%</span>
             </motion.div>
+          
           </div>
           
           <div className="w-full h-3 bg-background/80 rounded-full overflow-hidden shadow-inner">
@@ -1507,6 +1508,52 @@ export default function ProfileDashboard() {
                 <span>Your profile is {completionPercentage}% complete. Adding more details will help us provide better recommendations.</span>
               </div>
             )}
+            {/* Delete Profile Button and Dialog */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.7 }}
+          className="mt-8 border-t border-primary/20 pt-6"
+        >
+          <Button 
+            variant="destructive" 
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-sm hover:shadow-md transition-all duration-300"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Account
+          </Button>
+        </motion.div>
+
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="bg-gradient-to-b from-background to-background/95 border border-primary/20 shadow-lg">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 text-xl">Delete Profile</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-foreground/80 mb-3">
+                Are you sure you want to delete your account? This action cannot be undone.
+              </p>
+              <p className="text-foreground/70">
+                All your profile data, recommendations, and uploaded documents will be permanently removed.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteProfile} 
+                disabled={isLoading}
+                className="bg-gradient-to-r from-red-500 to-red-600"
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Delete Profile
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
           </div>
         </motion.div>
 
@@ -2305,52 +2352,6 @@ export default function ProfileDashboard() {
           
         </Accordion>
 
-        {/* Delete Profile Button and Dialog */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.7 }}
-          className="mt-8 border-t border-primary/20 pt-6"
-        >
-          <Button 
-            variant="destructive" 
-            onClick={() => setIsDeleteDialogOpen(true)}
-            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-sm hover:shadow-md transition-all duration-300"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Profile
-          </Button>
-        </motion.div>
-
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent className="bg-gradient-to-b from-background to-background/95 border border-primary/20 shadow-lg">
-            <DialogHeader>
-              <DialogTitle className="text-red-600 text-xl">Delete Profile</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <p className="text-foreground/80 mb-3">
-                Are you sure you want to delete your profile? This action cannot be undone.
-              </p>
-              <p className="text-foreground/70">
-                All your profile data, recommendations, and uploaded documents will be permanently removed.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button 
-                variant="destructive" 
-                onClick={handleDeleteProfile} 
-                disabled={isLoading}
-                className="bg-gradient-to-r from-red-500 to-red-600"
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                Delete Profile
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

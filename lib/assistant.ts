@@ -161,6 +161,7 @@ export const processMessages = async () => {
     ];
 
     let assistantMessageContent = "";
+    let currentAssistantId: string | null = null;
     let functionArguments = "";
     
     // Track which messages have been added to avoid duplication
@@ -182,7 +183,13 @@ export const processMessages = async () => {
           assistantMessageContent += partial;
 
           // Determine which ID to use for display (chain into previous message if applicable)
-          const displayId = effectivePreviousResponseId ?? item_id;
+          const displayId = item_id;
+          // If we started streaming a new assistant message, reset buffer
+          if (currentAssistantId !== displayId) {
+            assistantMessageContent = "";
+            currentAssistantId = displayId;
+          }
+
           // Check if we already have a message with this display ID
           let assistantMessage = localChatMessages.find(
             (m) => m.type === "message" && m.role === "assistant" && m.id === displayId

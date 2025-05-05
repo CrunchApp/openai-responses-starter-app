@@ -142,22 +142,21 @@ export async function updateApplicationTask(
   updates: Partial<{ title: string; description: string; due_date: string; status: string; sort_order: number }>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Sanitize updates: remove keys with undefined, null, or empty string values to avoid DB errors (e.g., due_date "")
+    // Sanitize updates
     const sanitized: Record<string, any> = {};
     Object.entries(updates).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== "") {
         sanitized[key] = value;
       }
-      // Special case: allow clearing due_date by passing null explicitly
       if (key === "due_date" && value === null) {
         sanitized[key] = null;
       }
     });
-
     if (Object.keys(sanitized).length === 0) {
       return { success: false, error: "No valid updates provided" };
     }
 
+    // Update the single task row
     const { error } = await supabase
       .from("application_tasks")
       .update(sanitized)
@@ -166,9 +165,149 @@ export async function updateApplicationTask(
       console.error("Failed to update application task", error);
       return { success: false, error: error.message };
     }
+
+    // Fetch the application_id for this task
+    const { data: taskRow, error: rowError } = await supabase
+      .from("application_tasks")
+      .select("application_id")
+      .eq("id", taskId)
+      .maybeSingle();
+    if (!rowError && taskRow?.application_id) {
+      const appId = taskRow.application_id;
+      // Fetch all tasks to rebuild checklist JSON
+      const { data: allTasks } = await supabase
+        .from("application_tasks")
+        .select("title, description, due_date, sort_order")
+        .eq("application_id", appId)
+        .order("sort_order", { ascending: true });
+      if (allTasks) {
+        // Update applications JSONB checklist
+        await supabase
+          .from("applications")
+          .update({ checklist: allTasks })
+          .eq("id", appId);
+      }
+    }
+
     return { success: true };
   } catch (error: any) {
     console.error("Error in updateApplicationTask", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Add function for creating a new application task
+export async function createApplicationTask(
+  supabase: SupabaseClient<Database>,
+  params: {
+    applicationId: string;
+    title: string;
+    description: string;
+    due_date: string;
+    sort_order: number;
+  }
+): Promise<{ success: boolean; task?: any; error?: string }> {
+  try {
+    const newTaskId = uuidv4();
+    const taskRow = {
+      id: newTaskId,
+      application_id: params.applicationId,
+      title: params.title,
+      description: params.description,
+      due_date: params.due_date,
+      sort_order: params.sort_order,
+      status: 'pending',
+    };
+    const { data, error } = await supabase
+      .from('application_tasks')
+      .insert([taskRow])
+      .select()
+      .single();
+    if (error) {
+      console.error('Failed to create application task', error);
+      return { success: false, error: error.message };
+    }
+    // Sync JSONB checklist
+    const { data: allTasks, error: tasksError } = await supabase
+      .from('application_tasks')
+      .select('title, description, due_date, sort_order')
+      .eq('application_id', params.applicationId)
+      .order('sort_order', { ascending: true });
+    if (!tasksError && allTasks) {
+      await supabase
+        .from('applications')
+        .update({ checklist: allTasks })
+        .eq('id', params.applicationId);
+    }
+    return { success: true, task: data };
+  } catch (error: any) {
+    console.error('Error in createApplicationTask', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Add function for deleting an application task
+export async function deleteApplicationTask(
+  supabase: SupabaseClient<Database>,
+  taskId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Find application_id before delete
+    const { data: taskRow, error: rowError } = await supabase
+      .from('application_tasks')
+      .select('application_id')
+      .eq('id', taskId)
+      .maybeSingle();
+    const appId = taskRow?.application_id;
+
+    const { error } = await supabase
+      .from('application_tasks')
+      .delete()
+      .eq('id', taskId);
+    if (error) {
+      console.error('Failed to delete application task', error);
+      return { success: false, error: error.message };
+    }
+    // Sync JSONB checklist if we had the application ID
+    if (appId) {
+      const { data: allTasks, error: tasksError } = await supabase
+        .from('application_tasks')
+        .select('title, description, due_date, sort_order')
+        .eq('application_id', appId)
+        .order('sort_order', { ascending: true });
+      if (!tasksError && allTasks) {
+        await supabase
+          .from('applications')
+          .update({ checklist: allTasks })
+          .eq('id', appId);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error in deleteApplicationTask', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Add function for updating the application timeline
+export async function updateApplicationTimeline(
+  supabase: SupabaseClient<Database>,
+  applicationId: string,
+  timeline: { label: string; target_date: string }[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('applications')
+      .update({ timeline })
+      .eq('id', applicationId);
+    if (error) {
+      console.error('Failed to update application timeline', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error in updateApplicationTimeline', error);
     return { success: false, error: error.message };
   }
 } 

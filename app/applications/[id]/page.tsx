@@ -1,18 +1,19 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { get_application_state, update_application_task } from "@/config/functions";
+import { get_application_state, update_application_task, create_application_task, delete_application_task, update_application_timeline } from "@/config/functions";
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GradCapAssistant } from "@/components/assistant/GradCapAssistant";
 import useConversationStore from "@/stores/useConversationStore";
-import { Loader2, ArrowLeft, Calendar, ListChecks, AlertCircle, BookOpen, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, Calendar, ListChecks, AlertCircle, BookOpen, CheckCircle2, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 interface TimelineEvent {
   label: string;
@@ -52,13 +53,60 @@ export default function ApplicationPage() {
   const [isUpdatingTask, setIsUpdatingTask] = useState<string | null>(null);
   const [previousResponseId, setPreviousResponseIdState] = useState<string | null>(null);
 
+  // Manual CRUD state for timeline
+  const [editingTimeline, setEditingTimeline] = useState(false);
+  const [editableTimeline, setEditableTimeline] = useState<TimelineEvent[]>([]);
+  const [newTimelineLabel, setNewTimelineLabel] = useState("");
+  const [newTimelineDate, setNewTimelineDate] = useState("");
+  const [loadingTimelineUpdate, setLoadingTimelineUpdate] = useState(false);
+
+  // Manual CRUD state for checklist tasks
+  const [editingTasks, setEditingTasks] = useState(false);
+  const [editableTasks, setEditableTasks] = useState<TaskItem[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [loadingTasksUpdate, setLoadingTasksUpdate] = useState(false);
+
   const sendUserMessage = useConversationStore((state) => state.sendUserMessage);
   const chatMessages = useConversationStore((state) => state.chatMessages);
   const setPreviousResponseId = useConversationStore((state) => state.setPreviousResponseId);
   const lastMessage = chatMessages[chatMessages.length - 1];
 
-  const fetchInitialState = React.useCallback(async () => {
-    setLoading(true);
+  // Ref to track processed tool call IDs so we don't fetch repeatedly
+  const processedToolCallIds = useRef<Set<string>>(new Set());
+
+  // Track processed tool call IDs to avoid duplicate fetches
+  const processedToolCallsRef = useRef<Set<string>>(new Set());
+
+  // Live-refresh when assistant completes relevant tool calls
+  useEffect(() => {
+    let shouldRefresh = false;
+    chatMessages.forEach((item: any) => {
+      if (item.type === 'tool_call' && item.status === 'completed' && item.id) {
+        if (!processedToolCallsRef.current.has(item.id)) {
+          processedToolCallsRef.current.add(item.id);
+          if (
+            item.name === 'update_application_task' ||
+            item.name === 'create_application_task' ||
+            item.name === 'delete_application_task' ||
+            item.name === 'update_application_timeline'
+          ) {
+            shouldRefresh = true;
+          }
+        }
+      }
+    });
+
+    if (shouldRefresh) {
+      // full page refresh but assistant state is preserved via store
+      router.refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatMessages]);
+
+  const fetchInitialState = React.useCallback(async (silent: boolean = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const result = await fetch(`/api/functions/get_application_state`, {
@@ -72,9 +120,12 @@ export default function ApplicationPage() {
       } else {
         const app: ApplicationData = result.application;
         setApplication(app);
-        setTimeline(Array.isArray(app.timeline) ? app.timeline : []);
+        const tl = Array.isArray(app.timeline) ? app.timeline : [];
+        setTimeline(tl);
+        setEditableTimeline(tl);
         const tasksWithAppId = (Array.isArray(result.tasks) ? result.tasks : []).map((task: any) => ({ ...task, application_id: applicationId }));
         setTasks(tasksWithAppId);
+        setEditableTasks(tasksWithAppId);
 
         const plannerRespId: string | null = app?.planner_response_id || null;
         setPreviousResponseId(plannerRespId);
@@ -83,7 +134,7 @@ export default function ApplicationPage() {
     } catch (err: any) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [applicationId, setPreviousResponseId]);
 
@@ -109,8 +160,31 @@ export default function ApplicationPage() {
        }
        setIsUpdatingTask(null);
     }
-
   }, [lastMessage, isUpdatingTask, fetchInitialState, tasks]);
+
+  // Effect after fetchInitialState is defined: refresh UI when assistant completes tool calls
+  useEffect(() => {
+    const relevantNames = [
+      "update_application_task",
+      "create_application_task",
+      "delete_application_task",
+      "update_application_timeline",
+    ];
+
+    const newCalls = chatMessages.filter(
+      (item: any) =>
+        item.type === "tool_call" &&
+        item.status === "completed" &&
+        item.name &&
+        relevantNames.includes(item.name) &&
+        !processedToolCallIds.current.has(item.id)
+    ) as any[];
+
+    if (newCalls.length > 0) {
+      newCalls.forEach((call) => processedToolCallIds.current.add(call.id));
+      fetchInitialState();
+    }
+  }, [chatMessages, fetchInitialState]);
 
   const handleToggleTask = async (task: TaskItem) => {
     const newStatus = task.status === "done" ? "pending" : "done";
@@ -138,6 +212,62 @@ export default function ApplicationPage() {
     } finally {
       setIsUpdatingTask(null);
     }
+  };
+
+  // Handlers for CRUD
+  const handleToggleTimeline = async () => {
+    if (editingTimeline) {
+      setLoadingTimelineUpdate(true);
+      try {
+        await update_application_timeline({ application_id: applicationId, timeline: editableTimeline });
+        setTimeline(editableTimeline);
+      } catch (err: any) { setError(err.message || String(err)); } finally { setLoadingTimelineUpdate(false); }
+    } else {
+      setEditableTimeline(timeline);
+    }
+    setEditingTimeline(!editingTimeline);
+  };
+  const handleToggleTasks = async () => {
+    if (editingTasks) {
+      setLoadingTasksUpdate(true);
+      try {
+        for (const task of editableTasks) {
+          const orig = tasks.find((t) => t.id === task.id);
+          const updates: any = {};
+          if (orig) {
+            if (task.title !== orig.title) updates.title = task.title;
+            if (task.description !== orig.description) updates.description = task.description;
+            if (task.due_date !== orig.due_date) updates.due_date = task.due_date;
+          }
+          if (Object.keys(updates).length) await update_application_task({ task_id: task.id, updates });
+        }
+        setTasks(editableTasks);
+      } catch (err: any) { setError(err.message || String(err)); } finally { setLoadingTasksUpdate(false); }
+    } else {
+      setEditableTasks(tasks);
+    }
+    setEditingTasks(!editingTasks);
+  };
+  const handleAddTask = async () => {
+    if (!newTaskTitle || !newTaskDueDate) return;
+    setLoadingTasksUpdate(true);
+    try {
+      const res = await create_application_task({ application_id: applicationId, title: newTaskTitle, description: newTaskDescription, due_date: newTaskDueDate, sort_order: editableTasks.length });
+      if (res.success && res.task) {
+        setEditableTasks([...editableTasks, res.task]); setTasks([...tasks, res.task]);
+        setNewTaskTitle(""); setNewTaskDescription(""); setNewTaskDueDate("");
+      } else { throw new Error(res.error || "Failed to create task"); }
+    } catch (err: any) { setError(err.message || String(err)); } finally { setLoadingTasksUpdate(false); }
+  };
+  const handleDeleteTask = async (taskId: string) => {
+    setLoadingTasksUpdate(true);
+    try {
+      const res = await delete_application_task({ task_id: taskId });
+      if (res.success) {
+        const updated = editableTasks.filter((t) => t.id !== taskId);
+        setEditableTasks(updated); setTasks(updated);
+      } else { throw new Error(res.error || "Failed to delete task"); }
+    } catch (err: any) { setError(err.message || String(err)); } finally { setLoadingTasksUpdate(false); }
   };
 
   if (loading) {
@@ -250,12 +380,17 @@ export default function ApplicationPage() {
         <div className="lg:col-span-2 space-y-6">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <Card>
-              <CardHeader className="flex flex-row items-center space-x-3">
-                <Calendar className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">Timeline</CardTitle>
+              <CardHeader className="flex justify-between items-center">
+                <div className="flex flex-row items-center space-x-3">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-lg">Timeline</CardTitle>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleToggleTimeline} disabled={loadingTimelineUpdate}>
+                  {editingTimeline ? "Save" : "Edit"}
+                </Button>
               </CardHeader>
               <CardContent>
-                {timeline.length > 0 ? (
+                {!editingTimeline ? (
                   <div className="relative pl-6 border-l-2 border-primary/20">
                     {timeline.map((evt, idx) => (
                       <div key={idx} className="mb-6 relative">
@@ -267,22 +402,44 @@ export default function ApplicationPage() {
                       </div>
                     ))}
                   </div>
-                 ) : (
-                   <p className="text-gray-500 dark:text-gray-400 pl-1">No timeline data available yet.</p>
-                 )} 
+                ) : (
+                  <div className="space-y-4">
+                    {editableTimeline.map((evt, idx) => (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <Input value={evt.label} onChange={(e) => { const nt = [...editableTimeline]; nt[idx].label = e.target.value; setEditableTimeline(nt); }} placeholder="Label" />
+                        <Input type="date" value={evt.target_date} onChange={(e) => { const nt = [...editableTimeline]; nt[idx].target_date = e.target.value; setEditableTimeline(nt); }} />
+                        <Button variant="ghost" size="icon" onClick={() => { const nt = editableTimeline.filter((_, i) => i !== idx); setEditableTimeline(nt); }}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Input value={newTimelineLabel} onChange={(e) => setNewTimelineLabel(e.target.value)} placeholder="New label" />
+                      <Input type="date" value={newTimelineDate} onChange={(e) => setNewTimelineDate(e.target.value)} />
+                      <Button size="icon" onClick={() => { setEditableTimeline([...editableTimeline, { label: newTimelineLabel, target_date: newTimelineDate }]); setNewTimelineLabel(""); setNewTimelineDate(""); }}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
             <Card>
-              <CardHeader className="flex flex-row items-center space-x-3">
-                <ListChecks className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">Checklist</CardTitle>
+              <CardHeader className="flex justify-between items-center">
+                <div className="flex flex-row items-center space-x-3">
+                  <ListChecks className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-lg">Checklist</CardTitle>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleToggleTasks} disabled={loadingTasksUpdate}>
+                  {editingTasks ? "Save" : "Edit"}
+                </Button>
               </CardHeader>
               <CardContent>
-                {tasks.length > 0 ? (
-                   <ul role="list" className="space-y-4">
+                {!editingTasks ? (
+                  <ul role="list" className="space-y-4">
                     {tasks.map((task) => (
                       <li key={task.id} className="relative group">
                         <div className="flex items-start space-x-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg transition border border-transparent group-hover:border-primary/20 group-hover:bg-primary/5 dark:group-hover:bg-primary/10">
@@ -311,8 +468,27 @@ export default function ApplicationPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-gray-500 dark:text-gray-400 pl-1">No checklist tasks available yet.</p>
-                )} 
+                  <div className="space-y-4">
+                    {editableTasks.map((task, idx) => (
+                      <div key={task.id} className="flex items-center space-x-2">
+                        <Input value={task.title} onChange={(e) => { const nt = [...editableTasks]; nt[idx].title = e.target.value; setEditableTasks(nt); }} />
+                        <Input value={task.description} onChange={(e) => { const nt = [...editableTasks]; nt[idx].description = e.target.value; setEditableTasks(nt); }} />
+                        <Input type="date" value={task.due_date} onChange={(e) => { const nt = [...editableTasks]; nt[idx].due_date = e.target.value; setEditableTasks(nt); }} />
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteTask(task.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Input value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="New task title" />
+                      <Input value={newTaskDescription} onChange={(e) => setNewTaskDescription(e.target.value)} placeholder="Description" />
+                      <Input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} />
+                      <Button size="icon" onClick={handleAddTask}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -327,7 +503,7 @@ export default function ApplicationPage() {
               </CardHeader>
               <CardContent className="p-4">
                 <GradCapAssistant
-                  contextMessage={`The user is currently viewing their application with ID: ${applicationId} for the program ${programName}. When they ask questions or request actions related to this application (like checking status, updating tasks, asking about deadlines), use the application ID (${applicationId}) with the available tools ('get_application_state', 'update_application_task'). Always refer to the timeline and checklist for this specific application.`}
+                  contextMessage={`The user is currently viewing their application with ID: ${applicationId} for the program ${programName}. When they ask questions or request actions related to this application (like checking status, creating tasks, deleting tasks, editing timeline events), use the application ID (${applicationId}) with the available tools ('get_application_state', 'update_application_task', 'create_application_task', 'delete_application_task', 'update_application_timeline'). Always refer to the timeline and checklist for this specific application.`}
                   previousResponseId={previousResponseId || undefined}
                   placeholder={`Ask about ${programName}...`}
                 />

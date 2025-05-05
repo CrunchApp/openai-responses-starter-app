@@ -101,6 +101,34 @@ export const list_user_applications = async () => {
   return res; // { success: boolean; applications?: Array<{ id: string; recommendation_id: string }>; error?: string }
 };
 
+// New functions for manual CRUD on application tasks and timeline
+export const create_application_task = async ({ application_id, title, description, due_date, sort_order }: { application_id: string; title: string; description: string; due_date: string; sort_order: number }) => {
+  const res = await fetch(`/api/functions/create_application_task`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ application_id, title, description, due_date, sort_order }),
+  }).then((r) => r.json());
+  return res;
+};
+
+export const delete_application_task = async ({ task_id }: { task_id: string }) => {
+  const res = await fetch(`/api/functions/delete_application_task`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id }),
+  }).then((r) => r.json());
+  return res;
+};
+
+export const update_application_timeline = async ({ application_id, timeline }: { application_id: string; timeline: any[] }) => {
+  const res = await fetch(`/api/functions/update_application_timeline`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ application_id, timeline }),
+  }).then((r) => r.json());
+  return res;
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -110,4 +138,7 @@ export const functionsMap = {
   update_application_task: update_application_task,
   save_application_plan: save_application_plan,
   list_user_applications: list_user_applications,
+  create_application_task: create_application_task,
+  delete_application_task: delete_application_task,
+  update_application_timeline: update_application_timeline,
 };

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Item, MessageItem, ToolCallItem } from '@/lib/assistant'; // Import Item types
 import Message from '../message'; // Import Message component
+import { processMessages } from '@/lib/assistant';
 
 interface GradCapAssistantProps {
   className?: string;
@@ -206,17 +207,32 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
 
   // On mount, if a previousResponseId prop is provided, inject a sentinel system message and ensure store has it
   useEffect(() => {
-    (async () => {
-      if (previousResponseId) {
-        // Ensure store has the value
-        if (!useConversationStore.getState().previousResponseId) {
-          useConversationStore.getState().setPreviousResponseId(previousResponseId);
-        }
-        // Inject chain sentinel once
-        await addConversationItem({ role: 'system', content: `__CHAIN__:${previousResponseId}` });
+    // Only inject once if not already present in persisted conversationItems
+    if (previousResponseId) {
+      const { conversationItems, previousResponseId: storedPrev } = useConversationStore.getState();
+      if (storedPrev !== previousResponseId) {
+        useConversationStore.getState().setPreviousResponseId(previousResponseId);
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      const sentinel = `__CHAIN__:${previousResponseId}`;
+      const alreadyInjected = conversationItems.some(
+        (msg) => msg.role === 'system' && msg.content === sentinel
+      );
+      if (!alreadyInjected) {
+        addConversationItem({ role: 'system', content: sentinel });
+        // Resume streaming based on existing previousResponseId
+        processMessages();
+      }
+    }
+  }, []);
+
+  // Resume streaming after network reconnect
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('Connection restored, resuming assistant stream...');
+      processMessages();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, []);
 
   const handleSendMessage = async () => {

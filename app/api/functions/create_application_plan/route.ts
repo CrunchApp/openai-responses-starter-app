@@ -25,19 +25,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch program file id from recommendation_files table
+    // Fetch program file id from recommendation_files table, but don't abort if missing
     const { data: recFileRow, error: recFileError } = await supabase
       .from("recommendation_files")
       .select("file_id")
       .eq("recommendation_id", recommendation_id)
       .maybeSingle();
-    if (recFileError || !recFileRow) {
-      return NextResponse.json(
-        { error: "Program file not found for recommendation" },
-        { status: 404 }
+    let programFileId: string;
+    if (recFileError) {
+      console.error("Error fetching program file id for recommendation", recFileError);
+      // Proceed without a specific program file id
+      programFileId = "";
+    } else if (!recFileRow) {
+      console.warn(
+        `Program file not found for recommendation ${recommendation_id}, proceeding with raw program data`
       );
+      programFileId = "";
+    } else {
+      programFileId = recFileRow.file_id as string;
     }
-    const programFileId = recFileRow.file_id as string;
 
     // Fetch profile file id and vector_store_id from profiles table
     const { data: profileRow, error: profileError } = await supabase

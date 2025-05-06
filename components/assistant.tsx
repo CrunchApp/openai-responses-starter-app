@@ -1,9 +1,8 @@
 "use client";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback } from "react";
 import Chat from "./chat";
 import useConversationStore from "@/stores/useConversationStore";
 import { Item, processMessages } from "@/lib/assistant";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/app/components/auth/AuthContext";
 import { motion } from "framer-motion";
 
@@ -14,10 +13,8 @@ export default function Assistant() {
     addChatMessage,
     isAuthenticated,
     userId,
-    setAuthState,
     activeConversationId,
     createNewConversation,
-    setActiveConversation,
     isLoading,
     error,
     setError
@@ -26,65 +23,6 @@ export default function Assistant() {
   // Access user data from AuthContext to pass to chat component
   const { user, profile } = useAuth();
   
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-
-  // Check authentication status - only run this once
-  useEffect(() => {
-    if (authChecked) return;
-    
-    const checkAuth = async () => {
-      try {
-        const supabase = createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError) {
-          console.error('Auth error:', authError);
-          setAuthState(false, null);
-        } else if (user) {
-          console.log('User authenticated:', user.id);
-          // Set authentication state but don't create a conversation automatically
-          setAuthState(true, user.id);
-        } else {
-          console.log('No authenticated user');
-          setAuthState(false, null);
-          setActiveConversation(null);
-        }
-      } catch (error) {
-        console.error('Error checking authentication:', error);
-      } finally {
-        setIsInitialized(true);
-        setAuthChecked(true);
-      }
-    };
-    
-    checkAuth();
-  }, [setAuthState, setActiveConversation, authChecked]);
-
-  // Listen for auth state changes - but only set up the listener once
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event);
-        
-        if (event === 'SIGNED_IN' && session?.user) {
-          // Just update auth state, don't create a new conversation automatically
-          setAuthState(true, session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          setAuthState(false, null);
-          setActiveConversation(null);
-        }
-      }
-    );
-    
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isInitialized, setAuthState, setActiveConversation]);
-
   // Simplified version of handleSendMessage that doesn't create automatic conversation
   const handleSendMessage = useCallback(async (message: string) => {
     setError(null);

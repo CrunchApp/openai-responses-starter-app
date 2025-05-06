@@ -15,6 +15,16 @@ import Image from "next/image";
 export default function ChatPage() {
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
   const { isLoading } = useConversationStore();
+  // Get active conversation ID and loader
+  const activeConversationId = useConversationStore(state => state.activeConversationId);
+  const loadConversation       = useConversationStore(state => state.loadConversation);
+
+  // On mount or when the activeConversationId changes, re-fetch its messages from the server
+  useEffect(() => {
+    if (activeConversationId) {
+      loadConversation(activeConversationId);
+    }
+  }, [activeConversationId, loadConversation]);
   
   // Add subtle animations to decorative elements
   useEffect(() => {
@@ -162,9 +172,9 @@ export default function ChatPage() {
             <div className="p-5 border-b border-primary/10">
               <ConversationSelector />
             </div>
-            <div className="flex-grow overflow-auto p-4">
+            {/* <div className="flex-grow overflow-auto p-4">
               <ToolsPanel />
-            </div>
+            </div> */}
           </motion.div>
         </div>
       </div>

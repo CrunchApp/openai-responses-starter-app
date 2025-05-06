@@ -23,31 +23,7 @@ export function PageWrapper({
   const router = useRouter();
   const pathname = usePathname();
   
-  // State to control minimum loading display time
-  const [showLoader, setShowLoader] = useState(false);
-  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
-  const MIN_LOADING_TIME = 3000; // 3 seconds in milliseconds
-  
-  // Track loading start time and control minimum display time
-  useEffect(() => {
-    if (authLoading) {
-      setShowLoader(true);
-      setLoadingStartTime(Date.now());
-    } else if (loadingStartTime !== null) {
-      const timeElapsed = Date.now() - loadingStartTime;
-      const remainingTime = Math.max(0, MIN_LOADING_TIME - timeElapsed);
-      
-      if (remainingTime === 0) {
-        setShowLoader(false);
-      } else {
-        const timer = setTimeout(() => {
-          setShowLoader(false);
-        }, remainingTime);
-        
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [authLoading, loadingStartTime]);
+  // Simplify loader: show spinner only while authLoading
   
   // Wrap the content with ProtectedRoute for auth handling
   const wrappedContent = <ProtectedRoute>{children}</ProtectedRoute>;
@@ -55,7 +31,7 @@ export function PageWrapper({
   // Show loading spinner only when auth is loading
   // Skip loading spinner for homepage to show content immediately
   const isHomePage = pathname === '/';
-  if ((authLoading || showLoader) && !isHomePage) {
+  if (authLoading && !isHomePage) {
     return (
       <div className="flex items-center justify-center min-h-screen absolute inset-0 bg-background z-50">
         <div style={{ position: 'relative', left: '-55px' }}>
@@ -67,9 +43,8 @@ export function PageWrapper({
   
   // Handle auth-required routes - redirect to login if no user
   if (requireAuth && !user && !authLoading) {
-    console.log(`[PageWrapper] Redirecting to login from ${pathname}`);
     if (typeof window !== 'undefined') {
-       router.push(`/auth/login?redirect=${encodeURIComponent(pathname || '/')}`);
+      router.push(`/auth/login?redirect=${encodeURIComponent(pathname || '/')}`);
     }
     return null; // Don't render anything while redirecting
   }

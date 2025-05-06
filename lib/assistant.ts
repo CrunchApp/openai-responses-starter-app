@@ -168,6 +168,12 @@ export const processMessages = async () => {
     const addedMessageIds = new Set();
 
     await handleTurn(allConversationItems, tools, async ({ event, data }) => {
+      // On initial response event, capture the model response ID for chaining
+      if (event === 'response' && data.id && typeof data.id === 'string') {
+        setPreviousResponseId(data.id);
+        console.log('Captured new previousResponseId:', data.id);
+        return; // skip further processing for this event
+      }
       switch (event) {
         case "response.output_text.delta":
         case "response.output_text.annotation.added": {
@@ -180,15 +186,14 @@ export const processMessages = async () => {
           if (typeof delta === "string") {
             partial = delta;
           }
-          assistantMessageContent += partial;
-
           // Determine which ID to use for display (chain into previous message if applicable)
           const displayId = item_id;
-          // If we started streaming a new assistant message, reset buffer
+          // If we started streaming a new assistant message, reset buffer BEFORE appending partial
           if (currentAssistantId !== displayId) {
             assistantMessageContent = "";
             currentAssistantId = displayId;
           }
+          assistantMessageContent += partial;
 
           // Check if we already have a message with this display ID
           let assistantMessage = localChatMessages.find(
@@ -210,11 +215,6 @@ export const processMessages = async () => {
                 },
               ],
             };
-            // Record the initial message ID for chaining if starting a new chain
-            if (!effectivePreviousResponseId) {
-              useConversationStore.getState().setPreviousResponseId(item_id);
-            }
-
             localChatMessages.push(assistantMessage);
             addedMessageIds.add(displayId); // Track that we've added this message ID
           } else {
@@ -246,35 +246,37 @@ export const processMessages = async () => {
           // Handle differently depending on the item type
           switch (item.type) {
             case "message": {
-              // IMPORTANT: Skip adding assistant messages here completely
-              // They are already handled by response.output_text.delta
+              // Skip user messages (they are already present locally to avoid duplication)
+              if (item.role === "user") {
+                break; // Prevent duplicate user messages
+              }
+
+              // Assistant messages: add only to conversationItems (stream handled elsewhere)
               if (item.role === "assistant") {
-                // Only track in conversationItems for API context, not in UI
                 const itemExists = localConversationItems.some(
                   (ci) => ci.role === "assistant" && JSON.stringify(ci.content) === JSON.stringify(item.content)
                 );
-                
                 if (!itemExists) {
                   console.log("Adding assistant message to conversationItems only:", item.id);
                   localConversationItems.push({
                     role: "assistant",
-                    content: item.content
+                    content: item.content,
                   });
                   setConversationItems([...localConversationItems]);
                 }
                 break;
               }
-              
-              // Non-assistant messages can be handled normally
-              console.log("Adding non-assistant message:", item.role, item.id);
+
+              // Handle any other message roles if needed (e.g., system)
+              console.log("Adding message:", item.role, item.id);
               const text = item.content?.text || "";
               localChatMessages.push({
                 type: "message",
-                role: item.role,
+                role: item.role as any,
                 id: item.id,
                 content: [
                   {
-                    type: "input_text", // For user messages we use input_text
+                    type: "input_text",
                     text,
                   },
                 ],

@@ -218,9 +218,16 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
         (msg) => msg.role === 'system' && msg.content === sentinel
       );
       if (!alreadyInjected) {
+        // Inject sentinel system message linking to previous conversation state
         addConversationItem({ role: 'system', content: sentinel });
-        // Resume streaming based on existing previousResponseId
-        processMessages();
+        /*
+         * Do NOT immediately resume streaming here. Triggering processMessages() on every
+         * mount caused an unnecessary /api/turn_response call whenever the user simply
+         * navigated to the application details page (e.g. via "View Details").
+         * Streaming will automatically resume if there are any pending tool calls
+         * (they are persisted in chatMessages) or after a connectivity drop via the
+         * dedicated network-reconnect listener further below.
+         */
       }
     }
   }, []);

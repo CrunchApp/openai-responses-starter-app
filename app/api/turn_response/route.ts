@@ -37,6 +37,15 @@ export async function POST(request: Request) {
   try {
     const { messages, tools, previous_response_id } = await request.json();
     console.log("Received messages:", messages);
+    // Sanitize previous_response_id: only chain if valid resp_ id
+    let safePrevId: string | undefined;
+    if (typeof previous_response_id === 'string') {
+      if (previous_response_id.startsWith('resp_')) {
+        safePrevId = previous_response_id;
+      } else {
+        console.warn(`Dropping invalid previous_response_id: '${previous_response_id}'`);
+      }
+    }
 
     // Validate tools array to prevent errors with null vector_store_ids
     const validatedTools = tools.filter((tool: Tool) => {
@@ -58,7 +67,7 @@ export async function POST(request: Request) {
       tools: validatedTools,
       stream: true,
       parallel_tool_calls: false,
-      ...(previous_response_id ? { previous_response_id } : {}),
+      ...(safePrevId ? { previous_response_id: safePrevId } : {}),
       store: true,
     });
 

@@ -550,16 +550,13 @@ const useConversationStore = create<ConversationState>()(
             
             if (response.ok) {
               console.log(`Message saved to DB for conversation ${conversationIdToUse}`);
-              // Index user message in vector store
-              try {
-                await vectorStoreClient.add({
-                  userId,
-                  applicationId: conversationIdToUse,
-                  role: role as 'user' | 'assistant',
-                  content: messageContent,
-                });
-              } catch (err) {
-                console.error("Error indexing user message in vector store:", err);
+              // Only upsert vector store file when assistant message is finalized
+              if (role === 'assistant') {
+                try {
+                  await vectorStoreClient.upsertConversationFile(conversationIdToUse);
+                } catch (err) {
+                  console.error("Error upserting conversation file in vector store:", err);
+                }
               }
             } else {
               const errorData = await response.json();
@@ -635,6 +632,13 @@ const useConversationStore = create<ConversationState>()(
     {
       name: 'conversation-store',
       partialize: (state) => ({
+        // Persist auth flags and essential conversation state
+        isAuthenticated: state.isAuthenticated,
+        userId: state.userId,
+        // Persist the active conversation ID so it stays selected
+        activeConversationId: state.activeConversationId,
+        // Persist the fetched conversations list
+        conversations: state.conversations,
         chatMessages: state.chatMessages,
         conversationItems: state.conversationItems,
         previousResponseId: state.previousResponseId,

@@ -852,7 +852,9 @@ const usePathwayStore = create<PathwayState>()(
         }
       },
        partialize: (state) => ({ 
-         // Persist only pathways and programs, not loading/error states
+         // Persist auth flags, pathways and programs, and guest count
+         isAuthenticated: state.isAuthenticated,
+         userId: state.userId,
          pathways: state.pathways, 
          programsByPathway: state.programsByPathway,
          // Persist guest count

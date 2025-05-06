@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation'
 import { Database } from '@/lib/database.types'
 import useProfileStore from '@/stores/useProfileStore'
 import { UserProfile } from '@/app/types/profile-schema'
+import useConversationStore from '@/stores/useConversationStore'
+import usePathwayStore from '@/stores/usePathwayStore'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -74,7 +76,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [vectorStoreId, setVectorStoreId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isSigningOut, setIsSigningOut] = useState(false)
 
   // --- Zustand Store Access --- 
   const setProfileDataInStore = useProfileStore((state) => state.setProfileData);
@@ -93,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error('Error fetching profile:', error)
         if (error.code === 'PGRST116') {
-          console.log('Profile not found for user, creating a default profile')
+          // Profile not found; create a default profile
           
           // Get user metadata
           const { data: userData } = await supabase.auth.getUser()
@@ -132,22 +133,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setVectorStoreId(null);
       }
 
-      // Log profile data for debugging
-      console.log("Fetched profile data:", {
-        id: data.id,
-        vectorStoreId: data.vector_store_id,
-        profileFileId: data.profile_file_id
-      });
-
       // === Update Profile Store ===
       if (data) {
         const userProfile = mapDbProfileToUserProfile(data);
-        console.log("[AuthContext] Setting profile data in Zustand store:", userProfile);
         setProfileDataInStore(userProfile);
         setVectorStoreIdInStore(userProfile.vectorStoreId || null);
       } else {
         // Ensure store is cleared if profile fetch fails or returns null
-        console.log("[AuthContext] No profile data found or fetch failed, clearing Zustand store.");
         clearProfileStore(); 
       }
       // =========================
@@ -156,7 +148,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Unexpected error fetching profile:', error)
       // === Clear Profile Store on Error ===
-      console.log("[AuthContext] Error fetching profile, clearing Zustand store.");
       clearProfileStore(); 
       // ==================================
       return null
@@ -187,6 +178,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Fetch user profile
           const profileData = await fetchProfile(session.user.id)
           if (isMounted) setProfile(profileData)
+          
+          // --- Sync auth state to stores ---
+          useConversationStore.getState().setAuthState(true, session.user.id)
+          usePathwayStore.getState().setAuthState(true, session.user.id)
         }
       } catch (error) {
         console.error('Error getting initial session:', error)
@@ -200,25 +195,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`Auth state changed: ${event}`);
+      // No-op: Removed debug log for auth state change.
       
-      // Treat INITIAL_SESSION with a valid session as SIGNED_IN for state purposes
-      if ((event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user))) {
-        if (session?.user) {
-          if (isMounted) setUser(session.user);
-          // Fetch user profile
-          const profileData = await fetchProfile(session.user.id);
-          if (isMounted) setProfile(profileData);
-        }
+      // Handle sign-in
+      if ((event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user)) && session?.user) {
+        if (isMounted) setUser(session.user);
+        const profileData = await fetchProfile(session.user.id);
+        if (isMounted) setProfile(profileData);
+        // Sync auth state to stores
+        useConversationStore.getState().setAuthState(true, session.user.id);
+        usePathwayStore.getState().setAuthState(true, session.user.id);
       } else if (event === 'PASSWORD_RECOVERY') {
         // Handle password recovery event
-        console.log("[AuthContext] Handling PASSWORD_RECOVERY event.");
         if (session?.user) {
           if (isMounted) {
             setUser(session.user); 
-            // Optionally fetch profile if needed during recovery, though likely not required
-            // const profileData = await fetchProfile(session.user.id);
-            // if (isMounted) setProfile(profileData);
             setLoading(false); // Set loading to false after recovery handled
           }
         } else {
@@ -235,11 +226,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isMounted) {
           setUser(null);
           setProfile(null);
-          // === Clear Profile Store on Sign Out ===
-          console.log("[AuthContext] User signed out, clearing Zustand store.");
           clearProfileStore();
-          // ====================================
-          setLoading(false); // Ensure loading is false on sign out/initial no session
+          // Sync sign-out to stores
+          useConversationStore.getState().setAuthState(false, null);
+          useConversationStore.getState().resetState();
+          usePathwayStore.getState().setAuthState(false, null);
+          usePathwayStore.getState().clearStore();
+          setLoading(false);
         }
       }
     })
@@ -293,7 +286,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       setError(null)
       
-      // Use Supabase client directly instead of API route for login
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -303,9 +295,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
       
-      // Redirect to dashboard after successful login
       if (data?.user) {
+        // Update context
+        setUser(data.user)
+        const prof = await fetchProfile(data.user.id)
+        setProfile(prof)
+        // Sync auth state to conversation and pathway stores
+        useConversationStore.getState().setAuthState(true, data.user.id)
+        usePathwayStore.getState().setAuthState(true, data.user.id)
+        // Ensure session and stores are fully refreshed in this tab
+        await refreshSession()
+        // Redirect to dashboard
         router.push('/dashboard')
+        // Refresh SSR cache to pick up new session cookie
+        router.refresh()
       }
       
       return data
@@ -328,25 +331,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       
-      // First, sign out from Supabase and wait for it to complete
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error('Supabase sign out error:', error);
-        throw error;
+      // Sign out via Supabase client
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        console.error('Error signing out:', signOutError);
+        throw signOutError;
       }
       
-      // After successful Supabase sign out, clear local state
+      // After successful logout, clear local state
       setUser(null);
       setProfile(null);
       setVectorStoreId(null);
-      // === Clear Profile Store on Explicit Sign Out ===
-      console.log("[AuthContext] Explicit signOut called, clearing Zustand store.");
+      // Clear Profile Store on Explicit Sign Out
       clearProfileStore();
-      // ============================================
-      
+      // Sync sign-out to conversation and pathway stores
+      useConversationStore.getState().setAuthState(false, null);
+      useConversationStore.getState().resetState();
+      usePathwayStore.getState().setAuthState(false, null);
+      usePathwayStore.getState().clearStore();
       // Navigate as the final step
       router.push('/');
+      // Refresh to ensure session is cleared
+      router.refresh();
     } catch (error) {
       console.error('Error signing out:', error);
       if (error instanceof Error) {
@@ -435,12 +441,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Update tools store with vectorStoreId if available
       if (profileData?.vector_store_id) {
-        // === Update Profile Store on Refresh === 
         const userProfile = mapDbProfileToUserProfile(profileData);
-        console.log("[AuthContext] Refreshing session, setting profile data in Zustand store:", userProfile);
         setProfileDataInStore(userProfile);
         setVectorStoreIdInStore(userProfile.vectorStoreId || null);
-        // =====================================
 
         const useToolsStore = (await import('@/stores/useToolsStore')).default;
         useToolsStore.getState().setVectorStore({

@@ -406,7 +406,10 @@ export default function ProfileDashboard() {
       
       // Handle specific field types if necessary (like comma-separated strings)
       if (['skills', 'careerGoals.desiredIndustry', 'careerGoals.desiredRoles', 'preferences.preferredLocations'].includes(fieldPath)) {
-          current[finalKey] = value.split(',').map((item: string) => item.trim()).filter(Boolean);
+          // Split and trim, but preserve empty segment when trailing comma/space
+          const parts = value.split(',').map((item: string) => item.trim());
+          const endsWithSeparator = /,\s*$/.test(value);
+          current[finalKey] = endsWithSeparator ? parts : parts.filter((item: string | any[]) => item.length > 0);
       } else if (fieldPath.startsWith('preferences.budgetRange')) {
           current[finalKey] = parseInt(value, 10) || 0;
       } else if (fieldPath.startsWith('preferences.preferredDuration')) {
@@ -2081,11 +2084,7 @@ export default function ProfileDashboard() {
                   </div>
                 ) : (
                   <div className="pl-10 space-y-4 py-2">
-                    {/* Display Target Study Level */}
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-xs text-purple-500">Target Study Level</p>
-                      <p className="font-medium">{userProfile?.targetStudyLevel && userProfile.targetStudyLevel !== "__NONE__" ? userProfile.targetStudyLevel : "Not specified"}</p>
-                    </div>
+                    
                     
                     {/* Display Education History Section Title */}
                     <div className="flex justify-between items-center">
@@ -2099,6 +2098,12 @@ export default function ProfileDashboard() {
                         <Edit className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
+                    </div>
+                    
+                    {/* Display Target Study Level */}
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <p className="text-xs text-purple-500">Target Study Level</p>
+                      <p className="font-medium">{userProfile?.targetStudyLevel && userProfile.targetStudyLevel !== "__NONE__" ? userProfile.targetStudyLevel : "Not specified"}</p>
                     </div>
                     
                     {/* Display Education Items */}

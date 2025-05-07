@@ -106,6 +106,12 @@ interface PathwayState {
 
   hideProgram: (pathwayId: string, programId: string) => void;
   restoreProgram: (pathwayId: string, programId: string) => void;
+
+  // New state property for tracking program evaluation ResponseId by pathway
+  lastProgramResponseIdByPathway: { [pathwayId: string]: string | undefined };
+  
+  // New action to retry program evaluation on OpenAI leveraging stored ResponseId
+  rerunEvaluation: (pathwayId: string) => Promise<void>;
 }
 
 // Default initial state for the store
@@ -126,6 +132,8 @@ const initialState = {
   maxGuestPathwayGenerations: 1,
   isActionLoading: false,
   actionError: null,
+  // Initialize the new state property
+  lastProgramResponseIdByPathway: {},
 };
 
 const usePathwayStore = create<PathwayState>()(
@@ -831,6 +839,63 @@ const usePathwayStore = create<PathwayState>()(
               console.error("Failed to restore recommendation on server", err);
             });
           });
+        }
+      },
+
+      // New action: retry evaluation using stored ResponseId
+      rerunEvaluation: async (pathwayId: string) => {
+        const { isAuthenticated, lastProgramResponseIdByPathway } = get();
+        if (!isAuthenticated) {
+          console.warn("Cannot rerun evaluation: user not authenticated");
+          return;
+        }
+        const prevId = lastProgramResponseIdByPathway[pathwayId];
+        if (!prevId) {
+          console.warn(`No previous evaluation ResponseId found for pathway ${pathwayId}`);
+          return;
+        }
+        // Set loading state
+        set((state) => ({
+          programGenerationLoading: { ...state.programGenerationLoading, [pathwayId]: true },
+          programGenerationError: { ...state.programGenerationError, [pathwayId]: null }
+        }));
+        try {
+          console.log(`Rerunning OpenAI evaluation for pathway ${pathwayId} with previousResponseId ${prevId}`);
+          const response = await fetch(
+            `/api/recommendations/programs/rerun`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ previousResponseId: prevId, pathwayId })
+            }
+          );
+          const data = await response.json();
+          if (!response.ok || data.error) {
+            const msg = data.error || `Rerun failed with status ${response.status}`;
+            console.error(msg);
+            set((state) => ({
+              programGenerationError: { ...state.programGenerationError, [pathwayId]: msg }
+            }));
+          } else {
+            // Update programs for pathway
+            set((state) => ({
+              programsByPathway: { ...state.programsByPathway, [pathwayId]: data.programs },
+              // Update stored ResponseId in case it changed
+              lastProgramResponseIdByPathway: {
+                ...state.lastProgramResponseIdByPathway,
+                [pathwayId]: data.responseId
+              }
+            }));
+          }
+        } catch (err: any) {
+          console.error(`Error during rerunEvaluation for pathway ${pathwayId}:`, err);
+          set((state) => ({
+            programGenerationError: { ...state.programGenerationError, [pathwayId]: err.message }
+          }));
+        } finally {
+          set((state) => ({
+            programGenerationLoading: { ...state.programGenerationLoading, [pathwayId]: false }
+          }));
         }
       },
     }),

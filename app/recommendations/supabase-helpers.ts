@@ -42,6 +42,7 @@ export async function saveRecommendation(
       requirements: recommendation.requirements || [],
       highlights: recommendation.highlights || [],
       pageLink: recommendation.pageLink,
+      pageLinks: recommendation.pageLinks || [],
       match_score: recommendation.matchScore, // Intentionally snake_case for the function
       is_favorite: recommendation.isFavorite || false, // Intentionally snake_case for the function
       match_rationale: recommendation.matchRationale, // Intentionally snake_case for the function
@@ -105,6 +106,12 @@ export async function fetchUserRecommendations(userId: string): Promise<{
     // Transform the data to match our RecommendationProgram interface, adding defaults and JSONB feedback
     const recommendations: RecommendationProgram[] = data.map((item: any) => {
       const fbData = item.feedback_data || {};
+      // Consolidate stored and single link into an array of candidates
+      const linksArray: string[] = Array.isArray(item.page_links)
+        ? item.page_links
+        : item.page_link
+        ? [item.page_link]
+        : [];
       return {
         id: item.id || `missing_id_${Math.random()}`,
         name: item.name || 'N/A',
@@ -121,7 +128,8 @@ export async function fetchUserRecommendations(userId: string): Promise<{
         applicationDeadline: item.application_deadline || 'N/A',
         requirements: Array.isArray(item.requirements) ? item.requirements : [],
         highlights: Array.isArray(item.highlights) ? item.highlights : [],
-        pageLink: item.page_link,
+        pageLinks: linksArray,
+        pageLink: linksArray[0] || '',
         matchRationale: item.match_rationale && typeof item.match_rationale === 'object'
           ? {
               careerAlignment: item.match_rationale.careerAlignment ?? 0,
@@ -395,6 +403,7 @@ export async function saveRecommendationsBatch(
         requirements: rec.requirements || [],
         highlights: rec.highlights || [],
         pageLink: rec.pageLink,
+        pageLinks: rec.pageLinks || [],
         match_score: rec.matchScore, // Intentionally snake_case for the function
         is_favorite: rec.isFavorite || false, // Intentionally snake_case for the function
         match_rationale: rec.matchRationale, // Intentionally snake_case for the function

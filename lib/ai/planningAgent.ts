@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { UserProfile } from '@/app/types/profile-schema';
 import { EducationPathway, RecommendationProgram } from '@/app/recommendations/types';
 import { OpenAIError } from 'openai/error';
-import { fetchProgramPageLink } from '@/lib/ai/linkSearch';
+import { fetchProgramPageLinks } from '@/lib/ai/linkSearch';
 
 // Check for required environment variables
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -253,6 +253,9 @@ const programEvaluationSchema = {
   ],
   "additionalProperties": false
 };
+
+// Export the programEvaluationSchema for reuse
+export { programEvaluationSchema };
 
 // Define interface for the structured output (excluding generated ID)
 interface EvaluatedProgramOutput extends Omit<RecommendationProgram, 'id'> {}
@@ -921,21 +924,29 @@ Think critically about the alignment. The match scores should be quantitative re
           }
         }
         
-        // Enrich programs with accurate page links via Google Custom Search
+        // Consolidate links: preserve LLM link and add custom search candidates
         const programsWithLinks = await Promise.all(
           evaluatedData.programs.map(async program => {
-            const newLink = await fetchProgramPageLink(program.name, program.institution);
+            const llmLink = program.pageLink;
+            const customLinks = await fetchProgramPageLinks(program.name, program.institution);
+            const candidates = Array.from(
+              new Set([
+                ...(llmLink ? [llmLink] : []),
+                ...customLinks
+              ])
+            );
             return {
               ...program,
-              pageLink: newLink || program.pageLink
+              pageLinks: candidates,
+              pageLink: candidates[0]
             };
           })
         );
 
-        // Return the enriched programs along with the response ID
+        // Return the consolidated links along with the response ID
         return {
           programs: programsWithLinks,
-          responseId: response.id // Return the response ID
+          responseId: response.id
         };
       } catch (parseError) {
         console.error('JSON parsing error during evaluation:', parseError instanceof Error ? parseError.message : String(parseError));
@@ -1082,21 +1093,29 @@ Respond ONLY with the valid JSON object conforming strictly to the program evalu
 
         console.log(`Successfully parsed ${evaluatedData.programs.length} additional evaluated programs.`);
 
-        // Enrich programs with accurate page links via Google Custom Search
+        // Consolidate links: preserve LLM link and add custom search candidates
         const programsWithLinks = await Promise.all(
           evaluatedData.programs.map(async program => {
-            const newLink = await fetchProgramPageLink(program.name, program.institution);
+            const llmLink = program.pageLink;
+            const customLinks = await fetchProgramPageLinks(program.name, program.institution);
+            const candidates = Array.from(
+              new Set([
+                ...(llmLink ? [llmLink] : []),
+                ...customLinks
+              ])
+            );
             return {
               ...program,
-              pageLink: newLink || program.pageLink
+              pageLinks: candidates,
+              pageLink: candidates[0]
             };
           })
         );
 
-        // Return the enriched programs along with the new response ID
+        // Return the consolidated links along with the new response ID
         return {
           programs: programsWithLinks,
-          responseId: response.id // Return the NEW response ID for this turn
+          responseId: response.id
         };
 
       } catch (parseError) {

@@ -111,8 +111,18 @@ export default function PathwayDetailsPage() {
     moreProgramsError,
     getMorePrograms,
     syncProgramsForPathway,
+    syncWithSupabase,
   } = usePathwayStore();
   const { user } = useAuth();
+
+  // Ensure pathways are refreshed to include latest program response ID
+  useEffect(() => {
+    if (user && user.id) {
+      console.log('[PathwayDetailsPage] Refreshing pathways for updated response ID');
+      syncWithSupabase(user.id);
+    }
+  }, [user, syncWithSupabase]);
+
   const [appMap, setAppMap] = useState<Record<string, string>>({});
   // Program search & filter state
   const [progSearchTerm, setProgSearchTerm] = useState("");

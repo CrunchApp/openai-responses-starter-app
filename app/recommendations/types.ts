@@ -23,7 +23,10 @@ export interface RecommendationProgram {
   applicationDeadline: string;
   requirements?: string[];
   highlights?: string[];
+  /** Primary link from LLM or first candidate */
   pageLink?: string;
+  /** Candidate links from various sources (LLM and custom search) */
+  pageLinks?: string[];
   matchScore: number;
   matchRationale?: {
     careerAlignment?: number;

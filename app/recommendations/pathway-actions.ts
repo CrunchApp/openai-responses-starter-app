@@ -1138,6 +1138,7 @@ async function saveProgramsForPathway(
         startDate: program.startDate || '',
         applicationDeadline: program.applicationDeadline || '',
         pageLink: program.pageLink || '',
+        pageLinks: program.pageLinks || [],
         
         // Fields SQL expects in snake_case (from examining SQL function)
         match_score: typeof program.matchScore === 'number' ? program.matchScore : 70,
@@ -1373,35 +1374,43 @@ export async function fetchProgramsForPathway(pathwayId: string): Promise<{
       return { recommendations: [], error: error.message };
     }
     // Map the result to RecommendationProgram[]
-    const recommendations = (data || []).map((row: any) => ({
-      id: row.recommendation_id,
-      name: row.name,
-      institution: row.institution,
-      degreeType: row.degree_type,
-      fieldOfStudy: row.field_of_study,
-      description: row.description,
-      costPerYear: row.cost_per_year ?? null,
-      duration: row.duration ?? null,
-      location: row.location,
-      startDate: row.start_date,
-      applicationDeadline: row.application_deadline,
-      requirements: Array.isArray(row.requirements) ? row.requirements : [],
-      highlights: Array.isArray(row.highlights) ? row.highlights : [],
-      pageLink: row.page_link,
-      matchScore: typeof row.match_score === 'number' ? row.match_score : 0,
-      matchRationale: row.match_rationale && typeof row.match_rationale === 'object' ? row.match_rationale : undefined,
-      isFavorite: row.is_favorite ?? false,
-      // Soft-delete flag: null/undefined treated as false
-      is_deleted: row.is_deleted ?? false,
-      // Structured feedback from JSONB column
-      feedbackData: row.feedback_data ?? {},
-      feedbackNegative: row.feedback_negative ?? false,
-      feedbackReason: row.feedback_data?.reason ?? null,
-      feedbackSubmittedAt: row.feedback_data?.submittedAt ?? null,
-      scholarships: Array.isArray(row.scholarships) ? row.scholarships : [],
-      pathway_id: pathwayId,
-      program_id: row.program_id,
-    }));
+    const recommendations = (data || []).map((row: any) => {
+      const linksArray: string[] = Array.isArray(row.page_links)
+        ? row.page_links
+        : row.page_link
+        ? [row.page_link]
+        : [];
+      return ({
+        id: row.recommendation_id,
+        name: row.name,
+        institution: row.institution,
+        degreeType: row.degree_type,
+        fieldOfStudy: row.field_of_study,
+        description: row.description,
+        costPerYear: row.cost_per_year ?? null,
+        duration: row.duration ?? null,
+        location: row.location,
+        startDate: row.start_date,
+        applicationDeadline: row.application_deadline,
+        requirements: Array.isArray(row.requirements) ? row.requirements : [],
+        highlights: Array.isArray(row.highlights) ? row.highlights : [],
+        pageLinks: linksArray,
+        pageLink: linksArray.length > 0 ? linksArray[0] : row.page_link,
+        matchScore: typeof row.match_score === 'number' ? row.match_score : 0,
+        matchRationale: row.match_rationale && typeof row.match_rationale === 'object' ? row.match_rationale : undefined,
+        isFavorite: row.is_favorite ?? false,
+        // Soft-delete flag: null/undefined treated as false
+        is_deleted: row.is_deleted ?? false,
+        // Structured feedback from JSONB column
+        feedbackData: row.feedback_data ?? {},
+        feedbackNegative: row.feedback_negative ?? false,
+        feedbackReason: row.feedback_data?.reason ?? null,
+        feedbackSubmittedAt: row.feedback_data?.submittedAt ?? null,
+        scholarships: Array.isArray(row.scholarships) ? row.scholarships : [],
+        pathway_id: pathwayId,
+        program_id: row.program_id,
+      });
+    });
     return { recommendations };
   } catch (error) {
     return {

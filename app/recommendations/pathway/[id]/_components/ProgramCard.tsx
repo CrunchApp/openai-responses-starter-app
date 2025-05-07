@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { create_application_plan } from "@/config/functions";
 
 // --- Helpers ---
@@ -91,6 +92,8 @@ export function ProgramCard({
   const applicationId = initialAppId || newAppId;
   const [isStarting, setIsStarting] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
+  // Toggle list of candidate links
+  const [showLinksList, setShowLinksList] = useState(false);
 
   const handleToggleFavorite = () => {
     if (isGuest) {
@@ -483,27 +486,80 @@ export function ProgramCard({
             onClose={() => setAssistantOpen(false)}
           />
             
-          {program.pageLink ? (
-            <Button 
-              variant="default" 
-              size="sm"
-              className="text-xs h-8 px-3"
-              onClick={() => window.open(program.pageLink, "_blank")}
-              title={`Visit program page at ${program.institution}`}
-            >
-              Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-            </Button>
-          ) : (
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="text-xs h-8 px-3"
-              disabled
-              title="No program link available"
-            >
-              Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-            </Button>
-          )}
+          {/* Explore program link(s) */}
+          {(() => {
+            const links = program.pageLinks?.length
+              ? program.pageLinks
+              : program.pageLink
+              ? [program.pageLink]
+              : [];
+            if (links.length > 1) {
+              return (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="text-xs h-8 px-3"
+                      title={`Visit program page at ${program.institution}`}
+                    >
+                      Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Explore Program Links</DialogTitle>
+                      <DialogDescription>
+                        These links are AI-generated and will take you to external sources.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 mt-4">
+                      {links.map((link, idx) => (
+                        <Button
+                          key={idx}
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => window.open(link, '_blank')}
+                        >
+                          {`Link ${idx + 1}`}
+                        </Button>
+                      ))}
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button size="sm">Close</Button>
+                      </DialogClose>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              );
+            }
+            if (links.length === 1) {
+              return (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="text-xs h-8 px-3"
+                  onClick={() => window.open(links[0], '_blank')}
+                  title={`Visit program page at ${program.institution}`}
+                >
+                  Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                </Button>
+              );
+            }
+            return (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-3"
+                disabled
+                title="No program link available"
+              >
+                Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+              </Button>
+            );
+          })()}
         </div>
       </div>
     </Card>

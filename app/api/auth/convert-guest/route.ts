@@ -164,15 +164,24 @@ export async function POST(req: NextRequest) {
               const highlights = Array.isArray(program.highlights) ? program.highlights.filter((h: any) => typeof h === 'string') : [];
 
               return {
-                name: program.name, institution: program.institution, description: program.description, location: program.location,
-                degreeType: program.degreeType, fieldOfStudy: program.fieldOfStudy,
+                name: program.name,
+                institution: program.institution,
+                description: program.description,
+                location: program.location,
+                degreeType: program.degreeType,
+                fieldOfStudy: program.fieldOfStudy,
                 costPerYear: typeof program.costPerYear === 'number' ? program.costPerYear : null,
                 duration: typeof program.duration === 'number' ? program.duration : null,
-                startDate: program.startDate || '', applicationDeadline: program.applicationDeadline || '', pageLink: program.pageLink || '',
+                startDate: program.startDate || '',
+                applicationDeadline: program.applicationDeadline || '',
+                pageLink: program.pageLink || '',
+                pageLinks: program.pageLinks || [],
                 match_score: typeof program.matchScore === 'number' ? program.matchScore : 70,
                 match_rationale: matchRationale,
                 is_favorite: program.isFavorite === true, // Guest data likely won't have favorites yet
-                requirements: requirements, highlights: highlights, scholarships: program.scholarships || []
+                requirements: requirements,
+                highlights: highlights,
+                scholarships: program.scholarships || []
               };
             });
 

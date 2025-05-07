@@ -572,10 +572,20 @@ const useConversationStore = create<ConversationState>()(
       },
       
       addConversationItem: async (message) => {
-        // Just update local state, no database interactions for conversation items
-        set((state) => ({
-          conversationItems: [...state.conversationItems, message],
-        }));
+        // Append conversation item only if it's not a duplicate of the last one
+        set((state) => {
+          const items = state.conversationItems;
+          const last = items[items.length - 1];
+          try {
+            if (last && JSON.stringify(last) === JSON.stringify(message)) {
+              // Duplicate detected, skip adding
+              return {};
+            }
+          } catch {
+            // If comparison fails, proceed to add
+          }
+          return { conversationItems: [...items, message] };
+        });
       },
       
       // New function to send user message and trigger processing

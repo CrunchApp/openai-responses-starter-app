@@ -1,6 +1,7 @@
 import { MessageItem } from "@/lib/assistant";
 import React from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 
@@ -21,11 +22,13 @@ const Message: React.FC<MessageProps> = ({ message, userData }) => {
       {message.role === "user" ? (
         <div className="flex justify-end">
           <div className="flex items-end gap-2">
-            <div className="max-w-[85%] ml-4 rounded-2xl rounded-br-sm px-4 py-3 md:ml-10 bg-primary/10 text-foreground shadow-sm">
+            <div className="max-w-[95%] ml-4 rounded-2xl rounded-br-sm px-4 py-3 md:ml-10 bg-primary/10 text-foreground shadow-sm">
               <div>
-                <ReactMarkdown className="prose prose-sm max-w-none">
-                  {message.content[0].text as string}
-                </ReactMarkdown>
+                <div className="overflow-x-auto">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none">
+                    {message.content[0].text as string}
+                  </ReactMarkdown>
+                </div>
               </div>
             </div>
             
@@ -61,11 +64,13 @@ const Message: React.FC<MessageProps> = ({ message, userData }) => {
               {/* Removed AvatarFallback */}
             </div>
             
-            <div className="max-w-[85%] mr-4 rounded-2xl rounded-tl-sm px-4 py-3 md:mr-10 bg-white border border-primary/10 text-foreground shadow-sm">
+            <div className="max-w-[95%] mr-4 rounded-2xl rounded-tl-sm px-4 py-3 md:mr-10 bg-white border border-primary/10 text-foreground shadow-sm">
               <div>
-                <ReactMarkdown className="prose prose-sm max-w-none">
-                  {message.content[0].text as string}
-                </ReactMarkdown>
+                <div className="overflow-x-auto">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none">
+                    {message.content[0].text as string}
+                  </ReactMarkdown>
+                </div>
               </div>
             </div>
           </div>

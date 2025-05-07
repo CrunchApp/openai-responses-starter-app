@@ -97,7 +97,7 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage, userData }) => {
 
   return (
     <div className="flex justify-center items-center size-full">
-      <div className="flex grow flex-col h-full max-w-[750px] gap-2 w-full">
+      <div className="flex grow flex-col h-full w-full gap-2">
         {items.length === 1 ? (
           <div className="flex flex-col items-center justify-center h-[80vh] px-6 text-center">
             <motion.div 

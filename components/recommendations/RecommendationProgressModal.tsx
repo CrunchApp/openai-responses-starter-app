@@ -123,6 +123,8 @@ interface RecommendationProgressModalProps {
   progressStages: ProgressStage[];
   currentStageIndex: number;
   isComplete: boolean;
+  currentPathwayTitle?: string; // Optional title of the pathway being processed
+  estimatedTimeRemaining?: string; // Optional realistic time remaining estimate
 }
 
 export function RecommendationProgressModal({
@@ -130,6 +132,8 @@ export function RecommendationProgressModal({
   progressStages, // This will now be dynamic ProgressStage[]
   currentStageIndex,
   isComplete
+  , currentPathwayTitle
+  , estimatedTimeRemaining
 }: RecommendationProgressModalProps) {
   // Calculate progress percentage based on the dynamic list of stages
   const progressPercentage = isComplete 
@@ -144,6 +148,14 @@ export function RecommendationProgressModal({
     ? 'Process completed successfully!' 
     : progressStages[currentStageIndex]?.description || 'Please wait...';
 
+  // Compute realistic time remaining estimate if not explicitly provided
+  const scenarioStartId = progressStages[0]?.id;
+  const isPathwayGen = ['analyzing', 'pathways-start', 'pathways-complete'].includes(scenarioStartId);
+  const defaultEstimatedTime = !isComplete
+    ? (isPathwayGen ? '≈1 minute' : '≈2 minutes')
+    : undefined;
+  const displayEstimatedTime = estimatedTimeRemaining || defaultEstimatedTime;
+
   return (
     <Dialog open={isOpen} onOpenChange={() => {}} modal={true}>
       <DialogContent className="sm:max-w-md">
@@ -154,6 +166,17 @@ export function RecommendationProgressModal({
         </DialogHeader>
         
         <div className="py-4">
+          {/* Show pathway context and realistic time estimate if provided */}
+          {currentPathwayTitle && !isComplete && (
+            <p className="text-center text-sm text-gray-500 mb-2">
+              Exploring pathway: {currentPathwayTitle}
+            </p>
+          )}
+          {displayEstimatedTime && !isComplete && (
+            <p className="text-center text-sm text-gray-500 mb-4">
+              Estimated time remaining: {displayEstimatedTime}
+            </p>
+          )}
           <Progress 
             value={progressPercentage} 
             className="h-2 mb-6 transition-all duration-500 ease-in-out" // Added transition

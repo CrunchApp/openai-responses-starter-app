@@ -776,7 +776,7 @@ PATHWAY CONTEXT:
 - Field: ${pathway.field_of_study} ${pathway.subfields ? `(${pathway.subfields.join(', ')})` : ''}
 - Target Regions: ${pathway.target_regions?.join(', ') || 'Global'}
 - Budget (Annual USD): $${pathway.budget_range_usd?.min?.toLocaleString()} - $${pathway.budget_range_usd?.max?.toLocaleString()}
-- Duration (Months): ${pathway.duration_months || 'Not specified'}
+- Duration (Months): ${(pathway as any).duration?.max ?? pathway.duration_months ?? 'Not specified'}
 - Alignment Rationale: ${pathway.alignment_rationale || 'Not specified'}
 `;
 

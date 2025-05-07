@@ -333,7 +333,6 @@ export function PathwayExplorer({
         }
         
         if (morePathwaysResult.pathways && morePathwaysResult.pathways.length > 0) {
-          setPathways([...pathways, ...morePathwaysResult.pathways]);
           setNewPathwayIds(morePathwaysResult.pathways.map(p => p.id));
           toast({ title: "Recommendations Updated", description: `Added ${morePathwaysResult.pathways.length} more pathways.`, variant: "default" });
         } else {

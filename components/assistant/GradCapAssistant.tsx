@@ -76,6 +76,7 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   const [userMessageIndex, setUserMessageIndex] = useState<number | null>(null); // Track user message index
   const sendUserMessage = useConversationStore((state) => state.sendUserMessage);
   const addConversationItem = useConversationStore((state) => state.addConversationItem);
+  const addChatMessage = useConversationStore((state) => state.addChatMessage);
   const createNewConversation = useConversationStore((state) => state.createNewConversation);
   const chatMessages = useConversationStore((state) => state.chatMessages);
   const router = useRouter();
@@ -88,28 +89,24 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
 
   const constraintsRef = useRef(null);
 
+  // Local override for persisted quick-chat session
+  const [quickChatItems, setQuickChatItems] = useState<Item[] | null>(null);
+
   // New Effect to detect completion based on chatMessages updates
   useEffect(() => {
     // Only run logic if we are in a loading state initiated by this component
     if (!isLoading || userMessageIndex === null) {
         return;
     }
-    console.log(`GradCapAssistant Effect [chatMessages]: isLoading=${isLoading}, userMessageIndex=${userMessageIndex}`);
 
     const relevantItems = chatMessages.slice(userMessageIndex + 1);
-    console.log(`GradCapAssistant Effect [chatMessages]: relevantItems count: ${relevantItems.length}`);
-
     if (relevantItems.length > 0) {
       const lastRelevantItem = relevantItems[relevantItems.length - 1];
-      console.log(`GradCapAssistant Effect [chatMessages]: Last relevant item:`, lastRelevantItem);
 
-      // Check if the last item indicates the end of a turn
+      // Check if the last item indicates the assistant has finished streaming its final message
       const turnSeemsComplete = (
-        (lastRelevantItem.type === 'message' && lastRelevantItem.role === 'assistant') ||
-        (lastRelevantItem.type === 'tool_call' && (lastRelevantItem.status === 'completed' || lastRelevantItem.status === 'failed'))
+        lastRelevantItem.type === 'message' && lastRelevantItem.role === 'assistant'
       );
-
-      console.log(`GradCapAssistant Effect [chatMessages]: Turn seems complete? ${turnSeemsComplete}`);
 
       if (turnSeemsComplete) {
         // Extract final assistant text response for simplified saving
@@ -118,29 +115,16 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
         ) as MessageItem | undefined;
 
         if (finalAssistantMsg && finalAssistantMsg.content[0]?.text) {
-          console.log('GradCapAssistant Effect [chatMessages]: Found final assistant text for saving.');
           setAssistantResponse(finalAssistantMsg.content[0].text);
         } else {
-          console.log('GradCapAssistant Effect [chatMessages]: No final assistant text message found for saving.');
-          setAssistantResponse(null); // Ensure it's null if no text found
+          setAssistantResponse(null);
         }
 
-        // Mark loading as finished and show the prompt
-        console.log('GradCapAssistant Effect [chatMessages]: Setting isLoading false, showSavePrompt true.');
         setIsLoading(false);
         setShowSavePrompt(true);
       }
-       // If not complete, do nothing and wait for the next chatMessages update
-       else {
-           console.log('GradCapAssistant Effect [chatMessages]: Turn not yet complete.');
-       }
     }
-     // If no relevant items yet, do nothing and wait for updates
-     else {
-         console.log('GradCapAssistant Effect [chatMessages]: No relevant items yet.');
-     }
-
-  }, [chatMessages, isLoading, userMessageIndex]); // Rerun whenever chatMessages changes while loading
+  }, [chatMessages, isLoading, userMessageIndex]);
 
   // Focus input when box opens (adjusted dependencies)
   useEffect(() => {
@@ -242,8 +226,29 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
     return () => window.removeEventListener('online', handleOnline);
   }, []);
 
+  // On mount, attempt to restore quick chat from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('vista_quick_buffer');
+    if (saved) {
+      try {
+        const { lastUserMessage: savedUserMessage, items } = JSON.parse(saved);
+        if (items && savedUserMessage) {
+          setLastUserMessage(savedUserMessage);
+          setQuickChatItems(items);
+          setIsLoading(false);
+          setShowSavePrompt(true);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }, []);
+
   const handleSendMessage = async () => {
     if (!message.trim() || isLoading) return; // Prevent sending while loading
+    // Clear any persisted fallback when starting a new quick chat
+    setQuickChatItems(null);
 
     const userMessageContent = message; // Store message content before clearing
     setMessage(''); // Clear input immediately
@@ -290,6 +295,12 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
     // Set the user message index based on the state *after* the message was likely added
     // This might be slightly racy, ideally sendUserMessage would return the added item or index
     setUserMessageIndex(initialMessagesLength); // Set index based on length before adding
+    // Persist the quick-chat buffer (items after user message)
+    setTimeout(() => {
+      const stateItems = useConversationStore.getState().chatMessages.slice(initialMessagesLength + 1);
+      localStorage.setItem('vista_quick_buffer', JSON.stringify({ lastUserMessage: userMessageContent, items: stateItems }));
+      setQuickChatItems(stateItems);
+    }, 0);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -310,9 +321,9 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
   const [isSaving, setIsSaving] = useState(false); // NEW: track saving state
   const handleSaveAsConversation = async (save: boolean) => {
     if (save) {
-      setIsSaving(true); // start spinner
+      setIsSaving(true);
     }
-    setShowSavePrompt(false); // Hide prompt immediately
+    setShowSavePrompt(false);
 
     // Find the relevant items (messages/tool calls after user's message)
     const relevantItems = userMessageIndex !== null ? chatMessages.slice(userMessageIndex + 1) : [];
@@ -321,50 +332,43 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
       // --- Saving the conversation --- 
       console.log('Attempting to save quick chat as new conversation...');
 
-      // Find the *last* assistant message in the relevant items
-      const finalAssistantMsg = [...relevantItems].reverse().find(
-          item => item.type === 'message' && item.role === 'assistant'
-      ) as MessageItem | undefined;
-      
-      const finalAssistantText = finalAssistantMsg?.content[0]?.text;
-
-      // Ensure we have the user message and the final assistant text
-      if (lastUserMessage && finalAssistantText) {
-          console.log(`Saving with User: "${lastUserMessage.substring(0, 50)}..." | Assistant: "${finalAssistantText.substring(0, 50)}..."`);
-          
-          // Call createNewConversation with the initial user message and the *full final* assistant text
-          const convId = await createNewConversation(lastUserMessage, finalAssistantText);
-          
-          if (convId) {
-              console.log('Saved conversation with ID:', convId);
-              setConversationId(convId); // Store the new ID locally to show "Continue in chat"
-              setIsSaving(false); // finished
-
-              // Recompute userMessageIndex based on new store state (chatMessages were reset within createNewConversation)
-              const updatedMessages = useConversationStore.getState().chatMessages;
-              const newUserIdx = updatedMessages.findIndex(
-                (m) => m.type === 'message' && m.role === 'user'
-              );
-              setUserMessageIndex(newUserIdx !== -1 ? newUserIdx : 0);
-
-              // Ensure local copies of lastUserMessage and assistantResponse remain intact (already set)
-              // No need to reset state here
-          } else {
-              console.error("Failed to create conversation from quick chat.");
-              setIsSaving(false);
-              // Handle error (e.g., show a toast notification)
-              // Reset state if saving fails to allow user to try again or dismiss
-              setLastUserMessage(null);
-              setAssistantResponse(null);
-              setUserMessageIndex(null);
+      // Ensure we have the initial user message
+      if (lastUserMessage) {
+        // Create conversation seeded with the user's initial message
+        const convId = await createNewConversation(lastUserMessage);
+        if (convId) {
+          // Persist all assistant messages from the quick chat
+          for (const item of relevantItems) {
+            if (item.type === 'message') {
+              await addChatMessage(item, false, convId);
+            }
           }
-      } else {
-          console.warn("Cannot save conversation: missing user message or final assistant text.");
+          console.log('Saved conversation with ID:', convId);
+          setConversationId(convId);
           setIsSaving(false);
-          // Reset state if critical info is missing
-          setLastUserMessage(null);
-          setAssistantResponse(null);
-          setUserMessageIndex(null);
+
+          // Update userMessageIndex to first user message in new history
+          const updatedMessages = useConversationStore.getState().chatMessages;
+          const newUserIdx = updatedMessages.findIndex(
+            (m) => m.type === 'message' && m.role === 'user'
+          );
+          setUserMessageIndex(newUserIdx !== -1 ? newUserIdx : 0);
+
+          // Reset fallback state
+          setQuickChatItems(null);
+          // Also clear localStorage
+          localStorage.removeItem('vista_quick_buffer');
+          return;
+        } else {
+          console.error('Failed to create conversation from quick chat.');
+          setIsSaving(false);
+          localStorage.removeItem('vista_quick_buffer');
+          return;
+        }
+      } else {
+        console.warn("Cannot save conversation: missing user message.");
+        setIsSaving(false);
+        localStorage.removeItem('vista_quick_buffer');
       }
     } else {
       // --- Not saving the conversation --- 
@@ -383,11 +387,14 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
       setLastUserMessage(null);
       setAssistantResponse(null);
       setUserMessageIndex(null);
+
+      // Reset fallback state
+      setQuickChatItems(null);
+      // Also clear localStorage
+      localStorage.removeItem('vista_quick_buffer');
     }
     // **REMOVE**: This reset was happening for both Yes and No
     // setLastUserMessage(null);
-    // setAssistantResponse(null);
-    // setUserMessageIndex(null);
   };
 
   const [isDragging, setIsDragging] = useState(false);
@@ -546,25 +553,29 @@ export const GradCapAssistant: React.FC<GradCapAssistantProps> = ({
               </Button>
             </div>
             {/* Render the sequence of messages/tool calls after the user's message */}
-            {userMessageIndex !== null && (
+            {userMessageIndex !== null && (() => {
+               const liveItems = chatMessages.slice(userMessageIndex + 1);
+               const fallback = quickChatItems || [];
+               const displayItems = liveItems.length > 0 ? liveItems : fallback;
+               return displayItems.length > 0 ? (
                  <div className={cn(
-                     "mt-2 space-y-2 overflow-y-auto w-full flex flex-col",
-                     size === 'small' ? 'text-[11px] max-h-32' : 'text-xs max-h-64'
+                   "mt-2 space-y-2 overflow-y-auto w-full flex flex-col",
+                   size === 'small' ? 'text-[11px] max-h-32' : 'text-xs max-h-64'
                  )}>
-                    {chatMessages.slice(userMessageIndex + 1).map((item, index) => (
-                        <React.Fragment key={item.id || index}>
-                            {item.type === 'message' && item.role === 'assistant' ? (
-                                // Use a simplified Message display for assistant
-                                <div className="p-2 bg-muted rounded text-foreground/90 border border-border whitespace-pre-line">
-                                    {item.content[0]?.text}
-                                </div>
-                            ) : item.type === 'tool_call' ? (
-                                <ToolCallDisplay toolCall={item} size={size} />
-                            ) : null}
-                        </React.Fragment>
-                    ))}
+                   {displayItems.map((item, index) => (
+                     <React.Fragment key={item.id || index}>
+                       {item.type === 'message' && item.role === 'assistant' ? (
+                         <div className="p-2 bg-muted rounded text-foreground/90 border border-border whitespace-pre-line">
+                           {item.content[0]?.text}
+                         </div>
+                       ) : item.type === 'tool_call' ? (
+                         <ToolCallDisplay toolCall={item} size={size} />
+                       ) : null}
+                     </React.Fragment>
+                   ))}
                  </div>
-            )}
+               ) : null;
+            })()}
             {showSavePrompt && !isLoading && (
               <div className="mt-2 flex flex-col gap-1 w-full">
                 <span className={cn(size === 'small' ? 'text-[11px]' : 'text-xs')}>Would you like to save this as a conversation?</span>

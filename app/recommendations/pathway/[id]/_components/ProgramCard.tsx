@@ -58,6 +58,7 @@ function formatDurationRange(duration?: number | { min?: number, max?: number } 
 
 export function ProgramCard({ 
   program, 
+  pathwayTitle,
   pathwayId,
   onToggleFavorite, 
   onSubmitFeedback,
@@ -67,6 +68,7 @@ export function ProgramCard({
   applicationId: initialAppId,
 }: { 
   program: RecommendationProgram;
+  pathwayTitle: string;
   pathwayId: string;
   onToggleFavorite: () => void;
   onSubmitFeedback: (reason: string, details?: string) => void;
@@ -169,16 +171,37 @@ export function ProgramCard({
       <div className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h3 id={`program-card-${program.id}-title`} className="font-semibold text-base text-gray-900 dark:text-gray-100">{program.name}</h3>
-            <p className="text-sm text-muted-foreground">{program.institution}</p>
+            {/* Title and degree badge */}
+            <div className="flex items-center space-x-2">
+              <h3 id={`program-card-${program.id}-title`} className="font-semibold text-base text-gray-900 dark:text-gray-100">{program.name}</h3>
+              <Badge variant="outline" className="text-xs font-medium whitespace-nowrap">{program.degreeType}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">{program.institution}</p>
             <div className="flex items-center text-xs text-muted-foreground mt-1.5">
               <BookOpen aria-hidden="true" className="h-3.5 w-3.5 mr-1.5 text-blue-500" />
-              <span>Part of pathway</span>
+              <span>Part of {pathwayTitle} pathway</span>
             </div>
           </div>
-          <Badge variant="outline" className="text-xs font-medium">
-            {program.degreeType}
-          </Badge>
+          <div className="flex flex-col items-end">
+            <Button
+              variant={applicationId ? "secondary" : "default"}
+              size="sm"
+              className="mt-2 h-8 px-3 whitespace-nowrap"
+              onClick={handleStartApplication}
+              disabled={isStarting}
+              title={applicationId ? "View application" : "Start application process"}
+            >
+              {isStarting
+                ? <>Starting...</>
+                : applicationId
+                  ? <>View Application</>
+                  : <>Start Application</>
+              }
+            </Button>
+            {appError && (
+              <p className="text-red-500 text-xs mt-1 text-right">{appError}</p>
+            )}
+          </div>
         </div>
         
         <div className="mt-3 space-y-2 bg-muted/20 dark:bg-muted/30 p-2.5 rounded-md">
@@ -480,23 +503,6 @@ export function ProgramCard({
             >
               Explore Program <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
             </Button>
-          )}
-        </div>
-        <div className="mt-4">
-          <Button
-            variant={applicationId ? "secondary" : "default"}
-            onClick={handleStartApplication}
-            disabled={isStarting}
-          >
-            {isStarting
-              ? <>Starting...</>
-              : applicationId
-                ? <>View Application</>
-                : <>Start Application process</>
-            }
-          </Button>
-          {appError && (
-            <p className="text-red-500 text-sm mt-2">{appError}</p>
           )}
         </div>
       </div>

@@ -29,7 +29,9 @@ import {
   GraduationCap,
   CheckCircle2,
   BanknoteIcon,
-  Globe
+  Globe,
+  FilterX,
+  Search
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,6 +69,9 @@ import { UserProfile } from "@/app/types/profile-schema";
 import { useToast } from "@/hooks/use-toast";
 import { RECOMMENDATION_STAGES_ENHANCED } from '@/components/recommendations/RecommendationProgressModal';
 import { list_user_applications } from '@/config/functions';
+import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 
 // Define ProgressStage type from modal stages
 type ProgressStage = typeof RECOMMENDATION_STAGES_ENHANCED[number];
@@ -125,6 +130,152 @@ export function PathwayExplorer({
   const { toast } = useToast();
   
   // Note: Pathway synchronization is now handled by AuthSynchronizer component
+  
+  // Search and filter state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterQualification, setFilterQualification] = useState<string | undefined>(undefined);
+  const [filterRegion, setFilterRegion] = useState<string | undefined>(undefined);
+  
+  const [allPathwaysForDefaults, setAllPathwaysForDefaults] = useState<EducationPathway[]>([]);
+
+  useEffect(() => {
+    // Keep a copy of all pathways to derive min/max for sliders
+    if (pathways.length > 0) {
+      setAllPathwaysForDefaults(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const newPathways = pathways.filter(p => !existingIds.has(p.id));
+        return [...prev, ...newPathways];
+      });
+    }
+  }, [pathways]);
+
+  const defaultDurationRange = React.useMemo<[number, number]>(() => {
+    if (allPathwaysForDefaults.length === 0) return [0, 60];
+    const durations = allPathwaysForDefaults.map(p => p.duration_months).filter(d => typeof d === 'number');
+    return [Math.min(0, ...durations), Math.max(60, ...durations)];
+  }, [allPathwaysForDefaults]);
+
+  const defaultBudgetRange = React.useMemo<[number, number]>(() => {
+    if (allPathwaysForDefaults.length === 0) return [0, 100000];
+    const budgets = allPathwaysForDefaults.map(p => (p.budget_range_usd as { min: number; max: number })?.min).filter(b => typeof b === 'number');
+    const minB = budgets.length > 0 ? Math.min(0, ...budgets) : 0;
+    const maxB = budgets.length > 0 ? Math.max(100000, ...budgets) : 100000;
+    return [minB, maxB];
+  }, [allPathwaysForDefaults]);
+
+  // Initialize with defaultDurationRange (assert as tuple)
+  const [durationRangeFilter, setDurationRangeFilter] = useState<[number, number]>(defaultDurationRange as [number, number]);
+  // Initialize with defaultBudgetRange (assert as tuple)
+  const [budgetRangeFilter, setBudgetRangeFilter] = useState<[number, number]>(defaultBudgetRange as [number, number]);
+
+  useEffect(() => {
+    // Update durationRangeFilter when defaultDurationRange changes
+    setDurationRangeFilter(defaultDurationRange as [number, number]);
+  }, [defaultDurationRange]);
+
+  useEffect(() => {
+    // Update budgetRangeFilter when defaultBudgetRange changes
+    setBudgetRangeFilter(defaultBudgetRange as [number, number]);
+  }, [defaultBudgetRange]);
+  
+  // Compute filtered lists for filtering UI
+  const qualifications = React.useMemo(() => Array.from(new Set(pathways.map(p => p.qualification_type))).sort(), [pathways]);
+  const regions = React.useMemo(() => Array.from(new Set(pathways.flatMap(p => p.target_regions || []))).sort(), [pathways]);
+  
+  // Sort pathways based on the selected criteria
+  const sortedPathways = React.useMemo(() => {
+    let sorted = [...pathways];
+    if (sortBy === 'duration') {
+      // Sort by minimum duration, ascending
+      sorted.sort((a, b) => {
+        // According to EducationPathway interface, duration_months is a number
+        // Let's handle it safely anyway
+        const durationA = typeof a.duration_months === 'number' ? a.duration_months : Infinity;
+        const durationB = typeof b.duration_months === 'number' ? b.duration_months : Infinity;
+             
+        return durationA - durationB;
+      });
+    } else if (sortBy === 'budget') {
+      // Sort by minimum budget, ascending
+      sorted.sort((a, b) => {
+        // Extract budget min values with proper type safety
+        const budgetA = (a.budget_range_usd && typeof a.budget_range_usd === 'object') ? (a.budget_range_usd.min || Infinity) : Infinity;
+        const budgetB = (b.budget_range_usd && typeof b.budget_range_usd === 'object') ? (b.budget_range_usd.min || Infinity) : Infinity;
+           
+        return budgetA - budgetB;
+      });
+    }
+    // 'default' sort is the order they come from the store/API
+    return sorted;
+  }, [pathways, sortBy]);
+  
+  // Normalize selected duration range (min <= max)
+  const [durationMinSel, durationMaxSel] = React.useMemo<[number, number]>(
+    () => [Math.min(...durationRangeFilter), Math.max(...durationRangeFilter)],
+    [durationRangeFilter]
+  );
+  
+  // Filter pathways based on search and filters
+  const filteredPathways = React.useMemo(() => {
+    return sortedPathways.filter(p => {
+      // Text search
+      if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) && !p.field_of_study.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      // Qualification filter
+      if (filterQualification && p.qualification_type !== filterQualification) return false;
+      // Region filter
+      if (filterRegion && (!p.target_regions || !p.target_regions.includes(filterRegion))) return false;
+      // Duration filter: derive min/max and apply range-overlap
+      const rawDur = (p as any).duration_months;
+      let pMinD: number;
+      let pMaxD: number;
+      if (typeof rawDur === 'number') {
+        pMinD = rawDur;
+        pMaxD = rawDur;
+      } else if (rawDur && typeof rawDur === 'object') {
+        const hasMin = typeof rawDur.min === 'number';
+        const hasMax = typeof rawDur.max === 'number';
+        pMinD = hasMin ? rawDur.min : (hasMax ? rawDur.max : 0);
+        pMaxD = hasMax ? rawDur.max : (hasMin ? rawDur.min : 0);
+      } else if (typeof rawDur === 'string') {
+        try {
+          const parsed = JSON.parse(rawDur);
+          if (typeof parsed === 'number') {
+            pMinD = parsed;
+            pMaxD = parsed;
+          } else if (parsed && typeof parsed === 'object') {
+            pMinD = typeof parsed.min === 'number' ? parsed.min : 0;
+            pMaxD = typeof parsed.max === 'number' ? parsed.max : 0;
+          } else {
+            pMinD = 0;
+            pMaxD = 0;
+          }
+        } catch {
+          const num = parseFloat(rawDur);
+          pMinD = isNaN(num) ? 0 : num;
+          pMaxD = pMinD;
+        }
+      } else {
+        pMinD = 0;
+        pMaxD = 0;
+      }
+      // Exclude if there's no overlap between pathway duration [pMinD,pMaxD] and selected [durationMinSel,durationMaxSel]
+      if (pMaxD < durationMinSel || pMinD > durationMaxSel) return false;
+      // Budget range overlap filter: pathway budget range [minB,maxB] must overlap selected [minSel,maxSel]
+      const pr = p.budget_range_usd as { min: number; max: number };
+      const pMinB = pr.min;
+      const pMaxB = pr.max;
+      // Budget filter: normalize selected range
+      const budgetMinSel = Math.min(...budgetRangeFilter);
+      const budgetMaxSel = Math.max(...budgetRangeFilter);
+      if (pMaxB < budgetMinSel || pMinB > budgetMaxSel) return false;
+      return true;
+    });
+  }, [sortedPathways, searchTerm, filterQualification, filterRegion, durationMinSel, durationMaxSel, budgetRangeFilter]);
+  
+  // Show loading state when initial load or auth is loading
+  if (isLoading || authLoading) {
+    return <PathwaysLoadingSkeleton />;
+  }
   
   const handleGeneratePathways = async () => {
     if (!userProfile) {
@@ -283,38 +434,6 @@ export function PathwayExplorer({
     router.push(`/recommendations/pathway/${pathway.id}`);
   };
   
-  // Sort pathways based on the selected criteria
-  const sortedPathways = React.useMemo(() => {
-    let sorted = [...pathways];
-    if (sortBy === 'duration') {
-      // Sort by minimum duration, ascending
-      sorted.sort((a, b) => {
-        // According to EducationPathway interface, duration_months is a number
-        // Let's handle it safely anyway
-        const durationA = typeof a.duration_months === 'number' ? a.duration_months : Infinity;
-        const durationB = typeof b.duration_months === 'number' ? b.duration_months : Infinity;
-             
-        return durationA - durationB;
-      });
-    } else if (sortBy === 'budget') {
-      // Sort by minimum budget, ascending
-      sorted.sort((a, b) => {
-        // Extract budget min values with proper type safety
-        const budgetA = (a.budget_range_usd && typeof a.budget_range_usd === 'object') ? (a.budget_range_usd.min || Infinity) : Infinity;
-        const budgetB = (b.budget_range_usd && typeof b.budget_range_usd === 'object') ? (b.budget_range_usd.min || Infinity) : Infinity;
-           
-        return budgetA - budgetB;
-      });
-    }
-    // 'default' sort is the order they come from the store/API
-    return sorted;
-  }, [pathways, sortBy]);
-  
-  // Show loading state when initial load or auth is loading
-  if (isLoading || authLoading) {
-    return <PathwaysLoadingSkeleton />;
-  }
-  
   const handleGuestSignupClick = () => {
     if (!userProfile) {
       // If guest profile is missing, route to wizard
@@ -395,74 +514,117 @@ export function PathwayExplorer({
           <h2 className="text-2xl font-bold">Your Education Pathways</h2>
           
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Sort Dropdown - Enhanced */} 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="flex items-center gap-1.5 min-w-[140px] group transition-colors"
-                >
-                  <span className="text-muted-foreground text-xs mr-1">Sort:</span>
-                  <span className="font-medium">{sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}</span>
-                  <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground group-data-[state=open]:rotate-180 transition-transform duration-200" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[200px] animate-in fade-in-40 zoom-in-95 duration-200">
-                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Sort Pathways By</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => setSortBy('default')}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <span className={sortBy === 'default' ? "font-medium" : ""}>
-                    Default Order
-                  </span>
-                  {sortBy === 'default' && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setSortBy('duration')}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <span className={sortBy === 'duration' ? "font-medium" : ""}>
-                    Duration (Shortest First)
-                  </span>
-                  {sortBy === 'duration' && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setSortBy('budget')}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <span className={sortBy === 'budget' ? "font-medium" : ""}>
-                    Budget (Lowest First)
-                  </span>
-                  {sortBy === 'budget' && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          
+            {/* Search and filter controls */}
+            <Card className="p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-800/30">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                {/* Col 1: Search & Main Filters */}
+                <div className="space-y-3 lg:col-span-1">
+                   <Label htmlFor="search-pathways" className="flex items-center text-sm font-medium text-muted-foreground">
+                      <Search className="h-4 w-4 mr-2 text-sky-600"/>
+                      Search Pathways
+                  </Label>
+                  <Input
+                    id="search-pathways"
+                    placeholder="Enter keywords (e.g., Fintech, Data Science)"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                          <Label htmlFor="filter-qualification" className="flex items-center text-xs font-medium text-muted-foreground mb-1">
+                              <GraduationCap className="h-3.5 w-3.5 mr-1.5 text-sky-600"/>
+                              Qualification
+                          </Label>
+                          <Select onValueChange={(val) => setFilterQualification(val === 'all' ? undefined : val)} value={filterQualification ?? 'all'}>
+                              <SelectTrigger id="filter-qualification" className="w-full">
+                              <SelectValue placeholder="All Qualifications" />
+                              </SelectTrigger>
+                              <SelectContent>
+                              <SelectItem value="all">All Qualifications</SelectItem>
+                              {qualifications.map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
+                              </SelectContent>
+                          </Select>
+                      </div>
+                      <div>
+                          <Label htmlFor="filter-region" className="flex items-center text-xs font-medium text-muted-foreground mb-1">
+                              <Globe className="h-3.5 w-3.5 mr-1.5 text-sky-600"/>
+                              Region
+                          </Label>
+                          <Select onValueChange={(val) => setFilterRegion(val === 'all' ? undefined : val)} value={filterRegion ?? 'all'}>
+                              <SelectTrigger id="filter-region" className="w-full">
+                              <SelectValue placeholder="All Regions" />
+                              </SelectTrigger>
+                              <SelectContent>
+                              <SelectItem value="all">All Regions</SelectItem>
+                              {regions.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                              </SelectContent>
+                          </Select>
+                      </div>
+                  </div>
+                </div>
+
+                {/* Col 2: Range Sliders */}
+                <div className="space-y-4 lg:col-span-1">
+                  <div>
+                      <Label htmlFor="filter-duration" className="flex items-center text-xs font-medium text-muted-foreground mb-2">
+                          <Calendar className="h-3.5 w-3.5 mr-1.5 text-sky-600"/>
+                          Duration (Months): <span className="font-semibold ml-1">{`${durationRangeFilter[0]} - ${durationRangeFilter[1]}`}</span>
+                      </Label>
+                      <Slider
+                          id="filter-duration"
+                          min={defaultDurationRange[0]}
+                          max={defaultDurationRange[1]}
+                          step={1}
+                          value={durationRangeFilter}
+                          onValueChange={(value) => setDurationRangeFilter(value as [number, number])}
+                          className="w-full"
+                      />
+                  </div>
+                  <div>
+                      <Label htmlFor="filter-budget" className="flex items-center text-xs font-medium text-muted-foreground mb-2">
+                          <Wallet className="h-3.5 w-3.5 mr-1.5 text-sky-600"/>
+                          Budget (USD): <span className="font-semibold ml-1">{`$${budgetRangeFilter[0].toLocaleString()} - $${budgetRangeFilter[1].toLocaleString()}`}</span>
+                      </Label>
+                      <Slider
+                          id="filter-budget"
+                          min={defaultBudgetRange[0]}
+                          max={defaultBudgetRange[1]}
+                          step={1000}
+                          value={budgetRangeFilter}
+                          onValueChange={(value) => setBudgetRangeFilter(value as [number, number])}
+                          className="w-full"
+                      />
+                  </div>
+                </div>
+
+                {/* Col 3: Actions */}
+                <div className="flex flex-col justify-end space-y-2 lg:col-span-1">
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setSearchTerm("");
+                    setFilterQualification(undefined);
+                    setFilterRegion(undefined);
+                    // Reset sliders to defaults (assert as tuple)
+                    setDurationRangeFilter(defaultDurationRange as [number, number]);
+                    setBudgetRangeFilter(defaultBudgetRange as [number, number]);
+                  }} className="w-full flex items-center">
+                    <FilterX className="h-4 w-4 mr-2"/> Clear Filters
+                  </Button>
             {isGuest && (
-              <div className="text-amber-600 text-sm mr-2 flex items-center">
-                <Shield className="h-4 w-4 mr-1" />
-                <span>Guest mode: {guestPathwayGenerationCount}/{maxGuestPathwayGenerations}</span>
+                    <div className="text-amber-600 text-xs text-center p-1.5 bg-amber-50 border border-amber-200 rounded-md flex items-center justify-center">
+                      <Shield className="h-3.5 w-3.5 mr-1" />
+                      <span>Guest: {guestPathwayGenerationCount}/{maxGuestPathwayGenerations}</span>
               </div>
             )}
-          
-            <Button 
-              onClick={handleGeneratePathways}
-              disabled={generating || hasReachedLimit || isActionLoading}
-              className="flex items-center gap-2"
-            >
-              {generating ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait...</>
-              ) : isActionLoading ? (
-                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Working...</>
-              ) : pathways.length === 0 ? (
-                 <>Generate Pathways <Sparkles className="ml-2 h-4 w-4" /></>
-              ) : (
-                 <>Generate More Pathways <Sparkles className="ml-2 h-4 w-4" /></>
-              )}
+                  <Button onClick={handleGeneratePathways} disabled={generating || hasReachedLimit || isActionLoading} className="w-full flex items-center">
+                    {generating ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait...</>) 
+                      : isActionLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Working...</>) 
+                      : pathways.length === 0 ? (<>Generate Pathways <Sparkles className="ml-2 h-4 w-4" /></>) 
+                      : (<>Generate More <Sparkles className="ml-2 h-4 w-4" /></>)} 
             </Button>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
         
@@ -530,7 +692,7 @@ export function PathwayExplorer({
         )}
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {sortedPathways.map((pathway) => (
+          {filteredPathways.map((pathway) => (
             <EnhancedPathwayCard 
               key={pathway.id} 
               pathway={pathway}

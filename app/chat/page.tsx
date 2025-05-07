@@ -15,6 +15,7 @@ import Image from "next/image";
 export default function ChatPage() {
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
   const { isLoading } = useConversationStore();
+  const resetState = useConversationStore(state => state.resetState);
   // Get active conversation ID and loader
   const activeConversationId = useConversationStore(state => state.activeConversationId);
   const loadConversation       = useConversationStore(state => state.loadConversation);
@@ -23,8 +24,14 @@ export default function ChatPage() {
   useEffect(() => {
     if (activeConversationId) {
       loadConversation(activeConversationId);
+    } else {
+      // If there is no active conversation selected (the user navigated to /chat directly
+      // after using a quick chat) we don't want to display the ephemeral quick-chat
+      // messages that live in the global store. Clearing the transient chat state here
+      // ensures the chat page starts clean and the orphaned messages aren't rendered.
+      resetState();
     }
-  }, [activeConversationId, loadConversation]);
+  }, [activeConversationId, loadConversation, resetState]);
   
   // Add subtle animations to decorative elements
   useEffect(() => {

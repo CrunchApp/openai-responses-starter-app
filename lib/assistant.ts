@@ -247,22 +247,23 @@ export const processMessages = async () => {
           switch (item.type) {
             case "message": {
               // Skip user messages (they are already present locally to avoid duplication)
-              if (item.role === "user") {
+              if (item.role === 'user') {
                 break; // Prevent duplicate user messages
               }
 
               // Assistant messages: add only to conversationItems (stream handled elsewhere)
-              if (item.role === "assistant") {
-                const itemExists = localConversationItems.some(
-                  (ci) => ci.role === "assistant" && JSON.stringify(ci.content) === JSON.stringify(item.content)
-                );
-                if (!itemExists) {
-                  console.log("Adding assistant message to conversationItems only:", item.id);
-                  localConversationItems.push({
-                    role: "assistant",
-                    content: item.content,
-                  });
-                  setConversationItems([...localConversationItems]);
+              if (item.role === 'assistant') {
+                // Only add if there's actual text content (avoid empty placeholder)
+                const hasTextContent = Array.isArray(item.content) &&
+                  (item.content as ContentItem[]).some((c: ContentItem) => typeof c.text === 'string' && c.text!.trim() !== '');
+                if (hasTextContent) {
+                  const itemExists = localConversationItems.some(
+                    ci => ci.role === 'assistant' && JSON.stringify(ci.content) === JSON.stringify(item.content)
+                  );
+                  if (!itemExists) {
+                    localConversationItems.push({ role: 'assistant', content: item.content });
+                    setConversationItems([...localConversationItems]);
+                  }
                 }
                 break;
               }

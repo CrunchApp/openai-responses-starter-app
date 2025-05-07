@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { UserProfile } from '@/app/types/profile-schema';
 import { EducationPathway, RecommendationProgram } from '@/app/recommendations/types';
 import { OpenAIError } from 'openai/error';
+import { fetchProgramPageLink } from '@/lib/ai/linkSearch';
 
 // Check for required environment variables
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -920,12 +921,22 @@ Think critically about the alignment. The match scores should be quantitative re
           }
         }
         
-        // Return the parsed data along with the response ID
+        // Enrich programs with accurate page links via Google Custom Search
+        const programsWithLinks = await Promise.all(
+          evaluatedData.programs.map(async program => {
+            const newLink = await fetchProgramPageLink(program.name, program.institution);
+            return {
+              ...program,
+              pageLink: newLink || program.pageLink
+            };
+          })
+        );
+
+        // Return the enriched programs along with the response ID
         return {
-          programs: evaluatedData.programs, // Note: The caller (parsePerplexityResponse) will add unique IDs.
+          programs: programsWithLinks,
           responseId: response.id // Return the response ID
-        }; 
-        
+        };
       } catch (parseError) {
         console.error('JSON parsing error during evaluation:', parseError instanceof Error ? parseError.message : String(parseError));
         console.error('Raw Evaluation Output Text:', outputText.substring(0, 500) + (outputText.length > 500 ? '...(truncated)' : ''));
@@ -1071,9 +1082,20 @@ Respond ONLY with the valid JSON object conforming strictly to the program evalu
 
         console.log(`Successfully parsed ${evaluatedData.programs.length} additional evaluated programs.`);
 
-        // Return the parsed data along with the new response ID
+        // Enrich programs with accurate page links via Google Custom Search
+        const programsWithLinks = await Promise.all(
+          evaluatedData.programs.map(async program => {
+            const newLink = await fetchProgramPageLink(program.name, program.institution);
+            return {
+              ...program,
+              pageLink: newLink || program.pageLink
+            };
+          })
+        );
+
+        // Return the enriched programs along with the new response ID
         return {
-          programs: evaluatedData.programs,
+          programs: programsWithLinks,
           responseId: response.id // Return the NEW response ID for this turn
         };
 

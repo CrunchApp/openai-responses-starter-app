@@ -110,6 +110,7 @@ export default function PathwayDetailsPage() {
     moreProgramsLoading,
     moreProgramsError,
     getMorePrograms,
+    syncProgramsForPathway,
   } = usePathwayStore();
   const { user } = useAuth();
   const [appMap, setAppMap] = useState<Record<string, string>>({});
@@ -221,6 +222,13 @@ export default function PathwayDetailsPage() {
     getMorePrograms(pathwayId, profileData);
   };
   
+  // Fetch the latest program list from DB whenever this pathway page loads or changes
+  useEffect(() => {
+    if (pathwayId) {
+      syncProgramsForPathway(pathwayId);
+    }
+  }, [pathwayId, syncProgramsForPathway]);
+
   if (!pathway && !isLoading) {
     return (
       <div className="container mx-auto py-8 px-4 max-w-4xl">

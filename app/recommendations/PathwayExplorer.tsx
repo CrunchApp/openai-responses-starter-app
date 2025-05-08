@@ -129,7 +129,6 @@ export function PathwayExplorer({
   // Toast for user feedback
   const { toast } = useToast();
   
-  // Note: Pathway synchronization is now handled by AuthSynchronizer component
   
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -271,6 +270,14 @@ export function PathwayExplorer({
       return true;
     });
   }, [sortedPathways, searchTerm, filterQualification, filterRegion, durationMinSel, durationMaxSel, budgetRangeFilter]);
+  
+  // Sync pathways from Supabase on mount or when user logs in
+  useEffect(() => {
+    if (user && !authLoading && pathways.length === 0) {
+      // Fetch fresh pathways from the database
+      syncWithSupabase(user.id);
+    }
+  }, [user, authLoading, pathways.length, syncWithSupabase]);
   
   // Show loading state when initial load or auth is loading
   if (isLoading || authLoading) {

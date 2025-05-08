@@ -56,6 +56,7 @@ import SignupModal from "@/app/auth/SignupModal";
 import { UserProfile } from "@/app/types/profile-schema";
 import { list_user_applications } from "@/config/functions";
 import { ApplicationsView } from "./ApplicationsView";
+import { CustomRecommendationsView } from "./CustomRecommendationsView";
 
 // Add interface for Supabase profile to fix type issues
 interface SupabaseProfile {
@@ -688,6 +689,13 @@ export default function RecommendationsPage() {
                     <Heart className="w-4 h-4 mr-2" />
                     Saved Programs
                   </TabsTrigger>
+                  <TabsTrigger
+                    value="direct"
+                    className="text-sm md:text-base px-2 py-3 h-auto data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none transition-all duration-200"
+                  >
+                    <Star className="w-4 h-4 mr-2" />
+                    Direct Recs
+                  </TabsTrigger>
                   <TabsTrigger 
                     value="applications" 
                     className="text-sm md:text-base px-2 py-3 h-auto data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none transition-all duration-200"
@@ -728,6 +736,10 @@ export default function RecommendationsPage() {
                     </div>
                   )}
                 </div>
+              </TabsContent>
+              
+              <TabsContent value="direct">
+                <CustomRecommendationsView />
               </TabsContent>
               
               <TabsContent value="applications">

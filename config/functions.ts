@@ -129,6 +129,24 @@ export const update_application_timeline = async ({ application_id, timeline }: 
   return res;
 };
 
+export const create_pathway = async (params: any) => {
+  const res = await fetch(`/api/functions/create_pathway`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  }).then((r) => r.json());
+  return res; // { success: boolean, pathway_id?: string, error?: string }
+};
+
+export const create_recommendation = async (params: any) => {
+  const res = await fetch(`/api/functions/create_recommendation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  }).then((r) => r.json());
+  return res; // { success: boolean, recommendation_id?: string, error?: string }
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -141,4 +159,6 @@ export const functionsMap = {
   create_application_task: create_application_task,
   delete_application_task: delete_application_task,
   update_application_timeline: update_application_timeline,
+  create_pathway: create_pathway,
+  create_recommendation: create_recommendation,
 };

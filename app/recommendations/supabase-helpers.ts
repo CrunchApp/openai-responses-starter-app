@@ -130,6 +130,7 @@ export async function fetchUserRecommendations(userId: string): Promise<{
         highlights: Array.isArray(item.highlights) ? item.highlights : [],
         pageLinks: linksArray,
         pageLink: linksArray[0] || '',
+        pathway_id: item.pathway_id || null,
         matchRationale: item.match_rationale && typeof item.match_rationale === 'object'
           ? {
               careerAlignment: item.match_rationale.careerAlignment ?? 0,

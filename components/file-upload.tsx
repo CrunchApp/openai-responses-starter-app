@@ -165,7 +165,7 @@ export default function FileUpload({
       <DialogContent className="sm:max-w-[500px] md:max-w-[600px] max-h-[80vh] overflow-y-scrollfrtdtd">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add files to your vector store</DialogTitle>
+            <DialogTitle>Add files to your Vista assistant's knowledge base</DialogTitle>
           </DialogHeader>
           <div className="my-6">
             {!vectorStoreId || disabled ? (
@@ -179,8 +179,8 @@ export default function FileUpload({
             ) : (
               <div className="flex items-center justify-between flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="text-sm font-medium w-24 text-nowrap">
-                    Vector store
+                  <div className="text-sm font-medium w-24 text-wrap">
+                    Knowledge base ID
                   </div>
                   <div className="text-zinc-400 text-xs font-mono flex-1 text-ellipsis truncate">
                     {vectorStoreId}

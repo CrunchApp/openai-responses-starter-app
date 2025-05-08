@@ -50,7 +50,7 @@ const pathwaySchema = {
       items: {
         type: "object",
         properties: {
-          title: { type: "string", description: "A concise title describing the pathway" },
+          title: { type: "string", description: "A concise title describing the pathway (e.g. Financial Technology, Data Analytics, Marketing, Chemical Engineering, International Commercial and Energy Law)" },
           qualificationType: { type: "string", description: "The type of qualification/degree suggested (e.g., Degree, Certificate, Diploma)" },
           fieldOfStudy: { type: "string", description: "Main field(s) of study" },
           subfields: { type: "array", items: { type: "string" }, description: "Specialization areas within the field of study" },

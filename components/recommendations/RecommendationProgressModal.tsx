@@ -152,7 +152,7 @@ export function RecommendationProgressModal({
   const scenarioStartId = progressStages[0]?.id;
   const isPathwayGen = ['analyzing', 'pathways-start', 'pathways-complete'].includes(scenarioStartId);
   const defaultEstimatedTime = !isComplete
-    ? (isPathwayGen ? '≈1 minute' : '≈2 minutes')
+    ? (isPathwayGen ? '≈2 minute' : '≈3 minutes')
     : undefined;
   const displayEstimatedTime = estimatedTimeRemaining || defaultEstimatedTime;
 

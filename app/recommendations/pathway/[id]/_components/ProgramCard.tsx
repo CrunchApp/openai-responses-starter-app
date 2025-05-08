@@ -69,8 +69,8 @@ export function ProgramCard({
   applicationId: initialAppId,
 }: { 
   program: RecommendationProgram;
-  pathwayTitle: string;
-  pathwayId: string;
+  pathwayTitle?: string;
+  pathwayId?: string;
   onToggleFavorite: () => void;
   onSubmitFeedback: (reason: string, details?: string) => void;
   onDeleteProgram: () => void;
@@ -180,10 +180,13 @@ export function ProgramCard({
               <Badge variant="outline" className="text-xs font-medium whitespace-nowrap">{program.degreeType}</Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-1">{program.institution}</p>
-            <div className="flex items-center text-xs text-muted-foreground mt-1.5">
-              <BookOpen aria-hidden="true" className="h-3.5 w-3.5 mr-1.5 text-blue-500" />
-              <span>Part of {pathwayTitle} pathway</span>
-            </div>
+            {/* Only show pathway info if provided */}
+            {pathwayId && pathwayTitle && (
+              <div className="flex items-center text-xs text-muted-foreground mt-1.5">
+                <BookOpen aria-hidden="true" className="h-3.5 w-3.5 mr-1.5 text-blue-500" />
+                <span>Part of {pathwayTitle} pathway</span>
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end">
             <Button

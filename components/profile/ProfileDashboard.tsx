@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft, Loader2, Save, X, Plus, Trash2, Sparkles, Languages } from "lucide-react";
+import { Check, FileText, User, BookOpen, Briefcase, Settings, Edit, ArrowLeft, Loader2, Save, X, Plus, Trash2, UserRoundPen, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
@@ -1467,7 +1467,7 @@ export default function ProfileDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
-                <Sparkles className="h-5 w-5 text-primary" />
+                <UserRoundPen className="h-5 w-5 text-primary" />
               </div>
               <h3 className="font-semibold text-xl text-primary">Profile Completion</h3>
             </div>
@@ -1847,7 +1847,7 @@ export default function ProfileDashboard() {
                       </>
                     ) : (
                       <>
-                        <Sparkles className="mr-1 h-4 w-4" />
+                        <UserRoundPen className="mr-1 h-4 w-4" />
                         Auto-fill My Profile from Uploaded Documents
                       </>
                     )}

@@ -153,7 +153,7 @@ export default function ChatPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="w-full md:w-[80%] relative bg-gradient-to-b from-background/20 to-background/10 backdrop-blur-sm"
+            className="w-full md:w-[70%] relative bg-gradient-to-b from-background/20 to-background/10 backdrop-blur-sm"
           >
             {/* Loading Overlay */}
             {isLoading && (
@@ -174,7 +174,7 @@ export default function ChatPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="hidden md:flex md:flex-col md:w-[20%] border-l border-primary/10 bg-gradient-to-b from-background/10 to-background/20 backdrop-blur-sm"
+            className="hidden md:flex md:flex-col md:w-[30%] border-l border-primary/10 bg-gradient-to-b from-background/10 to-background/20 backdrop-blur-sm"
           >
             <div className="p-5 border-b border-primary/10">
               <ConversationSelector />

@@ -385,7 +385,7 @@ export function PathwayExplorer({
     let programSuccess = true;
     if (onStartGeneration) {
       const programStages = RECOMMENDATION_STAGES_ENHANCED.slice(3, 6);
-      const programTimings = [5500, 7500, 8000];
+      const programTimings = [15000, 25000, 45000];
       onStartGeneration(programStages, programTimings);
     }
     

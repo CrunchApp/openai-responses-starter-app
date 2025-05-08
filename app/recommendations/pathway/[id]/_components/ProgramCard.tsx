@@ -510,7 +510,7 @@ export function ProgramCard({
                     <DialogHeader>
                       <DialogTitle>Explore Program Links</DialogTitle>
                       <DialogDescription>
-                        These links are AI-generated and will take you to external sources.
+                        Our links are AI-generated and might not always take you to the actual program page.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-2 mt-4">

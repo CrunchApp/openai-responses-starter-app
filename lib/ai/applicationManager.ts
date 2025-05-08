@@ -82,10 +82,6 @@ const applicationPlanSchema = {
 /**
  * Generates a detailed application checklist & timeline by leveraging OpenAI's Responses API
  * with file_search and web_search tools.
- *
- * This is an early PoC implementation. It uses a simple prompt and relies on the model's internal
- * reasoning rather than a strict schema. In future iterations, migrate to Structured Outputs with
- * JSON Schema for stronger guarantees.
  */
 export async function generateApplicationPlan(params: {
   profileFileId: string;

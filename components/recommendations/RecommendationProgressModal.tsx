@@ -47,19 +47,19 @@ export const RECOMMENDATION_STAGES_ENHANCED = [
   // Research Loop (simulated for up to 3 pathways)
   {
     id: 'research-init-1',
-    title: 'Researching Pathway 1',
-    description: 'Preparing to search for programs matching the first pathway.',
+    title: 'Researching Pathway',
+    description: 'Preparing to search for programs matching this pathway.',
     icon: <Search className="w-5 h-5" />
   },
   {
     id: 'research-web-1',
-    title: 'Querying Perplexity (Pathway 1)',
+    title: 'Querying Perplexity',
     description: 'Searching global databases for relevant programs.',
     icon: <Globe className="w-5 h-5" />
   },
   {
     id: 'research-parse-1',
-    title: 'Processing Results (Pathway 1)',
+    title: 'Processing Results',
     description: 'Using AI to structure program data from search.',
     icon: <Database className="w-5 h-5" />
   },
@@ -174,7 +174,7 @@ export function RecommendationProgressModal({
           )}
           {displayEstimatedTime && !isComplete && (
             <p className="text-center text-sm text-gray-500 mb-4">
-              Estimated time remaining: {displayEstimatedTime}
+              Estimated time: {displayEstimatedTime}
             </p>
           )}
           <Progress 

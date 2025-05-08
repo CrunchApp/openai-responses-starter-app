@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ToolCall from "./tool-call";
 import Message from "./message";
 import Annotations from "./annotations";
-import { Item } from "@/lib/assistant";
+import { Item, MessageItem } from "@/lib/assistant";
 import AnimatedLogo from "./ui/AnimatedLogo";
 import useConversationStore from "@/stores/useConversationStore";
 import { motion } from "framer-motion";
@@ -30,6 +30,14 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage, userData }) => {
   const [isComposing, setIsComposing] = useState(false);
   const { isLoading } = useConversationStore();
 
+  // Access global error state and setter
+  const error = useConversationStore(state => state.error);
+  const setError = useConversationStore(state => state.setError);
+
+  // Get last user message text for retry
+  const lastUserMsgItem = [...items].reverse().find((item): item is MessageItem => item.type === "message" && item.role === "user");
+  const lastUserText = (lastUserMsgItem?.content?.[0]?.text as string) || "";
+
   const scrollToBottom = () => {
     itemsEndRef.current?.scrollIntoView({ behavior: "instant" });
   };
@@ -37,31 +45,14 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage, userData }) => {
   // Enhanced send message handler that manages local typing state
   const handleSendMessageWithTyping = useCallback((message: string) => {
     if (!message.trim() || isTyping) return;
-    
-    setIsTyping(true); // Show typing indicator
-    
+
+    // Clear previous errors and show typing indicator
+    setError(null);
+    setIsTyping(true);
+
     // Send the message
     onSendMessage(message);
-    
-    // Check if a response has been added to items after a short delay
-    const checkForResponse = () => {
-      // Find the last user message index
-      const lastUserMsgIndex = [...items].reverse().findIndex(
-        item => item.type === "message" && item.role === "user"
-      );
-      
-      // If we have a new message or tool call after the user's last message, stop typing
-      if (lastUserMsgIndex !== 0) {
-        setIsTyping(false);
-      } else {
-        // Still waiting for response, check again soon
-        setTimeout(checkForResponse, 500);
-      }
-    };
-    
-    // Start checking after a short delay
-    setTimeout(checkForResponse, 1000);
-  }, [onSendMessage, items, isTyping]);
+  }, [onSendMessage, isTyping, setError]);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !isComposing) {
@@ -206,6 +197,24 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage, userData }) => {
             </div>
           </div>
         )}
+        {/* Inline error message with retry */}
+        {error && lastUserText && (
+          <div className="px-4 md:px-6 py-2">
+            <div className="bg-red-100 text-red-700 p-3 rounded-md flex justify-between items-center">
+              <span>{error}</span>
+              <button
+                onClick={() => {
+                  setError(null);
+                  handleSendMessageWithTyping(lastUserText);
+                }}
+                className="underline text-red-700 font-medium ml-4"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Input area */}
         <div className="px-4 md:px-6 py-4 bg-gradient-to-r from-background to-background/95 backdrop-blur-sm border-t border-primary/10">
           <div className="flex items-center">
             <div className="flex w-full items-center">

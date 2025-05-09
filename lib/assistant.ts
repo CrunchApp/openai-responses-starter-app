@@ -58,7 +58,16 @@ export const handleTurn = async (
     });
 
     if (!response.ok) {
+      // Capture HTTP error and set global error state
       console.error(`Error: ${response.status} - ${response.statusText}`);
+      let errMsg = `Error ${response.status}: ${response.statusText}`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.error) {
+          errMsg = errJson.error;
+        }
+      } catch {}
+      useConversationStore.getState().setError(errMsg);
       return;
     }
 
@@ -98,8 +107,11 @@ export const handleTurn = async (
         onMessage(data);
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error handling turn:", error);
+    // Set global error state for network or streaming errors
+    const errMsg = error?.message || String(error);
+    useConversationStore.getState().setError(errMsg);
   }
 };
 

@@ -48,7 +48,7 @@ export default function Assistant() {
     // If authenticated but no active conversation, create one first, passing the message
     if (!currentActiveConversationId) {
       console.log('Creating new conversation with first message for title generation');
-      // Pass the message content to createNewConversation
+      // Pass the message content to createNewConversation - this adds the user message
       const newConversationId = await createNewConversation(message);
       
       if (!newConversationId) {
@@ -57,6 +57,10 @@ export default function Assistant() {
       }
       // Update the local variable for the rest of the function
       currentActiveConversationId = newConversationId;
+
+      // Trigger processing immediately; createNewConversation already added the first user message
+      await processMessages();
+      return;
     }
 
     // Ensure we have an active ID before proceeding

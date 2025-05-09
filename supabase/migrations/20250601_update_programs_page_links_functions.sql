@@ -111,7 +111,20 @@ BEGIN
     'page_link',             p.page_link,
     'page_links',            p.page_links,
     'scholarships',
-      CASE WHEN jsonb_typeof(p.page_links) = 'array' THEN p.page_links ELSE '[]'::jsonb END
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'name', ps.name,
+              'amount', ps.amount,
+              'eligibility', ps.eligibility
+            )
+          )
+          FROM program_scholarships ps
+          WHERE ps.program_id = p.id
+        ),
+        '[]'::jsonb
+      )
   )
   FROM recommendations r
   JOIN programs p ON p.id = r.program_id

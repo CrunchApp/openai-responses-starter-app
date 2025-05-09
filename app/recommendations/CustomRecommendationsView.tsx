@@ -10,6 +10,7 @@ import {
   archiveRecommendationProgram,
   restoreRecommendationFeedback,
 } from './supabase-helpers';
+import { list_user_applications } from '@/config/functions';
 import { RecommendationProgram } from './types';
 import { ProgramCard } from './pathway/[id]/_components/ProgramCard';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -22,6 +23,7 @@ export function CustomRecommendationsView() {
   const [recommendations, setRecommendations] = useState<RecommendationProgram[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [appMap, setAppMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -38,6 +40,23 @@ export function CustomRecommendationsView() {
       })
       .catch((err) => setError(err.message || String(err)))
       .finally(() => setLoading(false));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    list_user_applications()
+      .then((res) => {
+        if (res.success && Array.isArray(res.applications)) {
+          const map: Record<string, string> = {};
+          res.applications.forEach((app: any) => {
+            if (app.recommendation_id) {
+              map[app.recommendation_id] = app.id;
+            }
+          });
+          setAppMap(map);
+        }
+      })
+      .catch((err) => console.error(err));
   }, [user]);
 
   if (loading) return (
@@ -75,7 +94,7 @@ export function CustomRecommendationsView() {
           onDeleteProgram={() => user && archiveRecommendationProgram(user.id, prog.id!)}
           isGuest={isGuest}
           onRestoreFeedback={() => user && restoreRecommendationFeedback(user.id, prog.id!)}
-          applicationId={undefined}
+          applicationId={prog.id ? appMap[prog.id] : undefined}
         />
       ))}
     </div>

@@ -17,19 +17,51 @@ export async function POST(request: NextRequest) {
     }
     const userId = user.id;
 
-    const { recommendation_id, previous_response_id } = await request.json();
-    if (!recommendation_id) {
+    const { recommendation_id, program_name, institution, previous_response_id } = await request.json();
+    // Determine recommendation ID: use provided recommendation_id or infer from program name & institution
+    let recId: string | undefined = recommendation_id;
+    if (!recId) {
+      if (program_name && institution) {
+        // Attempt to find existing recommendation for given program
+        // First find the program by name/institution
+        const { data: programRow, error: progErr } = await supabase
+          .from('programs')
+          .select('id')
+          .ilike('name', `%${program_name.trim()}%`)
+          .ilike('institution', `%${institution.trim()}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!progErr && programRow?.id) {
+          const programId = programRow.id;
+          // Find recommendation for this program and user
+          const { data: recRow, error: recErr } = await supabase
+            .from('recommendations')
+            .select('id')
+            .eq('program_id', programId)
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!recErr && recRow?.id) {
+            recId = recRow.id;
+          }
+        }
+      }
+    }
+    if (!recId) {
       return NextResponse.json(
-        { error: "Missing recommendation_id" },
+        { error: 'Recommendation ID not provided and could not be inferred from program name/institution' },
         { status: 400 }
       );
     }
+    const recommendation_id_final = recId;
 
     // Fetch program file id from recommendation_files table, but don't abort if missing
     const { data: recFileRow, error: recFileError } = await supabase
       .from("recommendation_files")
       .select("file_id")
-      .eq("recommendation_id", recommendation_id)
+      .eq("recommendation_id", recommendation_id_final)
       .maybeSingle();
     let programFileId: string;
     if (recFileError) {
@@ -81,7 +113,7 @@ export async function POST(request: NextRequest) {
     const { data: recRow, error: recError } = await supabase
       .from('recommendations')
       .select('program_id')
-      .eq('id', recommendation_id)
+      .eq('id', recommendation_id_final)
       .maybeSingle();
     if (recError || !recRow || !recRow.program_id) {
       return NextResponse.json({ error: 'Failed to fetch recommendation program ID' }, { status: 500 });
@@ -112,7 +144,7 @@ export async function POST(request: NextRequest) {
     // Store in database
     const result = await createApplicationWithPlan(supabase, {
       userId,
-      recommendationId: recommendation_id,
+      recommendationId: recommendation_id_final,
       profileFileId,
       programFileId,
       plan,

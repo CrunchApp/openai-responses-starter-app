@@ -70,25 +70,13 @@ async function saveRecommendationFileId(
       .eq('id', recommendationId)
       .maybeSingle();
     
-    if (checkError || !recommendationExists) {
-      console.log(`Recommendation not found with id column, trying recommendation_id column...`);
-      
-      // Try with recommendation_id column
-      const { data: altRecommendationExists, error: altCheckError } = await supabase
-        .from('recommendations')
-        .select('id')
-        .eq('recommendation_id', recommendationId)
-        .maybeSingle();
-      
-      if (altCheckError || !altRecommendationExists) {
-        console.error('Error checking if recommendation exists:', checkError || altCheckError);
-        console.error(`Cannot save file: Recommendation ID ${recommendationId} does not exist in the database with either id or recommendation_id`);
-        return false;
-      }
-      
-      // Found with recommendation_id, use its actual id
-      recommendationId = altRecommendationExists.id;
-      console.log(`Found recommendation using recommendation_id, actual id is: ${recommendationId}`);
+    if (checkError) {
+      console.error('Error checking if recommendation exists:', checkError);
+      return false;
+    }
+    if (!recommendationExists) {
+      console.error(`Cannot save file: Recommendation ID ${recommendationId} does not exist in the database`);
+      return false;
     }
     
     // Before inserting, delete any existing files for this recommendation
@@ -503,7 +491,7 @@ export async function syncSingleRecommendationToVectorStore(
     const base64Content = stringToBase64(recommendationJson);
     
     // Use a consistent naming pattern for recommendation files, including pathway_id
-    const fileName = `program_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendation.id}.json`;
+    const fileName = `recommendation_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendation.id}.json`;
     
     const fileObject = { name: fileName, content: base64Content };
     
@@ -766,7 +754,7 @@ export async function syncProgramsToVectorStore(
         const base64Content = stringToBase64(recommendationJson);
         
         // Use a consistent naming pattern for program files, including pathway_id
-        const fileName = `program_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendationId}.json`;
+        const fileName = `recommendation_${userId}_${recommendation.pathway_id || 'no-pathway'}_${recommendationId}.json`;
         
         const fileObject = { name: fileName, content: base64Content };
         

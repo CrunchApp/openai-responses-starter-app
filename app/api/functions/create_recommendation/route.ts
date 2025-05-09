@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { syncSingleRecommendationToVectorStore } from "@/app/recommendations/vector-store-helpers";
+import { fetchProgramPageLinks } from '@/lib/ai/linkSearch';
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,6 +73,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Consolidate links: preserve LLM link and add custom search candidates
+    const llmLink = program.page_link as string;
+    const customLinks = await fetchProgramPageLinks(program.name, program.institution);
+    const pageLinks = Array.from(new Set([
+      ...(llmLink ? [llmLink] : []),
+      ...customLinks
+    ]));
+    const pageLink = pageLinks[0] || '';
+
+    // Enforce scholarship data: require non-empty scholarships array
+    if (!Array.isArray(program.scholarships) || program.scholarships.length === 0) {
+      return NextResponse.json(
+        { error: "Missing required program field: scholarships. Please gather scholarship information via web_search." },
+        { status: 400 }
+      );
+    }
+
+    // Avoid duplicate recommendations: check if this program already recommended
+    const { data: existingPrograms } = await supabase
+      .from('programs')
+      .select('id')
+      .eq('name', program.name)
+      .eq('institution', program.institution)
+      .limit(1);
+    if (existingPrograms && existingPrograms.length > 0) {
+      const existingProgramId = existingPrograms[0].id;
+      const { data: existingRec } = await supabase
+        .from('recommendations')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('program_id', existingProgramId)
+        .maybeSingle();
+
+      /*
+        If the current user already has a recommendation for this program we should
+        inform the assistant so it can pick a different, truly "new" program.
+        Returning success: true here (the previous behaviour) made the model think it
+        had successfully created something novel which resulted in duplicate
+        suggestions.  Instead we now return an explicit 409 (Conflict) together with
+        success: false and the existing recommendation_id so the assistant can act
+        accordingly (e.g. choose another program or simply surface the existing one).
+      */
+      if (existingRec && existingRec.id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Program already recommended for this user. Please choose a different program or return the existing recommendation instead of creating a duplicate.",
+            recommendation_id: existingRec.id,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // ----- Sanitize numeric scores -----
+    const rawMatchScore = program.match_score;
+    let matchScoreInt: number;
+    if (typeof rawMatchScore === "number") {
+      matchScoreInt = rawMatchScore <= 1 ? Math.round(rawMatchScore * 100) : Math.round(rawMatchScore);
+    } else {
+      matchScoreInt = 70; // default
+    }
+
+    const convertSubScore = (val: any) => {
+      if (typeof val === "number") {
+        const num = val <= 1 ? val * 100 : val;
+        return Math.min(100, Math.max(0, Math.round(num)));
+      }
+      return 70;
+    };
+
+    const sanitizedRationale = {
+      careerAlignment: convertSubScore(program.match_rationale?.careerAlignment),
+      budgetFit: convertSubScore(program.match_rationale?.budgetFit),
+      locationMatch: convertSubScore(program.match_rationale?.locationMatch),
+      academicFit: convertSubScore(program.match_rationale?.academicFit),
+    };
+
     // Prepare recommendation payload for RPC
     const recommendationData = {
       name: program.name,
@@ -84,14 +163,14 @@ export async function POST(request: NextRequest) {
       location: program.location,
       startDate: program.start_date,
       applicationDeadline: program.application_deadline,
+      pageLink: pageLink,
+      pageLinks: pageLinks,
       requirements: program.requirements || [],
       highlights: program.highlights || [],
-      pageLink: program.page_link,
-      pageLinks: program.page_links || [],
-      match_score: program.match_score,
-      is_favorite: program.is_favorite || false,
-      match_rationale: program.match_rationale,
       scholarships: program.scholarships || [],
+      match_score: matchScoreInt,
+      is_favorite: program.is_favorite || false,
+      match_rationale: sanitizedRationale,
     };
 
     // Call RPC store_recommendation
@@ -157,11 +236,24 @@ export async function POST(request: NextRequest) {
           id: recommendationId,
           program_id: programId,
           pathway_id: null,
-          ...program,
+          name: program.name,
+          institution: program.institution,
+          degreeType: program.degree_type,
+          fieldOfStudy: program.field_of_study,
+          description: program.description,
+          costPerYear: program.cost_per_year,
+          duration: program.duration,
+          location: program.location,
+          startDate: program.start_date,
+          applicationDeadline: program.application_deadline,
+          requirements: program.requirements || [],
+          highlights: program.highlights || [],
+          pageLink: pageLink,
+          pageLinks: pageLinks,
           matchScore: program.match_score,
           matchRationale: program.match_rationale,
           isFavorite: program.is_favorite || false,
-          pageLinks: program.page_links || (program.page_link ? [program.page_link] : []),
+          scholarships: program.scholarships || [],
         },
         vectorStoreId
       );

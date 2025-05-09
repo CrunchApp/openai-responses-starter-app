@@ -33,6 +33,17 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage, userData }) => {
   // Access global error state and setter
   const error = useConversationStore(state => state.error);
   const setError = useConversationStore(state => state.setError);
+  const conversationItems = useConversationStore(state => state.conversationItems);
+  const setChatMessages = useConversationStore(state => state.setChatMessages);
+  const setConversationItems = useConversationStore(state => state.setConversationItems);
+  const setPreviousResponseId = useConversationStore(state => state.setPreviousResponseId);
+
+  // When a global error occurs, stop typing indicator
+  useEffect(() => {
+    if (error) {
+      setIsTyping(false);
+    }
+  }, [error]);
 
   // Get last user message text for retry
   const lastUserMsgItem = [...items].reverse().find((item): item is MessageItem => item.type === "message" && item.role === "user");
@@ -200,17 +211,31 @@ const Chat: React.FC<ChatProps> = ({ items, onSendMessage, userData }) => {
         {/* Inline error message with retry */}
         {error && lastUserText && (
           <div className="px-4 md:px-6 py-2">
-            <div className="bg-red-100 text-red-700 p-3 rounded-md flex justify-between items-center">
-              <span>{error}</span>
-              <button
-                onClick={() => {
-                  setError(null);
-                  handleSendMessageWithTyping(lastUserText);
-                }}
-                className="underline text-red-700 font-medium ml-4"
-              >
-                Retry
-              </button>
+            <div className="bg-red-100 text-red-700 p-3 rounded-md flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <span>{error}</span>
+                <button
+                  onClick={() => {
+                    // Clear error
+                    setError(null);
+                    // Trim chat messages to last user message
+                    const revMsgIdx = [...items].reverse().findIndex(item => item.type === "message" && item.role === "user");
+                    const lastUserIdx = revMsgIdx >= 0 ? items.length - 1 - revMsgIdx : items.length - 1;
+                    const trimmedChat = items.slice(0, lastUserIdx + 1);
+                    setChatMessages(trimmedChat);
+                    // Trim conversation items to last user entry
+                    const revConvIdx = [...conversationItems].reverse().findIndex(ci => ci.role === "user");
+                    const lastConvIdx = revConvIdx >= 0 ? conversationItems.length - 1 - revConvIdx : conversationItems.length - 1;
+                    const trimmedConv = conversationItems.slice(0, lastConvIdx + 1);
+                    setConversationItems(trimmedConv);
+                    // Reset response chain and retry
+                    setPreviousResponseId(null);
+                    handleSendMessageWithTyping(lastUserText);
+                  }}
+                  className="underline text-red-700 font-medium"
+                >Retry</button>
+              </div>
+              <div className="text-xs text-red-500">Your last request will be resent preserving context.</div>
             </div>
           </div>
         )}

@@ -101,6 +101,14 @@ export const list_user_applications = async () => {
   return res; // { success: boolean; applications?: Array<{ id: string; recommendation_id: string }>; error?: string }
 };
 
+export const list_user_pathways = async () => {
+  const res = await fetch(`/api/functions/list_user_pathways`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  }).then((r) => r.json());
+  return res; // { success: boolean; pathways?: Array<any>; error?: string }
+};
+
 // New functions for manual CRUD on application tasks and timeline
 export const create_application_task = async ({ application_id, title, description, due_date, sort_order }: { application_id: string; title: string; description: string; due_date: string; sort_order: number }) => {
   const res = await fetch(`/api/functions/create_application_task`, {
@@ -147,6 +155,18 @@ export const create_recommendation = async (params: any) => {
   return res; // { success: boolean, recommendation_id?: string, error?: string }
 };
 
+export const get_recommendation_by_program = async ({ name, institution }: { name?: string; institution?: string }) => {
+  const params = new URLSearchParams();
+  if (name) params.append('name', name);
+  if (institution) params.append('institution', institution);
+  // Require at least one param by route validation
+  const queryString = params.toString();
+  const res = await fetch(
+    `/api/functions/get_recommendation_by_program${queryString ? `?${queryString}` : ''}`
+  ).then((r) => r.json());
+  return res; // { success: boolean, recommendation_id?: string, program_id?: string, error?: string }
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -156,9 +176,11 @@ export const functionsMap = {
   update_application_task: update_application_task,
   save_application_plan: save_application_plan,
   list_user_applications: list_user_applications,
+  list_user_pathways: list_user_pathways,
   create_application_task: create_application_task,
   delete_application_task: delete_application_task,
   update_application_timeline: update_application_timeline,
   create_pathway: create_pathway,
   create_recommendation: create_recommendation,
+  get_recommendation_by_program: get_recommendation_by_program,
 };

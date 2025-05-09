@@ -45,7 +45,7 @@ export interface RecommendationProgram {
     submittedAt?: string;
   };
   scholarships?: Scholarship[];
-  pathway_id?: string; // ID of the education pathway this program belongs to
+  pathway_id?: string | null; // ID of the education pathway this program belongs to
   program_id?: string; // ID of the program in the programs table
   is_deleted?: boolean; // Added for soft delete
   restored?: boolean; // client side flag when bringing a program back

@@ -44,6 +44,18 @@ export const toolsList = [
         type: "string",
         description: "The ID of the recommendation/program the user is applying to.",
       },
+      program_name: {
+        type: "string",
+        description: "Optional program name to infer recommendation if recommendation_id is not provided.",
+      },
+      institution: {
+        type: "string",
+        description: "Optional institution name to infer recommendation if recommendation_id is not provided.",
+      },
+      previous_response_id: {
+        type: "string",
+        description: "Optional previous response ID for chaining across calls.",
+      },
     },
   },
   {
@@ -128,6 +140,11 @@ export const toolsList = [
   {
     name: "list_user_applications",
     description: "Retrieve all applications for the authenticated user, returning a list of application IDs and associated recommendation IDs.",
+    parameters: {},
+  },
+  {
+    name: "list_user_pathways",
+    description: "Retrieve all education pathways saved by the authenticated user, returning their full details.",
     parameters: {},
   },
   {
@@ -272,5 +289,14 @@ export const toolsList = [
         additionalProperties: false,
       },
     },
+  },
+  {
+    name: "get_recommendation_by_program",
+    description: "Look up an existing recommendation ID for the authenticated user by program name and institution so the assistant can reuse it instead of creating a duplicate.",
+    parameters: {
+      name: { type: "string", description: "Program name to search for (optional if institution provided)." },
+      institution: { type: "string", description: "Institution name to search for (optional if program name provided)." }
+    },
+    required: []
   },
 ];

@@ -55,6 +55,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<User | null>
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  resetPassword: (email: string) => Promise<void>
   refreshSession: () => Promise<void>
 }
 
@@ -227,6 +228,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Reset password via API
+  async function resetPassword(email: string): Promise<void> {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Password reset failed')
+    } catch (err) {
+      console.error('resetPassword error', err)
+      if (err instanceof Error) setError(err.message)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Refresh session manually
   async function refreshSession() {
     setLoading(true);
@@ -252,7 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, vectorStoreId, loading, error, signUp, signIn, signOut, refreshSession }}>
+    <AuthContext.Provider value={{ user, profile, vectorStoreId, loading, error, signUp, signIn, signOut, resetPassword, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

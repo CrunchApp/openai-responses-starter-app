@@ -30,6 +30,15 @@ const PUBLIC_API_ROUTES = [
   // Allow password reset API endpoints
   '/api/auth/reset-password',
   '/api/auth/reset-password/confirm',
+
+  // Public auth API endpoints
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/logout',
+  '/api/auth/session',
+  '/api/auth/social/google',
+  '/api/auth/social/linkedin',
+  '/api/auth/callback',
 ]
 
 export async function middleware(request: NextRequest) {

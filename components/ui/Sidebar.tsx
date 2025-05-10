@@ -191,14 +191,14 @@ export function Sidebar() {
                 onClick={openAvatarSelector}
               >
                 <AvatarImage 
-                  src={user?.user_metadata?.avatar_url || ''} 
-                  alt={profile?.first_name || 'User'} 
+                  src={user?.user_metadata['avatar_url'] || ''} 
+                  alt={profile?.firstName || 'User'} 
                 />
                 <AvatarFallback 
                   className={`bg-gradient-to-br from-primary/20 to-primary/10 text-primary transition-all duration-300 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}
                 >
-                  {profile?.first_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                  {profile?.last_name?.charAt(0) || ''}
+                  {profile?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  {profile?.lastName?.charAt(0) || ''}
                 </AvatarFallback>
               </Avatar>
               
@@ -217,7 +217,7 @@ export function Sidebar() {
               className="overflow-hidden"
             >
               <p className="font-medium text-foreground truncate whitespace-nowrap">
-                {profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}` : user.email}
+                {profile?.firstName ? `${profile.firstName} ${profile.lastName || ''}` : user.email}
               </p>
               <p className="text-xs text-foreground/60 truncate whitespace-nowrap">{user.email}</p>
             </motion.div>

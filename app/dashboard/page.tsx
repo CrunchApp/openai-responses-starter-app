@@ -13,7 +13,7 @@ import { GradCapAssistant } from "@/components/assistant/GradCapAssistant";
 export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
   
-  const displayName = profile?.first_name 
+  const displayName = profile?.firstName 
     || user?.email?.split('@')[0] 
     || 'there';
 

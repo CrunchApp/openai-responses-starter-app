@@ -18,15 +18,8 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 200 })
     }
     
-    // Return only the authenticated user object (or necessary parts)
-    // Avoid returning sensitive details if not needed client-side
-    return NextResponse.json({ 
-      user: {
-        id: user.id,
-        email: user.email,
-        // Add other non-sensitive fields if required by the client
-      } 
-    })
+    // Return the full authenticated user object (including metadata)
+    return NextResponse.json({ user })
     
   } catch (error) {
     console.error('Session route error:', error)

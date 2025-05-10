@@ -38,7 +38,7 @@ export default function AvatarSelector({ isOpen, onClose }: AvatarSelectorProps)
   const { user, refreshSession } = useAuth();
   const { toast } = useToast();
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(
-    user?.user_metadata?.avatar_url || null
+    (user?.user_metadata['avatar_url'] as string) || null
   );
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,8 +48,9 @@ export default function AvatarSelector({ isOpen, onClose }: AvatarSelectorProps)
 
   // Update selected avatar when user changes
   useEffect(() => {
-    if (user?.user_metadata?.avatar_url) {
-      setSelectedAvatar(user.user_metadata.avatar_url);
+    const url = user?.user_metadata['avatar_url'];
+    if (url) {
+      setSelectedAvatar(url as string);
     }
   }, [user]);
 

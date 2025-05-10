@@ -56,7 +56,7 @@ export default function SignupModal({ isOpen, onClose, onComplete, isLoading, pr
       }
 
       // Call onComplete with the new user ID
-      await onComplete(result.user?.id);
+      await onComplete(result.id);
     } catch (error) {
       console.error("Error signing up:", error);
       setSignupError(authError || "Failed to sign up. Please try again.");

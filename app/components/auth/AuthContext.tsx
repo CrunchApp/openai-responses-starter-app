@@ -52,7 +52,7 @@ interface AuthContextType {
   vectorStoreId: string | null
   loading: boolean
   error: string | null
-  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<void>
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<User | null>
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   refreshSession: () => Promise<void>
@@ -181,7 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Sign up via API
-  async function signUp(email: string, password: string, firstName: string, lastName: string) {
+  async function signUp(email: string, password: string, firstName: string, lastName: string): Promise<User | null> {
     try {
       setLoading(true);
       setError(null);
@@ -193,7 +193,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Signup failed');
-      router.push('/auth/login');
+      // Return the new user object for consumers
+      return data.user as User;
     } catch (err) {
       console.error('signUp error', err);
       if (err instanceof Error) setError(err.message);

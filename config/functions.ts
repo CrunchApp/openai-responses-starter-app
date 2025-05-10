@@ -167,6 +167,16 @@ export const get_recommendation_by_program = async ({ name, institution }: { nam
   return res; // { success: boolean, recommendation_id?: string, program_id?: string, error?: string }
 };
 
+// Add new function to update existing recommendations
+export const update_recommendation = async (params: { recommendation_id: string; program?: any; scholarships?: any[]; recommendation?: any; files?: any[] }) => {
+  const res = await fetch(`/api/functions/update_recommendation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  }).then((r) => r.json());
+  return res; // { success: boolean, error?: string }
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -183,4 +193,5 @@ export const functionsMap = {
   create_pathway: create_pathway,
   create_recommendation: create_recommendation,
   get_recommendation_by_program: get_recommendation_by_program,
+  update_recommendation: update_recommendation
 };

@@ -242,16 +242,17 @@ export const toolsList = [
           page_link: { type: "string" },
           scholarships: {
             type: "array",
+            description: "Optional updated list of scholarships for the program.",
             items: {
               type: "object",
               properties: {
                 name: { type: "string" },
                 amount: { type: "string" },
-                eligibility: { type: "string" },
+                eligibility: { type: "string" }
               },
               required: ["name", "amount", "eligibility"],
-              additionalProperties: false,
-            },
+              additionalProperties: false
+            }
           },
           match_score: { type: "number" },
           match_rationale: {
@@ -298,5 +299,100 @@ export const toolsList = [
       institution: { type: "string", description: "Institution name to search for (optional if program name provided)." }
     },
     required: []
+  },
+  {
+    name: "update_recommendation",
+    description: "Update an existing recommendation, including its program details, scholarships, and recommendation files.",
+    parameters: {
+      recommendation_id: { type: "string", description: "The UUID of the recommendation to update." },
+      program: {
+        type: "object",
+        description: "Optional updated program details.",
+        properties: {
+          name: { type: "string" },
+          institution: { type: "string" },
+          degree_type: { type: "string" },
+          field_of_study: { type: "string" },
+          description: { type: "string" },
+          cost_per_year: { type: "number" },
+          duration: { type: "number" },
+          location: { type: "string" },
+          start_date: { type: "string" },
+          application_deadline: { type: "string" },
+          requirements: { type: "array", items: { type: "string" } },
+          highlights: { type: "array", items: { type: "string" } },
+          page_link: { type: "string" },
+          page_links: { type: "array", items: { type: "string" } }
+        },
+        additionalProperties: false,
+        required: [
+          "name",
+          "institution",
+          "degree_type",
+          "field_of_study",
+          "description",
+          "cost_per_year",
+          "duration",
+          "location",
+          "start_date",
+          "application_deadline",
+          "requirements",
+          "highlights",
+          "page_link",
+          "page_links"
+        ]
+      },
+      scholarships: {
+        type: "array",
+        description: "Optional updated list of scholarships for the program.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            amount: { type: "string" },
+            eligibility: { type: "string" }
+          },
+          required: ["name", "amount", "eligibility"],
+          additionalProperties: false
+        }
+      },
+      recommendation: {
+        type: "object",
+        description: "Optional fields to update on the recommendation record.",
+        properties: {
+          match_score: { type: "number" },
+          match_rationale: {
+            type: "object",
+            properties: {
+              careerAlignment: { type: "number" },
+              budgetFit: { type: "number" },
+              locationMatch: { type: "number" },
+              academicFit: { type: "number" }
+            },
+            additionalProperties: false,
+            required: ["careerAlignment", "budgetFit", "locationMatch", "academicFit"]
+          },
+          is_favorite: { type: "boolean" },
+          pathway_id: { type: "string", description: "New pathway ID or null to detach." },
+          vector_store_id: { type: "string", description: "Optional new vector store ID." }
+        },
+        additionalProperties: false,
+        required: ["match_score", "match_rationale", "is_favorite", "pathway_id", "vector_store_id"]
+      },
+      files: {
+        type: "array",
+        description: "Optional updated list of recommendation files (OpenAI file IDs).",
+        items: {
+          type: "object",
+          properties: {
+            file_id: { type: "string" },
+            file_name: { type: "string" }
+          },
+          required: ["file_id", "file_name"],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ["recommendation_id"]
   },
 ];

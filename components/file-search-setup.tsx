@@ -21,9 +21,14 @@ export default function FileSearchSetup() {
   
   // Sync the tools store with the most current vectorStoreId
   useEffect(() => {
-    if (currentVectorStoreId && (!vectorStore || vectorStore.id !== currentVectorStoreId)) {
+    if (currentVectorStoreId) {
       // Only update if needed to avoid unnecessary re-renders
-      fetchAndUpdateVectorStore(currentVectorStoreId);
+      if (!vectorStore || vectorStore.id !== currentVectorStoreId) {
+        fetchAndUpdateVectorStore(currentVectorStoreId);
+      }
+    } else {
+      // No current store ID (e.g., user signed out) -> clear tools store vectorStore
+      setVectorStore({ id: "", name: "" });
     }
   }, [currentVectorStoreId]);
   

@@ -8,6 +8,7 @@ import useProfileStore from '@/stores/useProfileStore'
 import { UserProfile } from '@/app/types/profile-schema'
 import useConversationStore from '@/stores/useConversationStore'
 import usePathwayStore from '@/stores/usePathwayStore'
+import useToolsStore from '@/stores/useToolsStore'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -71,7 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setAuthConversation = useConversationStore((state) => state.setAuthState);
   const resetConversation = useConversationStore((state) => state.resetState);
   const setAuthPathway = usePathwayStore((state) => state.setAuthState);
-  const clearPathway = usePathwayStore((state) => state.clearStore);
 
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -218,7 +218,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setVectorStoreId(null);
       clearProfileStore();
       resetConversation();
-      clearPathway();
+      // Clear tools store vectorStore to avoid stale ID
+      useToolsStore.getState().setVectorStore({ id: '', name: '' });
+      // Clear conversation and pathway stores' auth state
+      setAuthConversation(false, null);
+      setAuthPathway(false, null);
       router.push('/');
     } catch (err) {
       console.error('signOut error', err);
@@ -269,7 +273,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setVectorStoreId(null);
       clearProfileStore();
       resetConversation();
-      clearPathway();
+      // Clear tools store vectorStore when session ends
+      useToolsStore.getState().setVectorStore({ id: '', name: '' });
+      // Clear conversation and pathway stores' auth state
+      setAuthConversation(false, null);
+      setAuthPathway(false, null);
     }
     setLoading(false);
   }

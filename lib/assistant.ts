@@ -136,6 +136,7 @@ export const processMessages = async () => {
       setConversationItems,
       previousResponseId,
       setPreviousResponseId,
+      isAuthenticated,
     } = useConversationStore.getState();
 
     // Create local copies to avoid state mutation issues
@@ -167,10 +168,16 @@ export const processMessages = async () => {
       setPreviousResponseId(effectivePreviousResponseId);
     }
 
+    // Build conversation items, adding a system message for guests
     const allConversationItems = [
       { role: "developer", content: DEVELOPER_PROMPT },
+      // If user is a guest, inform the assistant not to call auth-required functions
+      !isAuthenticated && {
+        role: "system",
+        content: "User is a guest. Do not call functions requiring authentication (e.g., create_pathway, create_recommendation, list_user_applications). If the user requests an action requiring auth, ask them to sign up or log in."
+      },
       ...filteredConversationItems,
-    ];
+    ].filter(Boolean);
 
     let assistantMessageContent = "";
     let currentAssistantId: string | null = null;

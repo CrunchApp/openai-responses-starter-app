@@ -9,8 +9,12 @@ export async function GET() {
     const { data: { user }, error: userError } = await supabase.auth.getUser()
 
     if (userError) {
-      // Log the error but return a standard unauthenticated response
-      console.error('Session user fetch error:', userError.message)
+      // If there's no active session, it's expected for guests; log at debug level
+      if (userError.message.includes('Auth session missing')) {
+        console.debug('No active auth session:', userError.message);
+      } else {
+        console.error('Session user fetch error:', userError.message);
+      }
       return NextResponse.json({ user: null }, { status: 200 })
     }
     

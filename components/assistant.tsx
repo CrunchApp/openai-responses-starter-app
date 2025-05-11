@@ -40,8 +40,11 @@ export default function Assistant() {
         content: [{ type: "input_text", text: message }],
       });
       
+      // Include guest message in conversation context
+      await addConversationItem({ role: "user", content: message });
+      
       // Process messages without saving to DB
-      processMessages();
+      await processMessages();
       return;
     }
 

@@ -179,9 +179,9 @@ export default function ChatPage() {
             <div className="p-5 border-b border-primary/10">
               <ConversationSelector />
             </div>
-            {/* <div className="flex-grow overflow-auto p-4">
+            <div className="flex-grow overflow-auto p-4">
               <ToolsPanel />
-            </div> */}
+            </div>
           </motion.div>
         </div>
       </div>

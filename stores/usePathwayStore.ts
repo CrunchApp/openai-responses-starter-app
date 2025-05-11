@@ -766,31 +766,17 @@ const usePathwayStore = create<PathwayState>()(
            if (result.warning) console.warn(`Warning getting more programs: ${result.warning}`);
 
            if (result.newRecommendations.length > 0) {
-             set((state) => {
-                const currentPrograms = state.programsByPathway[pathwayId] || [];
-                // Directly append new recommendations. Rely on backend/rendering logic for duplicates if necessary.
-                const updatedPrograms = [...currentPrograms, ...result.newRecommendations];
-
-                // Optional: If duplicates become an issue visually after this change, uncomment the next line
-                // const uniquePrograms = Array.from(new Map(updatedPrograms.map(p => [p.id, p])).values());
-
-                return {
-                 programsByPathway: {
-                   ...state.programsByPathway,
-                   [pathwayId]: updatedPrograms // Use updatedPrograms directly (or uniquePrograms if uncommented)
-                 },
-                 moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false },
-                };
-             });
-             console.log(`Store updated with ${result.newRecommendations.length} new programs for pathway ${pathwayId}`);
+             console.log(`Store action: new programs fetched, syncing programs from server for pathway ${pathwayId}`);
+             // Fetch the latest programs from the server (with IDs)
+             await get().syncProgramsForPathway(pathwayId);
+             console.log(`Store action: programs synced for pathway ${pathwayId}`);
            } else {
-             // No new programs, just update loading state
-             set((state) => ({
-               moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false },
-               // Optionally show the warning to the user via state if needed
-             }));
-             console.log(`Store: No new programs returned for pathway ${pathwayId}`);
+             console.log(`Store action: No new programs returned for pathway ${pathwayId}`);
            }
+           // Clear loading state for 'more programs'
+           set((state) => ({
+             moreProgramsLoading: { ...state.moreProgramsLoading, [pathwayId]: false }
+           }));
            // Note: We don't need to store the newResponseId in the client store.
 
         } catch (error) {

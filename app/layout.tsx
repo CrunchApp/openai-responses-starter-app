@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "./components/auth/AuthContext";
 import I18nProvider from "@/components/I18nProvider";
 import { Toaster } from "@/components/ui/toaster";
+import GlobalFetchCredentials from './components/GlobalFetchCredentials';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -45,6 +46,7 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className={`${inter.className} flex flex-col min-h-full`}>
         <AuthProvider>
+          <GlobalFetchCredentials />
           <I18nProvider>
             <main className="flex-grow">
               {children}

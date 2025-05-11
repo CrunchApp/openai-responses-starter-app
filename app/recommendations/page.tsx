@@ -485,9 +485,9 @@ export default function RecommendationsPage() {
     setSelectedTab(tab);
   }
   
-  // Determine the profile to pass based on auth state
-  const profileForExplorer = user 
-    ? mapSupabaseProfileToUserProfile(typedProfile) 
+  // Determine the profile to pass based on auth state (use AuthContext.profile, which is already a UserProfile)
+  const profileForExplorer = user && authProfile
+    ? authProfile
     : guestProfileData;
 
   return (

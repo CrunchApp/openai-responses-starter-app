@@ -349,7 +349,7 @@ export function PathwayExplorer({
         }
       } else {
         // First-time generation or guest user - use the original method
-        const result = await generateEducationPathways(userProfile.vector_store_id || '', userProfile);
+        const result = await generateEducationPathways(userProfile.vectorStoreId || '', userProfile);
         
         if (result.error) {
           setError(result.error);

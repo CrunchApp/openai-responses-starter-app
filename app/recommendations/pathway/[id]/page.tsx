@@ -547,7 +547,7 @@ export default function PathwayDetailsPage() {
           </Button>
           {!canLoadMore && (
              <p className="text-xs text-muted-foreground mt-2">
-               Load more requires previous context. Try exploring the pathway again if needed.
+               Load more requires previous context. Try refreshing the page or exploring the pathway again if needed.
              </p>
            )}
         </div>

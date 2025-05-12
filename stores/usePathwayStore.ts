@@ -332,13 +332,18 @@ const usePathwayStore = create<PathwayState>()(
           }
 
           console.log(`Generated ${result.pathways?.length || 0} new pathways.`);
-          // Append new pathways to the existing ones
-          set((state) => ({
-            pathways: [...state.pathways, ...result.pathways.filter(p => !p.is_deleted)],
-            isActionLoading: false,
-            lastGeneratedAt: Date.now(),
-          }));
+          // Append only unique new pathways to the existing ones
+          set((state) => {
+            const existingIds = new Set(state.pathways.map(p => p.id));
+            const uniqueNew = result.pathways.filter(p => !p.is_deleted && !existingIds.has(p.id));
+            return {
+              pathways: [...state.pathways, ...uniqueNew],
+              isActionLoading: false,
+              lastGeneratedAt: Date.now()
+            };
+          });
 
+          // Return the generated pathways result
           return {
             pathways: result.pathways,
             success: true
@@ -758,8 +763,17 @@ const usePathwayStore = create<PathwayState>()(
           moreProgramsError: { ...state.moreProgramsError, [pathwayId]: null },
         }));
         try {
-           console.log(`Store action: getting more programs for pathway ${pathwayId}`);
-           const result = await getMoreProgramsForPathwayAction(pathwayId, userProfile, programFeedback);
+           // Gather feedback on existing programs for this pathway
+           const existingPrograms = get().programsByPathway[pathwayId] || [];
+           const feedbackContext = existingPrograms
+             .filter(p => p.feedbackNegative)
+             .map(p => ({
+               programName: p.name,
+               reason: p.feedbackReason,
+               details: p.feedbackData?.details,
+             }));
+           console.log(`Store action: getting more programs for pathway ${pathwayId} with feedback:`, feedbackContext);
+           const result = await getMoreProgramsForPathwayAction(pathwayId, userProfile, feedbackContext);
 
            if (result.error) throw new Error(result.error);
            if (result.dbSaveError) console.warn(`DB Save Error for more programs: ${result.dbSaveError}`);

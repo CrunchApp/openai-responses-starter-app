@@ -1,4 +1,4 @@
-import { MODEL } from "@/config/constants";
+import { MODEL, FALLBACK_MODEL } from "@/config/constants";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -61,15 +61,33 @@ export async function POST(request: Request) {
 
     const openai = new OpenAI();
 
-    const events = await openai.responses.create({
-      model: MODEL,
-      input: messages,
-      tools: validatedTools,
-      stream: true,
-      parallel_tool_calls: false,
-      ...(safePrevId ? { previous_response_id: safePrevId } : {}),
-      store: true,
-    });
+    let events;
+    try {
+      events = await openai.responses.create({
+        model: MODEL,
+        input: messages,
+        tools: validatedTools,
+        stream: true,
+        parallel_tool_calls: false,
+        ...(safePrevId ? { previous_response_id: safePrevId } : {}),
+        store: true,
+      });
+    } catch (error: any) {
+      if (error.status === 429) {
+        console.warn("Primary model rate limited, falling back to mini model:", FALLBACK_MODEL);
+        events = await openai.responses.create({
+          model: FALLBACK_MODEL,
+          input: messages,
+          tools: validatedTools,
+          stream: true,
+          parallel_tool_calls: false,
+          ...(safePrevId ? { previous_response_id: safePrevId } : {}),
+          store: true,
+        });
+      } else {
+        throw error;
+      }
+    }
 
     // Create a ReadableStream that emits SSE data
     const stream = new ReadableStream({

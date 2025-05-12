@@ -1123,7 +1123,7 @@ export default function ProfileDashboard() {
              />
            </div>
            <div className="space-y-2">
-             <label className="text-sm font-medium">Living Expenses Budget (per month)</label>
+             <label className="text-sm font-medium">Living Expenses Budget (per year)</label>
              <div className="grid grid-cols-3 gap-2 items-end">
                <div>
                  <Label htmlFor="livingBudgetMin" className="text-xs">Min</Label>
@@ -2334,7 +2334,7 @@ export default function ProfileDashboard() {
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-zinc-500">Living Expenses Budget (per month)</p>
+                      <p className="text-xs text-zinc-500">Living Expenses Budget (per year)</p>
                       <p className="font-medium">
                           {userProfile.preferences?.livingExpensesBudget?.min || userProfile.preferences?.livingExpensesBudget?.max
                             ? `${userProfile.preferences.livingExpensesBudget.min?.toLocaleString() || '?'} - ${userProfile.preferences.livingExpensesBudget.max?.toLocaleString() || '?'} ${userProfile.preferences.livingExpensesBudget.currency || 'USD'}`

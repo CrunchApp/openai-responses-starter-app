@@ -674,22 +674,22 @@ export async function evaluateAndScorePrograms(
       requestOptions.previous_response_id = previousResponseId;
       
       // With conversation history, we only need to send the new user message
-      const userMessage = `I managed to find the following programs for the ${pathway.qualification_type || 'degree'} program in ${pathway.field_of_study || 'the field'} that you suggested. Please evaluate these programs against your recommendation and my profile.
+      const userMessage = `I managed to find the following programs for the ${pathway.qualification_type || 'degree'} pathway in ${pathway.field_of_study || 'the field'} that you suggested as part of my ${pathway.title} pathway.
 
 Research results:
 \`\`\`
 ${perplexityResponseText}
 \`\`\`
 
-Please review the results and for each program, assign specific 'matchRationale' scores (0-100) for:
-    -   'careerAlignment': How well the program aligns with user's stated career goals and desired roles/industries.
-    -   'budgetFit': How well the program's cost fits within the user's and pathway's budget range.
-    -   'locationMatch': How well the program's location aligns with user's and pathway's preferred regions.
-    -   'academicFit': How well the program's field, degree level, and potential prerequisites align with the user's education history and the pathway's intent.
+Review the results against my profile and the pathways you suggested and for each program, assign specific 'matchRationale' scores (integer between 0-100) for:
+    -   'careerAlignment': How well the program aligns with my stated career goals and desired roles/industries.
+    -   'budgetFit': How well the program's cost fits within the my and pathway's budget range.
+    -   'locationMatch': How well the program's location aligns with my and pathway's preferred regions.
+    -   'academicFit': How well the program's field, degree level, and potential prerequisites align with my education history and the pathway's intent.
 
-Then, calculate an overall 'matchScore' (0-100) reflecting the holistic fit.
+Then, calculate an overall 'matchScore' (integer between 0-100) reflecting the holistic fit.
 
-Finally, pick the top 5 programs with the highest overall matchScore and return your analysis in a structured JSON format.
+Finally, pick the top 5 programs with the highest overall matchScore and return them as your Recommendations in a structured JSON format. If any information about a program is not explicitly stated in the research results, provide a reasonable estimate based on the program type and location and DO NOT return any null values.
 
 Respond ONLY with the valid JSON object conforming strictly to the provided schema. Do not include explanations outside the JSON structure.`;
       
@@ -780,9 +780,29 @@ PATHWAY CONTEXT:
 - Alignment Rationale: ${pathway.alignment_rationale || 'Not specified'}
 `;
 
-      // --- Construct Full Prompt ---
+      // --- Construct Full Prompt & Developer prompt ---
+      const developerPrompt = `
+You are an expert education program evaluator. Respond strictly according to the provided JSON schema.
+
+INSTRUCTIONS:
+1.  Parse the 'RESEARCH RESULTS' to identify distinct educational programs.
+2.  For each program, extract the details required by the JSON schema (Name, Institution, Degree Type, Field, Description, Cost/Year (USD), Duration (months), Location, Start Date, Deadline, Requirements, Highlights, URL, Scholarships). If cost or duration are not explicit, provide a reasonable estimate based on the program type and location.
+3.  Evaluate each program against the 'PATHWAY CONTEXT' and 'USER PROFILE SUMMARY'.
+4.  Calculate an overall 'matchScore' (0-100) reflecting the holistic fit.
+5.  Calculate specific 'matchRationale' scores (0-100) for:
+    -   'careerAlignment': How well the program aligns with user's stated career goals and desired roles/industries.
+    -   'budgetFit': How well the program's cost fits within the user's and pathway's budget range.
+    -   'locationMatch': How well the program's location aligns with user's and pathway's preferred regions.
+    -   'academicFit': How well the program's field, degree level, and potential prerequisites align with the user's education history and the pathway's intent.
+
+6.  Respond ONLY with the valid JSON object conforming strictly to the provided schema. Do not include explanations outside the JSON structure.
+
+Think critically about the alignment. The match scores should be quantitative reflections of the fit based on the provided context.
+
+      `;
+      
       const prompt = `
-You are an expert education program evaluator. Your task is to analyze the following research results (from Perplexity) about education programs, evaluate their fit against a specific pathway and user profile, and calculate meaningful match scores.
+Analyze the following research results (from Perplexity) about education programs, evaluate their fit against a specific pathway and user profile, and calculate meaningful match scores.
 
 RESEARCH RESULTS:
 \`\`\`
@@ -797,19 +817,6 @@ USER PROFILE SUMMARY:
 - Skills: ${skillsList}
 - Preferences: Locations: ${preferredLocations}; Budget: ${budgetRange}; Study Mode: ${preferences.studyMode || 'Any'}; Start Date: ${preferences.startDate || 'Any'}
 
-INSTRUCTIONS:
-1.  Parse the 'RESEARCH RESULTS' to identify distinct educational programs (aim for 5).
-2.  For each program, extract the details required by the JSON schema (Name, Institution, Degree Type, Field, Description, Cost/Year (USD), Duration (months), Location, Start Date, Deadline, Requirements, Highlights, URL, Scholarships). If cost or duration are not explicit, provide a reasonable estimate based on the program type and location.
-3.  Evaluate each program against the 'PATHWAY CONTEXT' and 'USER PROFILE SUMMARY'.
-4.  Calculate an overall 'matchScore' (0-100) reflecting the holistic fit.
-5.  Calculate specific 'matchRationale' scores (0-100) for:
-    -   'careerAlignment': How well the program aligns with user's stated career goals and desired roles/industries.
-    -   'budgetFit': How well the program's cost fits within the user's and pathway's budget range.
-    -   'locationMatch': How well the program's location aligns with user's and pathway's preferred regions.
-    -   'academicFit': How well the program's field, degree level, and potential prerequisites align with the user's education history and the pathway's intent.
-6.  Respond ONLY with the valid JSON object conforming strictly to the provided schema. Do not include explanations outside the JSON structure.
-
-Think critically about the alignment. The match scores should be quantitative reflections of the fit based on the provided context.
 `;
 
       // Add validation for the full prompt construction
@@ -830,7 +837,7 @@ Think critically about the alignment. The match scores should be quantitative re
 
       // --- Set up request options for new conversation ---
       requestOptions.input = [
-        { role: "system", content: "You are an expert education program evaluator. Respond strictly according to the provided JSON schema." },
+        { role: "system", content: developerPrompt },
         { role: "user", content: prompt }
       ];
       requestOptions.text = { 
@@ -999,13 +1006,11 @@ export async function getMoreEvaluatedPrograms(
     console.log(`getMoreEvaluatedPrograms called for pathway: ${pathway.title} using previousResponseId: ${previousResponseId}`);
 
     // Construct the user message for the follow-up request
-    const followUpMessage = `Based on our previous conversation (where you evaluated programs for the ${pathway.qualification_type} in ${pathway.field_of_study}), please find more programs matching that pathway and my profile.
+    const followUpMessage = `Evaluate and recommend five more programs. ${userRequest}.
 
-${userRequest}
+Please ensure these programs are *distinct* from the ones you previously recommended in this conversation thread. Evaluate the remaining programs that you haven't recommended yet using the same rationale (careerAlignment, budgetFit, locationMatch, academicFit, and overall matchScore).
 
-Please ensure these programs are *distinct* from the ones you previously recommended in this conversation thread. Evaluate these new programs using the same criteria and scoring rationale as before (careerAlignment, budgetFit, locationMatch, academicFit, overall matchScore).
-
-Respond ONLY with the valid JSON object conforming strictly to the program evaluation schema. Do not include explanations outside the JSON structure. Only include the *new* programs found.`;
+Respond ONLY with the valid JSON object conforming strictly to the program evaluation schema. Do not include explanations outside the JSON structure and make sure you exactly recommend five programs from the RESEARCH RESULTS PROGRAM LIST.`;
 
     // Prepare Request Options
     const requestOptions: any = {

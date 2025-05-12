@@ -484,28 +484,18 @@ export async function generateProgramsForPathway(
     // ---- Initialize Supabase Client ----
     const supabase = await createClient();
     
-    // Get the userId from the user profile
-    const userId = userProfile.userId;
-    if (!userId) {
-      return {
-        recommendations: [],
-        error: "User ID not found in profile"
-      };
-    }
-    
-    console.log(`Generating program recommendations for pathway ${pathwayId}...`);
-    
-    // Check authentication status
-    const { isAuthenticated, userId: authUserId } = await checkUserAuthentication();
-    console.log(`Auth check result: isAuthenticated=${isAuthenticated}, userId=${authUserId}`);
-    
-    if (!isAuthenticated || !authUserId) {
+    // Check authentication status and retrieve user ID
+    const { isAuthenticated, userId } = await checkUserAuthentication();
+    console.log(`Auth check result: isAuthenticated=${isAuthenticated}, userId=${userId}`);
+    if (!isAuthenticated || !userId) {
       return {
         recommendations: [],
         error: 'Authentication required to generate program recommendations'
       };
     }
 
+    console.log(`Generating program recommendations for pathway ${pathwayId} for user ${userId}...`);
+    
     // ---- Fetch Pathway Data Directly ----
     console.log(`Fetching pathway data for ${pathwayId}`);
     const { pathway, error: pathwayError } = await fetchPathwayData(pathwayId, userId);
@@ -520,19 +510,35 @@ export async function generateProgramsForPathway(
     console.log(`Successfully fetched pathway: ${pathway.title}`);
     // ---- End Fetch Pathway Data ----
 
-    // ---- Fetch previousResponseId from pathway (if available) ----
-    // Use the last_pathway_response_id from pathway data
-    // Note: This is for the *pathway generation* context, 
-    // We will later use the *program evaluation* responseId if available.
-    const previousPathwayResponseId = pathway.last_pathway_response_id || undefined;
-    if (previousPathwayResponseId) {
-      console.log(`Using previous pathway response ID for initial research context: ${previousPathwayResponseId}`);
-    }
-    // We also need the last_recommended_programs_response_id if it exists
+    // ---- Fetch previousResponseId for context ----
+    // Start with the last_recommended_programs_response_id (program evaluation context)
     const previousProgramResponseId = pathway.last_recommended_programs_response_id || undefined;
-     if (previousProgramResponseId) {
-       console.log(`Using previous program recommendation response ID for context: ${previousProgramResponseId}`);
-     }
+    if (previousProgramResponseId) {
+      console.log(`Using previous program recommendation response ID for context: ${previousProgramResponseId}`);
+    }
+    // Then fallback to last_pathway_response_id (pathway generation context)
+    let previousPathwayResponseId = pathway.last_pathway_response_id || undefined;
+    if (!previousPathwayResponseId) {
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('last_pathway_response_id')
+          .eq('id', userId)
+          .single();
+        if (profileError) {
+          console.warn(`Failed to fetch last_pathway_response_id from profile: ${profileError.message}`);
+        } else if (profileData) {
+          previousPathwayResponseId = profileData.last_pathway_response_id || undefined;
+          if (previousPathwayResponseId) {
+            console.log(`Fetched previous pathway response ID from profile: ${previousPathwayResponseId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`Error fetching profile for last_pathway_response_id: ${err}`);
+      }
+    } else {
+      console.log(`Using previous pathway response ID from pathway record: ${previousPathwayResponseId}`);
+    }
     // ---- End Fetch previousResponseId ----
 
     // ---- Call Program Research Agent Directly ----
@@ -2108,13 +2114,15 @@ export async function getMoreProgramsForPathwayAction(
     console.log(`Using previous program response ID: ${previousProgramResponseId} for pathway ${pathwayId}`);
 
     // ---- Construct User Request for More Programs ----
-    // Simple request for now, can be expanded with feedback processing
-    let userRequest = "Please provide 5 more distinct programs from your research results.";
-    if (programFeedback) {
-      // Basic feedback incorporation (can be made more sophisticated)
-      userRequest += ` Consider this feedback on previous programs: ${JSON.stringify(programFeedback)}. Prioritize programs that address these points.`;
+    // Build a detailed request, incorporating feedback if available
+    let userRequest = "Please provide 5 new educational programs from the original list that you have not suggested previously.";
+    if (programFeedback && Array.isArray(programFeedback) && programFeedback.length > 0) {
+      const feedbackSummaries = (programFeedback as Array<any>)
+        .map(fb => `- ${fb.programName || fb.name}: ${fb.reason}${fb.details ? ` (${fb.details})` : ''}`)
+        .join("\n");
+      userRequest += `\n\nHere is my feedback on previous recommendations:\n${feedbackSummaries}\n\nPlease prioritize programs that address these feedback points.`;
     }
-    console.log("User request for more programs:", userRequest);
+    console.log("Constructed user request for more programs:", userRequest);
 
     // ---- Call the new Planning Agent function ----
     try {

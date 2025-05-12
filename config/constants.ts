@@ -1,4 +1,5 @@
-export const MODEL = "gpt-4.1-mini-2025-04-14";
+export const FALLBACK_MODEL = "gpt-4.1-mini-2025-04-14";
+export const MODEL = "gpt-4.1-2025-04-14";
 
 // Developer prompt for the Vista Education Adviser assistant
 export const DEVELOPER_PROMPT = `

@@ -25,7 +25,7 @@ User Message: "${messageContent}"
 Title:`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Using a faster model for title generation
+      model: "gpt-4.1-nano-2025-04-14", // Using a faster model for title generation
       messages: [{ role: "user", content: prompt }],
       max_tokens: 20, // Limit the title length
       temperature: 0.5, // Moderate creativity

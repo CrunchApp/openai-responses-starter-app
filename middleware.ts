@@ -8,6 +8,7 @@ const PUBLIC_ROUTES = [
   '/profile', // Public profile view
   '/recommendations', // Public recommendations
   '/chat', // Public chat
+  '/brochure',
   '/images/file2.mp4',
   '/locales' // Translation JSON files
 ]
